@@ -73,17 +73,26 @@ jobs:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
+    # Boot the prod overlay (Caddy reverse proxy) so we can verify §9.7:
+    # `curl / through Caddy returns index.html`. TLS_MODE=internal makes Caddy
+    # mint a self-signed cert (no ACME), so curl with -k works against localhost.
+    env:
+      DOMAIN: localhost
+      TLS_MODE: internal
+      TLS_CONFIG: internal
     steps:
       - uses: actions/checkout@v6
       - run: cp deploy/.env.example deploy/.env
-      - run: docker compose -f deploy/docker-compose.yml build
-      - run: docker compose -f deploy/docker-compose.yml up -d
-      - name: wait + assert backend
+      - run: docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+      - name: wait + assert SPA and API through Caddy
         run: |
-          for i in $(seq 1 30); do
-            curl -fsS http://localhost:8000/api/v1/ping && break || sleep 3
+          for i in $(seq 1 40); do
+            curl -fsSk https://localhost/api/v1/ping && break || sleep 3
           done
-          curl -fsS http://localhost:8000/api/v1/health | grep -q '"oidc_provider": "disabled"'
+          # §9.7: the SPA index.html is served at / through Caddy.
+          curl -fsSk https://localhost/ | grep -qi '<!doctype html'
+          # The API is proxied through Caddy (same origin), not a direct port.
+          curl -fsSk https://localhost/api/v1/health | grep -q '"oidc_provider": "disabled"'
       - name: assert prod overlay exposes only Caddy ports
         run: |
           DOMAIN=example.test docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config \
