@@ -5,6 +5,7 @@ from app.core.config import Settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware_trace import TraceIdMiddleware
+from app.routes.v1 import _schema_probe as schema_probe_route  # SCAFFOLDING (F4)
 from app.routes.v1 import config as config_route
 from app.routes.v1 import health as health_route
 from app.routes.v1 import ping as ping_route
@@ -26,6 +27,9 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     for r in (ping_route.router, health_route.router, config_route.router):
         app.include_router(r, prefix="/api/v1")
+    # SCAFFOLDING (F4): probe route exists only to emit the SectionBody
+    # discriminator into OpenAPI / generated frontend types. Removable in WP3.
+    app.include_router(schema_probe_route.router, prefix="/api/v1")
     for r in stub_routers.values():
         app.include_router(r, prefix="/api/v1")
     return app
