@@ -9,4 +9,4 @@ COPY alembic ./alembic
 RUN useradd -u 10001 -m appuser && mkdir -p /data/attachments && chown -R appuser /app /data
 USER appuser
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/v1/ping').status==200 else 1)"
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
