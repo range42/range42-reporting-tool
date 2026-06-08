@@ -1,0 +1,12 @@
+{$DOMAIN:localhost} {
+	tls {$TLS_CONFIG}
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+}
