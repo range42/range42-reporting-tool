@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8
-      - run: cd backend && uv sync
+      - run: cd backend && uv sync --frozen
       - run: cd backend && uv run ruff check . && uv run ruff format --check .
       - run: cd backend && uv run mypy app
       - run: cd backend && uv run pytest -m "not integration"
