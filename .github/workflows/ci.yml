@@ -88,3 +88,31 @@ jobs:
         run: |
           DOMAIN=example.test docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config \
             | grep "published:" | grep -vE '"(80|443)"' && exit 1 || echo "ok: only 80/443 published"
+
+  # RESERVED (F8) — TLS-mode + air-gap smoke matrix. Gated off (`if: false`) so the
+  # matrix *shape* exists now without running. Wired live in V1-ROADMAP WP8-A
+  # (multi-mode TLS: internal CA) and WP8-D (network-isolated / air-gapped boot).
+  # TODO(WP8-A/D): drop `if: false`, fill in the per-mode boot + assertions.
+  docker-smoke-reserved:
+    needs: changes
+    if: false
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # WP8-A: boot with Caddy's internal self-signed CA (no ACME reachable).
+          - mode: tls-internal
+            tls_mode: internal
+            isolated: false
+          # WP8-D: boot on an internal-only docker network with no egress.
+          - mode: air-gap
+            tls_mode: internal
+            isolated: true
+    steps:
+      - uses: actions/checkout@v6
+      - run: cp deploy/.env.example deploy/.env
+      # TODO(WP8-A/D): set TLS_MODE=${{ matrix.tls_mode }}; when
+      # ${{ matrix.isolated }} is true, bring the stack up on an internal-only
+      # network (no egress) and assert the backend still answers /api/v1/ping.
+      - run: echo "reserved smoke slot ${{ matrix.mode }} (TLS_MODE=${{ matrix.tls_mode }}, isolated=${{ matrix.isolated }})"
