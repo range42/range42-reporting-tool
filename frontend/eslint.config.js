@@ -1,2 +1,2 @@
 import ts from '@vue/eslint-config-typescript'
-export default [...ts()]
+export default [{ ignores: ['dist/**', 'node_modules/**'] }, ...ts()]
