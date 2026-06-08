@@ -15,5 +15,7 @@ dist/
 certs/
 *_data/
 backups/
+# Local transient compose overrides
+deploy/docker-compose.localboot.yml
 # OS
 .DS_Store
