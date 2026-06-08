@@ -1,0 +1,38 @@
+{
+  "name": "range42-reporting-tool-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "vue": "^3.5.35",
+    "vue-router": "^5.1.0",
+    "pinia": "^3.0.4",
+    "vue-i18n": "^11.4.5",
+    "dompurify": "^3.4.8"
+  },
+  "devDependencies": {
+    "vite": "^8.0.16",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@tailwindcss/vite": "^4.3.0",
+    "tailwindcss": "^4.3.0",
+    "daisyui": "^5",
+    "typescript": "~5.9",
+    "vue-tsc": "^3.3.3",
+    "vitest": "^4.1.8",
+    "@vue/test-utils": "^2.4.10",
+    "jsdom": "^29.1.1",
+    "eslint": "^10.4.1",
+    "@vue/eslint-config-typescript": "^14.8.0",
+    "prettier": "^3.8.3",
+    "uplot": "^1.6.32",
+    "openapi-typescript": "^7.13.0",
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21"
+  }
+}
