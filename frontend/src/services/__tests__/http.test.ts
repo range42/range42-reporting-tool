@@ -27,4 +27,21 @@ describe('apiGet', () => {
       traceId: 't1',
     } as ApiError)
   })
+
+  it('throws ApiError on a non-JSON response body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('<html>502 Bad Gateway</html>', {
+            status: 502,
+            statusText: 'Bad Gateway',
+            headers: { 'content-type': 'text/html' },
+          }),
+      ),
+    )
+    await expect(apiGet('/api/v1/x')).rejects.toMatchObject({
+      code: 'NON_JSON_RESPONSE',
+    } as ApiError)
+  })
 })
