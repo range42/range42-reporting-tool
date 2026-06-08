@@ -8,6 +8,7 @@ from app.core.middleware_trace import TraceIdMiddleware
 from app.routes.v1 import config as config_route
 from app.routes.v1 import health as health_route
 from app.routes.v1 import ping as ping_route
+from app.routes.v1._stubs import routers as stub_routers
 
 
 def create_app() -> FastAPI:
@@ -24,6 +25,8 @@ def create_app() -> FastAPI:
     )
     register_error_handlers(app)
     for r in (ping_route.router, health_route.router, config_route.router):
+        app.include_router(r, prefix="/api/v1")
+    for r in stub_routers.values():
         app.include_router(r, prefix="/api/v1")
     return app
 
