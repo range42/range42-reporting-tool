@@ -1,0 +1,13 @@
+pre-commit:
+  parallel: true
+  commands:
+    backend-lint:
+      glob: "backend/**/*.py"
+      run: cd backend && uv run ruff check {staged_files} && uv run ruff format --check {staged_files}
+    frontend-lint:
+      glob: "frontend/**/*.{ts,vue,js}"
+      run: cd frontend && pnpm exec eslint {staged_files}
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm exec commitlint --edit {1}
