@@ -1,0 +1,40 @@
+name: reporting-tool
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: reporting
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: reporting
+    ports: ["5432:5432"]
+    volumes: ["pg_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reporting"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: ../backend
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    env_file: [.env]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  backend:
+    build: ../backend
+    env_file: [.env]
+    ports: ["8000:8000"]
+    volumes: ["local_attachments:/data/attachments"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  frontend:
+    build: { context: ../frontend, target: build }
+    command: ["pnpm", "dev"]
+    ports: ["5173:5173"]
+
+volumes:
+  pg_data:
+  local_attachments:
