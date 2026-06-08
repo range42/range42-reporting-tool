@@ -10,8 +10,9 @@ class LocalStorage(StorageBackend):
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, key: str) -> Path:
-        p = (self._root / key).resolve()
-        if not str(p).startswith(str(self._root.resolve())):
+        root = self._root.resolve()
+        p = (root / key).resolve()
+        if p != root and root not in p.parents:
             raise ValueError("path traversal blocked")
         return p
 
