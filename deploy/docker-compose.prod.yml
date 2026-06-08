@@ -1,0 +1,40 @@
+name: reporting-tool
+services:
+  postgres:
+    ports: !reset []
+    networks: [internal]
+  migrate:
+    networks: [internal]
+  backend:
+    ports: !reset []
+    networks: [internal]
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      TLS_CONFIG: ${TLS_CONFIG-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - frontend_dist:/srv/frontend:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend: { condition: service_started }
+    networks: [internal, edge]
+  frontend:
+    build: { context: ../frontend, target: dist }
+    command: ["sh", "-c", "cp -r /srv/. /out/"]
+    ports: !reset []
+    volumes: ["frontend_dist:/out"]
+    networks: [internal]
+
+volumes:
+  frontend_dist:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal: { internal: true }
+  edge: {}
