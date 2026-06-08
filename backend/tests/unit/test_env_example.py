@@ -11,8 +11,6 @@ def test_every_setting_documented() -> None:
         for line in text.splitlines()
         if line.strip() and not line.strip().startswith("#") and "=" in line
     }
-    required = {
-        f.alias for f in Settings.model_fields.values() if f.alias
-    }
+    required = {f.alias for f in Settings.model_fields.values() if f.alias}
     missing = required - documented
     assert not missing, f"undocumented env vars: {sorted(missing)}"

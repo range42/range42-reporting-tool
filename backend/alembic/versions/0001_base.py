@@ -1,4 +1,5 @@
 """base schema_meta table"""
+
 import sqlalchemy as sa
 
 from alembic import op
