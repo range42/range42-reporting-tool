@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "s3"] = Field("local", alias="STORAGE_BACKEND")
     storage_local_path: str = Field("/data/attachments", alias="STORAGE_LOCAL_PATH")
     tls_mode: Literal["acme", "internal", "custom"] = Field("acme", alias="TLS_MODE")
+    # Reserved: the one-shot `migrate` compose service is the canonical
+    # migration path. This flag is honored by the app lifespan only if you
+    # choose to wire alembic there (not wired today).
     run_migrations_on_start: bool = Field(False, alias="RUN_MIGRATIONS_ON_START")
     cors_origins: str = Field("", alias="CORS_ORIGINS")
     app_version: str = Field("0.1.0", alias="APP_VERSION")
