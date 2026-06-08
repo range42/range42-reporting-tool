@@ -24,4 +24,8 @@ class TimestampMixin:
 
 class MetadataMixin:
     # stored column name "metadata" (attr suffixed to avoid SQLAlchemy reserved name)
+    #
+    # USAGE (WP6): apply this mixin to the integration tables too — `api_key` and
+    # `webhook_config` both need the metadata-JSONB column (operator-supplied tags,
+    # provenance, etc.), so they must inherit MetadataMixin like every domain table.
     metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, key="metadata_", nullable=True)
