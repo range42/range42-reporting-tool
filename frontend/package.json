@@ -2,6 +2,7 @@
   "name": "range42-reporting-tool-ui",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.28.1",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
