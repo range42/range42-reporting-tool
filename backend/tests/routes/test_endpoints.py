@@ -39,4 +39,7 @@ async def test_health_oidc_disabled(env: None) -> None:
         r = await c.get("/api/v1/health")
     checks = r.json()["data"]["checks"]
     assert checks["oidc_provider"] == "disabled"
+    # DB readiness is probed (§9.5). Unit tests do not run the app lifespan and
+    # point at a bogus DATABASE_URL, so only assert the key is present, not "ok".
+    assert "db" in checks
     assert "version" in r.json()["data"]

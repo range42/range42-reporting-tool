@@ -1,7 +1,11 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import Settings
+from app.core.db import build_engine, get_sessionmaker
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware_trace import TraceIdMiddleware
@@ -12,10 +16,27 @@ from app.routes.v1 import ping as ping_route
 from app.routes.v1._stubs import routers as stub_routers
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Build the async DB engine + sessionmaker once per process and expose them
+    # on app.state for request handlers (e.g. the /health DB ping).
+    settings = Settings()
+    app.state.db_engine = build_engine(settings.database_url)
+    app.state.db_sessionmaker = get_sessionmaker(app.state.db_engine)
+    try:
+        yield
+    finally:
+        await app.state.db_engine.dispose()
+
+
 def create_app() -> FastAPI:
     configure_logging()
     settings = Settings()
-    app = FastAPI(title="range42-reporting-tool", version=settings.app_version)
+    app = FastAPI(
+        title="range42-reporting-tool",
+        version=settings.app_version,
+        lifespan=lifespan,
+    )
     app.add_middleware(TraceIdMiddleware)
     app.add_middleware(
         CORSMiddleware,
