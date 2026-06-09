@@ -79,6 +79,13 @@ async def get_current_user(ctx: AuthContext = Depends(get_auth_context)) -> User
     return ctx.user
 
 
+async def require_global_admin(user: User = Depends(get_current_user)) -> User:
+    """Dependency for global-scoped routes: 403 unless the caller is a global admin."""
+    if not user.is_global_admin:
+        raise HTTPException(status_code=403, detail="global admin required")
+    return user
+
+
 def require_permission(perm: str) -> Callable[..., Awaitable[None]]:
     """Build a FastAPI dependency that asserts the caller holds ``perm``.
 
