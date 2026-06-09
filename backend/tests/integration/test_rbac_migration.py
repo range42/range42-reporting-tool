@@ -17,7 +17,7 @@ async def test_exercise_role_unique_constraint(migrated_db: async_sessionmaker[A
         user_id = (
             await s.execute(
                 text(
-                    "INSERT INTO \"user\" (external_id, email, display_name) "
+                    'INSERT INTO "user" (external_id, email, display_name) '
                     "VALUES ('oidc:c3', 'c3@x', 'C3') RETURNING id"
                 )
             )
