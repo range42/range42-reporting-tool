@@ -19,8 +19,10 @@ Implementations (mint/verify app JWTs, JWKS fetch + cache + verify) land in WP2.
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 import jwt
+from jwt import PyJWK
 
 # HS256: the only algorithm we use to sign/verify our own app JWTs.
 APP_JWT_ALGORITHM = "HS256"
@@ -87,3 +89,42 @@ def verify_app_jwt(token: str, secret: str) -> AppClaims:
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise InvalidToken(f"malformed claims: {exc}") from exc
+
+
+class InvalidProviderToken(Exception):
+    """Raised when an inbound OIDC id_token fails JWKS signature/claim validation."""
+
+
+class SigningKeyResolver(Protocol):
+    """Structural seam over ``jwt.PyJWKClient`` so tests can inject a static key."""
+
+    def get_signing_key_from_jwt(self, token: str) -> PyJWK: ...
+
+
+def verify_provider_id_token(
+    token: str,
+    *,
+    jwks_resolver: SigningKeyResolver,
+    issuer: str,
+    audience: str,
+) -> dict[str, object]:
+    """Verify an inbound OIDC id_token against the provider's JWKS (RS256).
+
+    ``jwks_resolver`` is a ``jwt.PyJWKClient`` in production (fetches + caches the
+    provider's public keys) and a static test double under the fake-IdP harness.
+    Validates signature, ``iss``, ``aud``, ``exp`` and returns the claims dict.
+    Raises ``InvalidProviderToken`` on any failure.
+    """
+    try:
+        signing_key = jwks_resolver.get_signing_key_from_jwt(token)
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=issuer,
+            audience=audience,
+            options={"require": ["exp", "iat", "sub"]},
+        )
+    except jwt.PyJWTError as exc:
+        raise InvalidProviderToken(str(exc)) from exc
+    return dict(claims)
