@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 
+from fastapi import Request
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -19,5 +20,12 @@ def get_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
 async def session_dependency(
     sm: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[AsyncSession]:
+    async with sm() as session:
+        yield session
+
+
+async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
+    """FastAPI dependency: yield a session from the lifespan-managed sessionmaker."""
+    sm: async_sessionmaker[AsyncSession] = request.app.state.db_sessionmaker
     async with sm() as session:
         yield session
