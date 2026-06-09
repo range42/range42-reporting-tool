@@ -23,6 +23,7 @@ async def upsert_user(session: AsyncSession, claims: NormalizedClaims, *, now: d
             email=claims.email,
             display_name=claims.display_name,
             last_login_at=stamp,
+            avatar_url=claims.avatar_url,
         )
         session.add(user)
         await session.flush()
@@ -30,5 +31,6 @@ async def upsert_user(session: AsyncSession, claims: NormalizedClaims, *, now: d
     existing.email = claims.email
     existing.display_name = claims.display_name
     existing.last_login_at = stamp
+    existing.avatar_url = claims.avatar_url
     await session.flush()
     return existing

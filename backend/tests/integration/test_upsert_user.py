@@ -56,3 +56,23 @@ async def test_same_subject_different_provider_are_distinct(
         assert u_saml.external_id == "saml:abc-123"
         count = (await s.execute(select(func.count()).select_from(User))).scalar_one()
         assert count == 2
+
+
+@pytest.mark.integration
+async def test_upsert_sets_and_updates_avatar(migrated_db: async_sessionmaker[AsyncSession]) -> None:
+    async with migrated_db() as s:
+        u1 = await upsert_user(
+            s,
+            NormalizedClaims(
+                subject="av", email="a@x", display_name="A", provider="oidc", avatar_url="https://img/1.png"
+            ),
+        )
+        assert u1.avatar_url == "https://img/1.png"
+        u2 = await upsert_user(
+            s,
+            NormalizedClaims(
+                subject="av", email="a@x", display_name="A", provider="oidc", avatar_url="https://img/2.png"
+            ),
+        )
+        assert u2.id == u1.id
+        assert u2.avatar_url == "https://img/2.png"  # updated on hit

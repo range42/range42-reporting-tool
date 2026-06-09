@@ -23,6 +23,7 @@ class NormalizedClaims:
     email: str
     display_name: str
     provider: str
+    avatar_url: str | None = None
 
 
 class AuthProvider(Protocol):

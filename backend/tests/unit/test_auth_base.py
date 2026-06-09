@@ -35,3 +35,15 @@ def test_normalized_claims_fields() -> None:
     assert claims.email == "user@example.com"
     assert claims.display_name == "User One"
     assert claims.provider == "fake"
+
+
+def test_normalized_claims_avatar_defaults_none() -> None:
+    claims = NormalizedClaims(subject="s", email="e@x", display_name="D", provider="oidc")
+    assert claims.avatar_url is None
+
+
+def test_normalized_claims_avatar_set() -> None:
+    claims = NormalizedClaims(
+        subject="s", email="e@x", display_name="D", provider="oidc", avatar_url="https://img/a.png"
+    )
+    assert claims.avatar_url == "https://img/a.png"
