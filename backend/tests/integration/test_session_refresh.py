@@ -32,12 +32,13 @@ async def test_refresh_within_window_reissues(migrated_db: async_sessionmaker[As
     async with migrated_db() as s:
         auth_time = datetime.now(UTC)
         issued = await _issue(s, settings, auth_time=auth_time)
+        expires_before = issued.session.expires_at
         later = auth_time + timedelta(hours=1)
         new_token = await refresh_session(s, issued.session, settings, now=later)
         claims = verify_app_jwt(new_token, SECRET)
         assert claims.jti == issued.session.jti
         assert claims.auth_time == int(auth_time.timestamp())  # auth_time preserved
-        assert issued.session.expires_at > issued.session.auth_time
+        assert issued.session.expires_at > expires_before  # refresh extended the expiry
 
 
 @pytest.mark.integration

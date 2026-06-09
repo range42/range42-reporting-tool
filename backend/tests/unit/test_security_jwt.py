@@ -89,6 +89,39 @@ def test_alg_none_token_rejected() -> None:
         verify_app_jwt(f"{header}.{payload}.", SECRET)
 
 
+def test_future_iat_token_still_verifies() -> None:
+    # iat is informational (RFC 7519); verify_app_jwt deliberately does not reject a
+    # future iat so that clock skew / injected-`now` refresh tokens still validate.
+    future = datetime.now(UTC) + timedelta(hours=1)
+    token = mint_app_jwt(
+        user_id="u",
+        is_global_admin=False,
+        jti="j",
+        auth_time=future,
+        secret=SECRET,
+        ttl_minutes=60,
+        now=future,
+    )
+    claims = verify_app_jwt(token, SECRET)
+    assert claims.jti == "j"
+
+
+def test_expired_token_still_rejected_with_relaxed_iat() -> None:
+    # Relaxing iat must NOT relax exp: an expired token is still rejected.
+    past = datetime.now(UTC) - timedelta(hours=2)
+    token = mint_app_jwt(
+        user_id="u",
+        is_global_admin=False,
+        jti="j",
+        auth_time=past,
+        secret=SECRET,
+        ttl_minutes=1,
+        now=past,
+    )
+    with pytest.raises(InvalidToken):
+        verify_app_jwt(token, SECRET)
+
+
 def test_non_bool_is_global_admin_rejected() -> None:
     """A token whose is_global_admin is a string must be rejected, not coerced."""
     import jwt
