@@ -24,14 +24,18 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.security import InvalidToken, verify_app_jwt
 from app.models.user import User
 from app.models.user_session import UserSession
 
 
-async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> User:
     """Resolve the caller from the app-JWT + an active server-side session row.
 
     Validates: Bearer present -> JWT signature/expiry -> session row exists, not
@@ -42,7 +46,7 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
     try:
-        claims = verify_app_jwt(auth.removeprefix("Bearer "), Settings().jwt_secret)
+        claims = verify_app_jwt(auth.removeprefix("Bearer "), settings.jwt_secret)
     except InvalidToken:
         raise HTTPException(status_code=401, detail="invalid token") from None
 

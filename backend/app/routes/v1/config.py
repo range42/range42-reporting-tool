@@ -1,14 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.schemas.common import DataEnvelope
 
 router = APIRouter()
 
 
 @router.get("/config")
-async def config() -> DataEnvelope[dict[str, str]]:
-    s = Settings()
+async def config(s: Settings = Depends(get_settings)) -> DataEnvelope[dict[str, str]]:
     return DataEnvelope(
         data={
             "app_name": s.branding_app_name,

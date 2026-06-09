@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -42,3 +43,9 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Process-wide cached Settings. FastAPI dependency; tests call ``cache_clear()``."""
+    return Settings()
