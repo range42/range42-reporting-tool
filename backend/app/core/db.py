@@ -25,7 +25,20 @@ async def session_dependency(
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
-    """FastAPI dependency: yield a session from the lifespan-managed sessionmaker."""
+    """FastAPI dependency: a per-request unit of work.
+
+    Yields a session from the lifespan-managed sessionmaker; **commits on a clean
+    response and rolls back on any exception**. This is the documented persistence
+    policy for request-scoped writes — including the ``get_current_user``
+    ``last_seen_at`` heartbeat (read-only routes still persist it on clean exit).
+    Handlers may ``flush()`` to obtain server-generated values mid-request; the
+    final commit/rollback is owned here, so handlers must not commit themselves.
+    """
     sm: async_sessionmaker[AsyncSession] = request.app.state.db_sessionmaker
     async with sm() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
