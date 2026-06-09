@@ -17,6 +17,7 @@ breaks custom/operator-defined roles (a role the operator invents would never
 match a name allowlist). Authorize on *permissions*, never on role names.
 """
 
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,6 +30,8 @@ from app.auth.oidc import OIDCProvider
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.security import InvalidToken, verify_app_jwt
+from app.models.exercise_role import ExerciseRole
+from app.models.role_definition import RoleDefinition
 from app.models.user import User
 from app.models.user_session import UserSession
 
@@ -87,14 +90,45 @@ async def require_global_admin(user: User = Depends(get_current_user)) -> User:
 
 
 def require_permission(perm: str) -> Callable[..., Awaitable[None]]:
-    """Build a FastAPI dependency that asserts the caller holds ``perm``.
+    """Build a dependency asserting the caller holds ``perm`` in the path's exercise.
 
-    Resolves JWT -> user -> exercise_role -> role_definition.permissions and
-    raises 403 if ``perm`` is absent. Unimplemented until WP2.
+    Global admins bypass. Otherwise resolves the caller's ``exercise_role`` rows for
+    the path ``exercise_id``, ORs their ``role_definition`` permission sets, and 403s
+    if ``perm`` is absent. Exercise-scoped only — global strings are guarded by
+    ``require_global_admin`` (design §4.3).
     """
 
-    async def _dependency() -> None:
-        raise NotImplementedError("require_permission resolver lands in WP2")
+    async def _dependency(
+        exercise_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> None:
+        if user.is_global_admin:
+            return
+        role_keys = (
+            (
+                await db.execute(
+                    select(ExerciseRole.role_key).where(
+                        ExerciseRole.exercise_id == exercise_id,
+                        ExerciseRole.user_id == user.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not role_keys:
+            raise HTTPException(status_code=403, detail="insufficient permissions")
+        granted = (
+            (await db.execute(select(RoleDefinition.permissions).where(RoleDefinition.role_key.in_(role_keys))))
+            .scalars()
+            .all()
+        )
+        allowed: set[str] = set()
+        for perms in granted:
+            allowed.update(perms)
+        if perm not in allowed:
+            raise HTTPException(status_code=403, detail="insufficient permissions")
 
     return _dependency
 
@@ -103,11 +137,11 @@ def require_team_membership(tid: str) -> Callable[..., Awaitable[None]]:
     """Build a FastAPI dependency that asserts the caller belongs to team ``tid``.
 
     Resolves JWT -> user -> team membership for ``tid`` and raises 403 otherwise.
-    Unimplemented until WP2.
+    Lands in **Phase D** (needs the ``team_member`` table).
     """
 
     async def _dependency() -> None:
-        raise NotImplementedError("require_team_membership resolver lands in WP2")
+        raise NotImplementedError("require_team_membership lands in Phase D (needs team_member)")
 
     return _dependency
 
