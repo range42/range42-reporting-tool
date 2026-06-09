@@ -36,7 +36,7 @@ jobs:
       JWT_SECRET: ci-test-secret-0123456789-0123456789-xx
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0   # no moving `v8` tag is published; pin the exact release
       - run: cd backend && uv sync --frozen
       - run: cd backend && uv run ruff check . && uv run ruff format --check .
       - run: cd backend && uv run mypy app
@@ -50,6 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v6
+        with: { package_json_file: frontend/package.json }   # reads the pinned packageManager (no root package.json)
       - uses: actions/setup-node@v6
         with: { node-version: 24, cache: pnpm, cache-dependency-path: frontend/pnpm-lock.yaml }
       - run: cd frontend && pnpm install --frozen-lockfile
@@ -64,6 +65,7 @@ jobs:
       - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v6
+        with: { package_json_file: frontend/package.json }   # reads the pinned packageManager (no root package.json)
       - uses: actions/setup-node@v6
         with: { node-version: 24 }
       - run: pnpm add -g @commitlint/cli @commitlint/config-conventional
@@ -86,13 +88,26 @@ jobs:
       - run: docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
       - name: wait + assert SPA and API through Caddy
         run: |
+          set -x
+          # Wait for the API through Caddy (Caddy + backend ready).
           for i in $(seq 1 40); do
             curl -fsSk https://localhost/api/v1/ping && break || sleep 3
           done
-          # §9.7: the SPA index.html is served at / through Caddy.
+          curl -fsSk https://localhost/api/v1/ping | grep -q '"status":"ok"'
+          # §9.7: the SPA index.html is served at / through Caddy. Retry — the one-shot
+          # frontend dist-copy can lag Caddy's start.
+          for i in $(seq 1 20); do
+            curl -fsSk https://localhost/ | grep -qi '<!doctype html' && break || sleep 3
+          done
           curl -fsSk https://localhost/ | grep -qi '<!doctype html'
-          # The API is proxied through Caddy (same origin), not a direct port.
-          curl -fsSk https://localhost/api/v1/health | grep -q '"oidc_provider": "disabled"'
+          # API proxied through Caddy returns the readiness envelope. Our JSON is COMPACT
+          # (Starlette JSONResponse separators are ",":") so match without spaces.
+          curl -fsSk https://localhost/api/v1/health | grep -q '"oidc_provider":"disabled"'
+      - name: dump compose state on failure
+        if: failure()
+        run: |
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml ps -a || true
+          docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml logs --tail=80 || true
       - name: assert prod overlay exposes only Caddy ports
         run: |
           DOMAIN=example.test docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml config \

@@ -23,3 +23,4 @@ deploy/docker-compose.localboot.yml
 # Project memory / assistant instructions — keep local, do not publish
 CLAUDE.md
 **/CLAUDE.md
+deploy/docker-compose.localprod.yml
