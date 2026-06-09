@@ -14,10 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import RedirectResponse
 
 from app.auth.oidc import OIDCProvider
-from app.auth.session import start_session
+from app.auth.session import RefreshDenied, refresh_session, revoke_session, start_session
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
-from app.core.rbac import get_oidc_provider
+from app.core.rbac import AuthContext, get_auth_context, get_oidc_provider
 from app.schemas.auth import TokenResponse, UserOut
 from app.schemas.common import DataEnvelope
 
@@ -51,3 +51,30 @@ async def callback(
     claims = provider.claims(id_token)
     issued = await start_session(db, claims, settings)
     return DataEnvelope(data=TokenResponse(access_token=issued.token, user=UserOut.from_model(issued.user)))
+
+
+@router.get("/auth/me")
+async def me(ctx: AuthContext = Depends(get_auth_context)) -> DataEnvelope[UserOut]:
+    return DataEnvelope(data=UserOut.from_model(ctx.user))
+
+
+@router.post("/auth/logout")
+async def logout(
+    ctx: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[dict[str, bool]]:
+    await revoke_session(db, ctx.session.jti)
+    return DataEnvelope(data={"revoked": True})
+
+
+@router.post("/auth/refresh")
+async def refresh(
+    ctx: AuthContext = Depends(get_auth_context),
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DataEnvelope[TokenResponse]:
+    try:
+        token = await refresh_session(db, ctx.session, settings)
+    except RefreshDenied as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return DataEnvelope(data=TokenResponse(access_token=token, user=UserOut.from_model(ctx.user)))
