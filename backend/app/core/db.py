@@ -17,13 +17,6 @@ def get_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def session_dependency(
-    sm: async_sessionmaker[AsyncSession],
-) -> AsyncIterator[AsyncSession]:
-    async with sm() as session:
-        yield session
-
-
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
     """FastAPI dependency: a per-request unit of work.
 
@@ -33,6 +26,8 @@ async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
     ``last_seen_at`` heartbeat (read-only routes still persist it on clean exit).
     Handlers may ``flush()`` to obtain server-generated values mid-request; the
     final commit/rollback is owned here, so handlers must not commit themselves.
+    Writes performed by dependencies (e.g. the ``get_current_user``
+    ``last_seen_at`` heartbeat) are likewise rolled back if the handler raises.
     """
     sm: async_sessionmaker[AsyncSession] = request.app.state.db_sessionmaker
     async with sm() as session:
