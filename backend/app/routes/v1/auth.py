@@ -10,9 +10,11 @@ B14/B15.
 from authlib.common.security import generate_token
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import RedirectResponse
 
+from app.auth.emergency import emergency_claims, verify_emergency_password
 from app.auth.oidc import OIDCProvider
 from app.auth.session import RefreshDenied, refresh_session, revoke_session, start_session
 from app.core.config import Settings, get_settings
@@ -78,3 +80,21 @@ async def refresh(
     except RefreshDenied as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     return DataEnvelope(data=TokenResponse(access_token=token, user=UserOut.from_model(ctx.user)))
+
+
+class EmergencyLoginIn(BaseModel):
+    password: str
+
+
+@router.post("/auth/emergency-login")
+async def emergency_login(
+    body: EmergencyLoginIn,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> DataEnvelope[TokenResponse]:
+    if not settings.emergency_admin_enabled:
+        raise HTTPException(status_code=404, detail="not found")
+    if not verify_emergency_password(body.password, settings.emergency_admin_password_hash):
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    issued = await start_session(db, emergency_claims(), settings, force_global_admin=True)
+    return DataEnvelope(data=TokenResponse(access_token=issued.token, user=UserOut.from_model(issued.user)))
