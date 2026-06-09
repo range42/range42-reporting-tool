@@ -18,6 +18,7 @@ match a name allowlist). Authorize on *permissions*, never on role names.
 """
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Request
@@ -31,16 +32,24 @@ from app.models.user import User
 from app.models.user_session import UserSession
 
 
-async def get_current_user(
+@dataclass
+class AuthContext:
+    """The validated caller: the user plus the active session row backing the JWT."""
+
+    user: User
+    session: UserSession
+
+
+async def get_auth_context(
     request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
-) -> User:
-    """Resolve the caller from the app-JWT + an active server-side session row.
+) -> AuthContext:
+    """Resolve + validate the caller from the app-JWT and the server-side session row.
 
-    Validates: Bearer present -> JWT signature/expiry -> session row exists, not
-    revoked, not expired -> user exists. Raises 401 on any failure. Refreshes
-    ``last_seen_at``. Authorization (permissions) is resolved separately, fresh.
+    Bearer present -> JWT signature/expiry -> session row exists, not revoked, not
+    expired -> user exists. 401 on any failure. Refreshes ``last_seen_at`` (persisted
+    by ``get_db``'s unit-of-work on a clean response).
     """
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -61,7 +70,12 @@ async def get_current_user(
 
     session_row.last_seen_at = now
     await db.flush()
-    return user
+    return AuthContext(user=user, session=session_row)
+
+
+async def get_current_user(ctx: AuthContext = Depends(get_auth_context)) -> User:
+    """Resolve the caller's ``User`` (delegates to ``get_auth_context``)."""
+    return ctx.user
 
 
 def require_permission(perm: str) -> Callable[..., Awaitable[None]]:
