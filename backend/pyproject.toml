@@ -17,7 +17,11 @@ dependencies = [
   "structlog>=26.1",
   "python-multipart>=0.0.32",
   "psycopg[binary]>=3.3",
-  "pyjwt>=2.10",
+  "pyjwt[crypto]>=2.10",
+  "authlib>=1.6",
+  "passlib[bcrypt]>=1.7.4",
+  "itsdangerous>=2.2",
+  "httpx>=0.28",
 ]
 
 [dependency-groups]
@@ -47,3 +51,7 @@ plugins = ["pydantic.mypy"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = ["integration: needs a database"]
+
+[[tool.mypy.overrides]]
+module = ["authlib.*", "passlib.*"]
+ignore_missing_imports = true
