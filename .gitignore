@@ -24,3 +24,5 @@ deploy/docker-compose.localboot.yml
 CLAUDE.md
 **/CLAUDE.md
 deploy/docker-compose.localprod.yml
+# Internal planning artifacts (specs/plans) — keep local, do not publish
+docs/superpowers/
