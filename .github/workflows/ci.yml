@@ -2,6 +2,7 @@ name: ci
 on:
   push: { branches: [main, dev] }
   pull_request: {}
+  workflow_dispatch: {}   # allow manual full-suite runs (ignores path filters)
 
 jobs:
   changes:
@@ -22,7 +23,7 @@ jobs:
 
   backend:
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: ${{ needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -45,7 +46,7 @@ jobs:
 
   frontend:
     needs: changes
-    if: needs.changes.outputs.frontend == 'true'
+    if: ${{ needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -73,7 +74,7 @@ jobs:
 
   docker-smoke:
     needs: changes
-    if: needs.changes.outputs.deploy == 'true'
+    if: ${{ needs.changes.outputs.deploy == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     # Boot the prod overlay (Caddy reverse proxy) so we can verify §9.7:
     # `curl / through Caddy returns index.html`. TLS_MODE=internal makes Caddy
