@@ -48,3 +48,8 @@ def test_oidc_and_emergency_settings_override() -> None:
     assert s.oidc_redirect_uri.endswith("/auth/callback")
     assert s.emergency_admin_enabled is True
     assert s.emergency_admin_password_hash == "$2b$12$abc"
+
+
+def test_session_https_only_default_and_override() -> None:
+    assert Settings(_env_file=None, **_base_env()).session_https_only is False
+    assert Settings(_env_file=None, SESSION_HTTPS_ONLY="true", **_base_env()).session_https_only is True

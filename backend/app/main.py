@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import jwt
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -19,6 +20,8 @@ from app.routes.v1 import config as config_route
 from app.routes.v1 import health as health_route
 from app.routes.v1 import ping as ping_route
 from app.routes.v1._stubs import routers as stub_routers
+
+logger = structlog.get_logger(__name__)
 
 
 async def _build_oidc_provider(settings: Settings) -> OIDCProvider | None:
@@ -44,7 +47,8 @@ async def _build_oidc_provider(settings: Settings) -> OIDCProvider | None:
             scopes=settings.oidc_scopes,
             jwks_resolver=jwks_resolver,
         )
-    except Exception:  # noqa: BLE001 — boot must survive a down/misconfigured IdP
+    except Exception as exc:  # noqa: BLE001 — boot must survive a down/misconfigured IdP
+        logger.warning("oidc_discovery_failed", issuer=settings.oidc_issuer_url, error=str(exc))
         return None
 
 
@@ -84,7 +88,7 @@ def create_app() -> FastAPI:
         SessionMiddleware,
         secret_key=session_secret,
         session_cookie="rt_oidc_txn",
-        https_only=False,
+        https_only=settings.session_https_only,
         same_site="lax",
         max_age=300,
     )

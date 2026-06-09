@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     branding_app_name: str = Field("Reporting Tool", alias="BRANDING_APP_NAME")
     branding_logo_url: str = Field("", alias="BRANDING_LOGO_URL")
     branding_primary_color: str = Field("#2563eb", alias="BRANDING_PRIMARY_COLOR")
+    session_https_only: bool = Field(False, alias="SESSION_HTTPS_ONLY")
 
     @field_validator("jwt_secret")
     @classmethod
