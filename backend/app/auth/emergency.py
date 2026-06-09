@@ -22,7 +22,7 @@ def verify_emergency_password(password: str, password_hash: str) -> bool:
         return False
     try:
         return _bcrypt.checkpw(password.encode(), password_hash.encode())
-    except ValueError, TypeError:
+    except (ValueError, TypeError):  # fmt: skip
         return False
 
 

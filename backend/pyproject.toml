@@ -19,7 +19,6 @@ dependencies = [
   "psycopg[binary]>=3.3",
   "pyjwt[crypto]>=2.10",
   "authlib>=1.6",
-  "passlib[bcrypt]>=1.7.4",
   "bcrypt>=4.2",
   "itsdangerous>=2.2",
   "httpx>=0.28",
@@ -54,5 +53,5 @@ testpaths = ["tests"]
 markers = ["integration: needs a database"]
 
 [[tool.mypy.overrides]]
-module = ["authlib.*", "passlib.*"]
+module = ["authlib.*"]
 ignore_missing_imports = true
