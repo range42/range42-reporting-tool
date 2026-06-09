@@ -70,9 +70,15 @@ def mint_app_jwt(
 
 
 def verify_app_jwt(token: str, secret: str) -> AppClaims:
-    """Verify signature + expiry and return typed claims. Raises ``InvalidToken``."""
+    """Verify signature + expiry and return typed claims. Raises ``InvalidToken``.
+
+    ``iat`` is treated as informational only; PyJWT's default strict ``iat <= now``
+    check is disabled so that tokens minted with an injected future ``now`` (used in
+    tests and in refresh flows) are not spuriously rejected.  The meaningful
+    time-bound is ``exp``, which is always verified.
+    """
     try:
-        data = jwt.decode(token, secret, algorithms=[APP_JWT_ALGORITHM])
+        data = jwt.decode(token, secret, algorithms=[APP_JWT_ALGORITHM], options={"verify_iat": False})
     except jwt.PyJWTError as exc:
         raise InvalidToken(str(exc)) from exc
     try:

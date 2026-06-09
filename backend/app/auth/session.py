@@ -75,3 +75,61 @@ async def revoke_session(db: AsyncSession, jti: str, *, now: datetime | None = N
     row.revoked_at = stamp
     await db.flush()
     return True
+
+
+class RefreshDenied(Exception):
+    """Raised when a session may not be refreshed (revoked/expired/window exceeded)."""
+
+
+async def any_exercise_active(db: AsyncSession) -> bool:
+    """Whether some exercise is currently ``active`` (ARCH §5.1.1 refresh gate).
+
+    Phase D backport: query ``exercise.status == 'active'`` once the table exists.
+    Until then there is no exercise table, so this returns ``True`` and refresh is
+    governed purely by the auth-time max-session window (issue #1 acceptance).
+    """
+    return True
+
+
+async def refresh_session(
+    db: AsyncSession,
+    session: UserSession,
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+) -> str:
+    """Re-issue an app-JWT for an active session within the max-session window.
+
+    Keeps the same ``jti`` and original ``auth_time``; extends ``expires_at``.
+
+    The ``expires_at <= stamp`` guard is intentionally absent: refresh exists
+    precisely to renew a token whose per-token TTL has lapsed or is about to.
+    Time-based denial is instead governed exclusively by the max-session window
+    (``jwt_exercise_max_session_hours``), which bounds the total lifetime of an
+    authentication event regardless of how many times the token is refreshed.
+
+    Raises ``RefreshDenied`` if the session is revoked, the max-session window is
+    exceeded, or no exercise is active.
+    """
+    stamp = now or datetime.now(UTC)
+    if session.revoked_at is not None:
+        raise RefreshDenied("session revoked")
+    window = timedelta(hours=settings.jwt_exercise_max_session_hours)
+    if stamp - session.auth_time >= window:
+        raise RefreshDenied("max session window exceeded")
+    if not await any_exercise_active(db):
+        raise RefreshDenied("no active exercise")
+
+    user = (await db.execute(select(User).where(User.id == session.user_id))).scalar_one()
+    session.expires_at = stamp + timedelta(minutes=settings.jwt_access_ttl_minutes)
+    session.last_seen_at = stamp
+    await db.flush()
+    return mint_app_jwt(
+        user_id=str(user.id),
+        is_global_admin=user.is_global_admin,
+        jti=session.jti,
+        auth_time=session.auth_time,
+        secret=settings.jwt_secret,
+        ttl_minutes=settings.jwt_access_ttl_minutes,
+        now=stamp,
+    )
