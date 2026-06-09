@@ -2,9 +2,14 @@ from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 ISSUER = "https://idp.test/realms/range42"
 AUDIENCE = "range42-client"
@@ -50,3 +55,22 @@ def mint_id_token(idp_private_key: rsa.RSAPrivateKey) -> Callable[..., str]:
         return jwt.encode(claims, idp_private_key, algorithm="RS256", headers={"kid": KID})
 
     return _mint
+
+
+TOKEN_ENDPOINT = "https://idp.test/token"
+AUTHORIZATION_ENDPOINT = "https://idp.test/authorize"
+JWKS_URI = "https://idp.test/jwks"
+
+
+@pytest.fixture()
+def fake_idp_transport(mint_id_token: Callable[..., str]) -> httpx.ASGITransport:
+    """An ASGI transport whose ``POST /token`` returns a freshly minted id_token."""
+
+    async def token(request: Request) -> JSONResponse:
+        form = await request.form()
+        if not form.get("code") or not form.get("code_verifier"):
+            return JSONResponse({"error": "invalid_request"}, status_code=400)
+        return JSONResponse({"access_token": "fake-access", "token_type": "Bearer", "id_token": mint_id_token()})
+
+    app = Starlette(routes=[Route("/token", token, methods=["POST"])])
+    return httpx.ASGITransport(app=app)

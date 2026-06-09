@@ -7,8 +7,8 @@ class _FakeProvider:
     def build_login_url(self, state: str, challenge: str) -> str:
         return f"https://idp.example/auth?state={state}&challenge={challenge}"
 
-    async def exchange(self, code: str) -> RawToken:
-        return f"token-for-{code}"
+    async def exchange(self, code: str, code_verifier: str) -> RawToken:
+        return f"token-for-{code}-{code_verifier}"
 
     def claims(self, token: RawToken) -> NormalizedClaims:
         return NormalizedClaims(
