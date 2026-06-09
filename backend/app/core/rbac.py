@@ -18,6 +18,46 @@ match a name allowlist). Authorize on *permissions*, never on role names.
 """
 
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+
+from fastapi import Depends, HTTPException, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import Settings
+from app.core.db import get_db
+from app.core.security import InvalidToken, verify_app_jwt
+from app.models.user import User
+from app.models.user_session import UserSession
+
+
+async def get_current_user(request: Request, db: AsyncSession = Depends(get_db)) -> User:
+    """Resolve the caller from the app-JWT + an active server-side session row.
+
+    Validates: Bearer present -> JWT signature/expiry -> session row exists, not
+    revoked, not expired -> user exists. Raises 401 on any failure. Refreshes
+    ``last_seen_at``. Authorization (permissions) is resolved separately, fresh.
+    """
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    try:
+        claims = verify_app_jwt(auth.removeprefix("Bearer "), Settings().jwt_secret)
+    except InvalidToken:
+        raise HTTPException(status_code=401, detail="invalid token") from None
+
+    session_row = (await db.execute(select(UserSession).where(UserSession.jti == claims.jti))).scalar_one_or_none()
+    now = datetime.now(UTC)
+    if session_row is None or session_row.revoked_at is not None or session_row.expires_at <= now:
+        raise HTTPException(status_code=401, detail="session invalid")
+
+    user = (await db.execute(select(User).where(User.id == session_row.user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=401, detail="user not found")
+
+    session_row.last_seen_at = now
+    await db.flush()
+    return user
 
 
 def require_permission(perm: str) -> Callable[..., Awaitable[None]]:
