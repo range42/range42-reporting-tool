@@ -25,6 +25,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.oidc import OIDCProvider
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.security import InvalidToken, verify_app_jwt
@@ -102,3 +103,11 @@ def require_team_membership(tid: str) -> Callable[..., Awaitable[None]]:
         raise NotImplementedError("require_team_membership resolver lands in WP2")
 
     return _dependency
+
+
+def get_oidc_provider(request: Request) -> OIDCProvider:
+    """Return the configured OIDC provider or raise 503 if OIDC is not set up."""
+    provider: OIDCProvider | None = getattr(request.app.state, "oidc_provider", None)
+    if provider is None:
+        raise HTTPException(status_code=503, detail="OIDC not configured")
+    return provider
