@@ -103,3 +103,13 @@ async def test_or_across_multiple_roles(migrated_db: async_sessionmaker[AsyncSes
         a = await c.get(_url("approve"), headers={"Authorization": f"Bearer {token}"})
     assert w.status_code == 200
     assert a.status_code == 200
+
+
+@pytest.mark.integration
+async def test_role_in_other_exercise_does_not_grant_here(migrated_db: async_sessionmaker[AsyncSession]) -> None:
+    # User has team_writer in EX, but requests a write in a DIFFERENT exercise → 403.
+    token = await _setup(migrated_db, jti="rp-xexercise", role_keys=["team_writer"])
+    other = uuid.UUID("33333333-3333-3333-3333-333333333333")
+    async with AsyncClient(transport=ASGITransport(app=_app(migrated_db)), base_url="http://t") as c:
+        r = await c.get(f"/exercises/{other}/write", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403

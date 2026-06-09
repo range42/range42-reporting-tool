@@ -1,7 +1,9 @@
-"""Permission-based RBAC dependency factories (shape reservation — no impl yet).
+"""Permission-based RBAC dependency factories.
 
-These are the final FastAPI-dependency signatures for v1 authorization. They are
-unimplemented (raise ``NotImplementedError``); the resolver lands in WP2.
+``get_current_user``, ``get_auth_context``, ``require_permission``, and
+``require_global_admin`` are fully implemented (WP2 Phase C). The only remaining
+stub is ``require_team_membership``, which lands in Phase D once the
+``team_member`` table exists.
 
 Resolver chain (how a permission string is checked):
 
@@ -10,6 +12,8 @@ Resolver chain (how a permission string is checked):
 i.e. the request's app-JWT identifies the *user*; the user's *exercise_role* for
 the target exercise points at a *role_definition*; that definition carries a set
 of permission *strings*; ``require_permission`` asserts ``perm`` is in that set.
+The check is exercise-scoped: only rows whose ``exercise_id`` matches the path
+parameter are considered, so a role in exercise A never grants access in exercise B.
 
 NOTE: the architecture doc §5.3 ``require_role(role_names)`` example is
 **SUPERSEDED** by this permission-based model. Gating on hard-coded role *names*
