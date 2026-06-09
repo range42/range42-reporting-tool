@@ -19,3 +19,7 @@ backups/
 deploy/docker-compose.localboot.yml
 # OS
 .DS_Store
+
+# Project memory / assistant instructions — keep local, do not publish
+CLAUDE.md
+**/CLAUDE.md
