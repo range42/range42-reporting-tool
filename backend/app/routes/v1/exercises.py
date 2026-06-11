@@ -4,15 +4,23 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, nulls_last, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
-from app.core.permissions import EXERCISES_READ
+from app.core.permissions import EXERCISES_READ, TEAMS_READ
 from app.core.rbac import get_current_user, require_global_admin, require_permission
-from app.models import Exercise, ExerciseRole, Team, TeamMember, User
+from app.models import Exercise, ExerciseRole, Team, TeamMember, TeamTypeConfig, User
 from app.schemas.common import DataEnvelope, Page
-from app.schemas.domain import ExerciseCreate, ExerciseOut, ExerciseUpdate
+from app.schemas.domain import (
+    ExerciseCreate,
+    ExerciseOut,
+    ExerciseUpdate,
+    TeamTypeConfigCreate,
+    TeamTypeConfigOut,
+    TeamTypeConfigUpdate,
+)
 from app.seed import seed_exercise_defaults
 
 router = APIRouter(tags=["exercises"])
@@ -115,3 +123,84 @@ async def archive_exercise(
     await db.flush()
     await db.refresh(ex)
     return DataEnvelope(data=ExerciseOut.from_model(ex))
+
+
+@router.get("/exercises/{exercise_id}/team-types")
+async def list_team_types(
+    exercise_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(TEAMS_READ)),
+) -> DataEnvelope[list[TeamTypeConfigOut]]:
+    rows = (
+        (
+            await db.execute(
+                select(TeamTypeConfig)
+                .where(TeamTypeConfig.exercise_id == exercise_id)
+                .order_by(TeamTypeConfig.type_key)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return DataEnvelope(data=[TeamTypeConfigOut.from_model(t) for t in rows])
+
+
+@router.post("/exercises/{exercise_id}/team-types", status_code=201)
+async def create_team_type(
+    exercise_id: uuid.UUID,
+    body: TeamTypeConfigCreate,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[TeamTypeConfigOut]:
+    await _get_exercise(db, exercise_id)
+    t = TeamTypeConfig(
+        exercise_id=exercise_id,
+        type_key=body.type_key,
+        display_label=body.display_label,
+        default_color=body.default_color,
+        is_visible_to_others=body.is_visible_to_others,
+    )
+    db.add(t)
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="team type already exists") from None
+    return DataEnvelope(data=TeamTypeConfigOut.from_model(t))
+
+
+async def _get_team_type(db: AsyncSession, exercise_id: uuid.UUID, type_id: uuid.UUID) -> TeamTypeConfig:
+    t = (
+        await db.execute(
+            select(TeamTypeConfig).where(TeamTypeConfig.id == type_id, TeamTypeConfig.exercise_id == exercise_id)
+        )
+    ).scalar_one_or_none()
+    if t is None:
+        raise HTTPException(status_code=404, detail="team type not found")
+    return t
+
+
+@router.patch("/exercises/{exercise_id}/team-types/{type_id}")
+async def update_team_type(
+    exercise_id: uuid.UUID,
+    type_id: uuid.UUID,
+    body: TeamTypeConfigUpdate,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[TeamTypeConfigOut]:
+    t = await _get_team_type(db, exercise_id, type_id)
+    for k, v in body.model_dump(exclude_unset=True).items():
+        setattr(t, k, v)
+    await db.flush()
+    return DataEnvelope(data=TeamTypeConfigOut.from_model(t))
+
+
+@router.delete("/exercises/{exercise_id}/team-types/{type_id}", status_code=204)
+async def delete_team_type(
+    exercise_id: uuid.UUID,
+    type_id: uuid.UUID,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    t = await _get_team_type(db, exercise_id, type_id)
+    await db.delete(t)
+    await db.flush()
