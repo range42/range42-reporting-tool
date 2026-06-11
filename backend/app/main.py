@@ -21,6 +21,7 @@ from app.routes.v1 import config as config_route
 from app.routes.v1 import exercises as exercises_route
 from app.routes.v1 import health as health_route
 from app.routes.v1 import ping as ping_route
+from app.routes.v1 import teams as teams_route
 from app.routes.v1._stubs import routers as stub_routers
 
 logger = structlog.get_logger(__name__)
@@ -95,7 +96,14 @@ def create_app() -> FastAPI:
         max_age=300,
     )
     register_error_handlers(app)
-    for r in (ping_route.router, health_route.router, config_route.router, auth_route.router, exercises_route.router):
+    for r in (
+        ping_route.router,
+        health_route.router,
+        config_route.router,
+        auth_route.router,
+        exercises_route.router,
+        teams_route.router,
+    ):
         app.include_router(r, prefix="/api/v1")
     # SCAFFOLDING (F4): probe route exists only to emit the SectionBody
     # discriminator into OpenAPI / generated frontend types. Removable in WP3.

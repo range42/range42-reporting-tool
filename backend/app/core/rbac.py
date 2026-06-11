@@ -1,9 +1,9 @@
 """Permission-based RBAC dependency factories.
 
-``get_current_user``, ``get_auth_context``, ``require_permission``, and
-``require_global_admin`` are fully implemented (WP2 Phase C). The only remaining
-stub is ``require_team_membership``, which lands in Phase D once the
-``team_member`` table exists.
+``get_current_user``, ``get_auth_context``, ``require_permission``,
+``require_global_admin``, and ``require_team_membership`` are all fully
+implemented (WP2 Phase D). ``require_team_membership`` reads the ``team_member``
+table to assert the caller belongs to a team.
 
 Resolver chain (how a permission string is checked):
 
@@ -36,6 +36,7 @@ from app.core.db import get_db
 from app.core.security import InvalidToken, verify_app_jwt
 from app.models.exercise_role import ExerciseRole
 from app.models.role_definition import RoleDefinition
+from app.models.team_member import TeamMember
 from app.models.user import User
 from app.models.user_session import UserSession
 
@@ -137,17 +138,23 @@ def require_permission(perm: str) -> Callable[..., Awaitable[None]]:
     return _dependency
 
 
-def require_team_membership(tid: str) -> Callable[..., Awaitable[None]]:
-    """Build a FastAPI dependency that asserts the caller belongs to team ``tid``.
+async def require_team_membership(
+    team_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Assert the caller is a member of ``team_id`` (global admins bypass). 403 otherwise.
 
-    Resolves JWT -> user -> team membership for ``tid`` and raises 403 otherwise.
-    Lands in **Phase D** (needs the ``team_member`` table).
+    Reads the ``team_id`` path parameter, so any route guarded by this dependency must
+    declare ``team_id: uuid.UUID`` in its path.
     """
-
-    async def _dependency() -> None:
-        raise NotImplementedError("require_team_membership lands in Phase D (needs team_member)")
-
-    return _dependency
+    if user.is_global_admin:
+        return
+    exists = (
+        await db.execute(select(TeamMember.id).where(TeamMember.team_id == team_id, TeamMember.user_id == user.id))
+    ).first()
+    if exists is None:
+        raise HTTPException(status_code=403, detail="not a team member")
 
 
 def get_oidc_provider(request: Request) -> OIDCProvider:
