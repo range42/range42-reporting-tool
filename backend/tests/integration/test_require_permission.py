@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.rbac import require_permission
 from app.core.security import mint_app_jwt
+from app.models.exercise import Exercise
 from app.models.exercise_role import ExerciseRole
 from app.models.user import User
 from app.models.user_session import UserSession
@@ -51,6 +52,9 @@ async def _setup(sm: async_sessionmaker[AsyncSession], *, jti: str, role_keys: l
                 jti=jti, user_id=u.id, auth_time=datetime.now(UTC), expires_at=datetime.now(UTC) + timedelta(hours=1)
             )
         )
+        if await s.get(Exercise, EX) is None:
+            s.add(Exercise(id=EX, name="Test Exercise", created_by=u.id))
+            await s.flush()
         for rk in role_keys:
             s.add(ExerciseRole(exercise_id=EX, user_id=u.id, role_key=rk))
         await s.commit()

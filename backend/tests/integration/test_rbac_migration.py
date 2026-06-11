@@ -24,6 +24,10 @@ async def test_exercise_role_unique_constraint(migrated_db: async_sessionmaker[A
         ).scalar_one()
         ex = "11111111-1111-1111-1111-111111111111"
         await s.execute(
+            text("INSERT INTO exercise (id, name, created_by) VALUES (:e, 'Test Exercise', :u)"),
+            {"e": ex, "u": user_id},
+        )
+        await s.execute(
             text("INSERT INTO exercise_role (exercise_id, user_id, role_key) VALUES (:e, :u, 'team_writer')"),
             {"e": ex, "u": user_id},
         )
