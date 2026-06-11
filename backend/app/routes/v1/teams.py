@@ -12,7 +12,7 @@ from app.core.permissions import TEAMS_READ
 from app.core.rbac import require_global_admin, require_permission, require_team_membership
 from app.models import Team, TeamMember, TeamTypeConfig, User
 from app.schemas.common import DataEnvelope
-from app.schemas.domain import TeamCreate, TeamMemberOut, TeamOut, TeamUpdate
+from app.schemas.domain import TeamCreate, TeamMemberCreate, TeamMemberOut, TeamMemberRowOut, TeamOut, TeamUpdate
 
 router = APIRouter(tags=["teams"])
 
@@ -115,4 +115,47 @@ async def delete_team(
 ) -> None:
     t = await _get_team(db, exercise_id, team_id)
     await db.delete(t)  # CASCADE removes team_member rows
+    await db.flush()
+
+
+@router.post("/exercises/{exercise_id}/teams/{team_id}/members", status_code=201)
+async def add_member(
+    exercise_id: uuid.UUID,
+    team_id: uuid.UUID,
+    body: TeamMemberCreate,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[TeamMemberRowOut]:
+    await _get_team(db, exercise_id, team_id)
+    try:
+        user_uuid = uuid.UUID(body.user_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="invalid user_id") from None
+    user = (await db.execute(select(User).where(User.id == user_uuid))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    m = TeamMember(team_id=team_id, user_id=user.id)
+    db.add(m)
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="user already a member of this team") from None
+    return DataEnvelope(data=TeamMemberRowOut.from_model(m))
+
+
+@router.delete("/exercises/{exercise_id}/teams/{team_id}/members/{user_id}", status_code=204)
+async def remove_member(
+    exercise_id: uuid.UUID,
+    team_id: uuid.UUID,
+    user_id: uuid.UUID,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _get_team(db, exercise_id, team_id)
+    m = (
+        await db.execute(select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.user_id == user_id))
+    ).scalar_one_or_none()
+    if m is None:
+        raise HTTPException(status_code=404, detail="membership not found")
+    await db.delete(m)
     await db.flush()
