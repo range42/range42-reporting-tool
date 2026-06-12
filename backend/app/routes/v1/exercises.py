@@ -11,11 +11,13 @@ from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
 from app.core.permissions import EXERCISES_READ, TEAMS_READ
 from app.core.rbac import get_current_user, require_global_admin, require_permission
-from app.models import Exercise, ExerciseRole, Team, TeamMember, TeamTypeConfig, User
+from app.models import Exercise, ExerciseRole, RoleDefinition, Team, TeamMember, TeamTypeConfig, User
 from app.schemas.common import DataEnvelope, Page
 from app.schemas.domain import (
     ExerciseCreate,
     ExerciseOut,
+    ExerciseRoleCreate,
+    ExerciseRoleOut,
     ExerciseUpdate,
     TeamTypeConfigCreate,
     TeamTypeConfigOut,
@@ -203,4 +205,61 @@ async def delete_team_type(
 ) -> None:
     t = await _get_team_type(db, exercise_id, type_id)
     await db.delete(t)
+    await db.flush()
+
+
+@router.post("/exercises/{exercise_id}/roles", status_code=201)
+async def assign_role(
+    exercise_id: uuid.UUID,
+    body: ExerciseRoleCreate,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ExerciseRoleOut]:
+    await _get_exercise(db, exercise_id)
+    try:
+        user_uuid = uuid.UUID(body.user_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="invalid user_id") from None
+    user = (await db.execute(select(User).where(User.id == user_uuid))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    role = (
+        await db.execute(select(RoleDefinition.role_key).where(RoleDefinition.role_key == body.role_key))
+    ).scalar_one_or_none()
+    if role is None:
+        raise HTTPException(status_code=400, detail=f"unknown role '{body.role_key}'")
+    r = ExerciseRole(exercise_id=exercise_id, user_id=user.id, role_key=body.role_key)
+    db.add(r)
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="user already holds this role in the exercise") from None
+    return DataEnvelope(data=ExerciseRoleOut.from_model(r))
+
+
+@router.get("/exercises/{exercise_id}/roles")
+async def list_role_assignments(
+    exercise_id: uuid.UUID,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[list[ExerciseRoleOut]]:
+    rows = (await db.execute(select(ExerciseRole).where(ExerciseRole.exercise_id == exercise_id))).scalars().all()
+    return DataEnvelope(data=[ExerciseRoleOut.from_model(r) for r in rows])
+
+
+@router.delete("/exercises/{exercise_id}/roles/{assignment_id}", status_code=204)
+async def remove_role_assignment(
+    exercise_id: uuid.UUID,
+    assignment_id: uuid.UUID,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    r = (
+        await db.execute(
+            select(ExerciseRole).where(ExerciseRole.id == assignment_id, ExerciseRole.exercise_id == exercise_id)
+        )
+    ).scalar_one_or_none()
+    if r is None:
+        raise HTTPException(status_code=404, detail="assignment not found")
+    await db.delete(r)
     await db.flush()
