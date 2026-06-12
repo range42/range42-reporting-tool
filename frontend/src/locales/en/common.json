@@ -10,5 +10,13 @@
     "invalid": "Sign in failed. Check your credentials.",
     "completing": "Completing sign in…",
     "callbackFailed": "Sign in could not be completed."
+  },
+  "exercises": {
+    "title": "Exercises",
+    "subtitle": "Select an exercise to work in",
+    "empty": "No exercises available to you yet.",
+    "manageRoles": "Manage roles",
+    "logout": "Sign out",
+    "status": { "draft": "Draft", "active": "Active", "archived": "Archived" }
   }
 }
