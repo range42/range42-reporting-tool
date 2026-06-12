@@ -8,7 +8,7 @@ from app.core.rbac import require_global_admin
 from app.models.user import User
 from app.schemas.common import DataEnvelope
 
-router = APIRouter()
+router = APIRouter(tags=["permissions"])
 
 
 @router.get("/permissions")
