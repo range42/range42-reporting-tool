@@ -29,8 +29,13 @@ async function reload(): Promise<void> {
 }
 
 onMounted(async () => {
-  catalogue.value = await listPermissions(token.value)
-  await reload()
+  if (!auth.token) return
+  try {
+    catalogue.value = await listPermissions(token.value)
+    await reload()
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'Failed to load roles'
+  }
 })
 
 function openCreate(): void {

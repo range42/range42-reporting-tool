@@ -62,6 +62,7 @@ describe('Roles.vue', () => {
     expect(wrapper.text()).toContain('CISO')
     const systemRow = wrapper.get('[data-test="role-row-s"]')
     expect(systemRow.get('[data-test="edit"]').attributes('disabled')).toBeDefined()
+    expect(systemRow.get('[data-test="delete"]').attributes('disabled')).toBeDefined()
   })
 
   it('creates a role through the modal', async () => {
@@ -97,5 +98,39 @@ describe('Roles.vue', () => {
     await wrapper.get('[data-test="delete"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('.alert-error').exists()).toBe(true)
+  })
+
+  it('edits an existing role through the modal (PATCH, role_key disabled)', async () => {
+    vi.spyOn(svc, 'listRoles').mockResolvedValue([CUSTOM])
+    const update = vi.spyOn(svc, 'updateRole').mockResolvedValue(CUSTOM)
+    const wrapper = mountRoles()
+    await flushPromises()
+    await wrapper.get('[data-test="role-row-c"] [data-test="edit"]').trigger('click')
+    expect(wrapper.get('[data-test="role_key"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-test="display_label"]').setValue('Chief')
+    await wrapper.get('[data-test="save-form"]').trigger('submit')
+    await flushPromises()
+    expect(update).toHaveBeenCalledWith(
+      'tok',
+      'c',
+      expect.objectContaining({ display_label: 'Chief' }),
+    )
+  })
+
+  it('keeps the modal open and shows an error when create fails', async () => {
+    vi.spyOn(svc, 'listRoles').mockResolvedValue([])
+    const { ApiError } = await import('@/services/http')
+    vi.spyOn(svc, 'createRole').mockRejectedValue(
+      new ApiError('HTTP_ERROR', 'role_key already exists'),
+    )
+    const wrapper = mountRoles()
+    await flushPromises()
+    await wrapper.get('[data-test="create"]').trigger('click')
+    await wrapper.get('[data-test="role_key"]').setValue('dupe')
+    await wrapper.get('[data-test="display_label"]').setValue('Dupe')
+    await wrapper.get('[data-test="save-form"]').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('.alert-error').exists()).toBe(true)
+    expect(wrapper.find('.modal-open').exists()).toBe(true)
   })
 })
