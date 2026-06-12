@@ -43,4 +43,14 @@ describe('AuthCallback.vue', () => {
     expect(wrapper.find('.alert-error').exists()).toBe(true)
     expect(push).not.toHaveBeenCalled()
   })
+
+  it('shows an error when completeOidc rejects', async () => {
+    query = { code: 'bad', state: 'bad' }
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'completeOidc').mockRejectedValue(new Error('invalid_grant'))
+    const wrapper = mountCb()
+    await flushPromises()
+    expect(wrapper.find('.alert-error').exists()).toBe(true)
+    expect(push).not.toHaveBeenCalled()
+  })
 })

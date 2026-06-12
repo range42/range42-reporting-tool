@@ -45,10 +45,11 @@ async function submitEmergency(): Promise<void> {
         <form class="space-y-3" @submit.prevent="submitEmergency">
           <h2 class="text-sm font-semibold opacity-70">{{ t('auth.emergencyHeading') }}</h2>
           <div class="form-control">
-            <label class="label"
-              ><span class="label-text">{{ t('auth.password') }}</span></label
-            >
+            <label class="label" for="emergency-password">
+              <span class="label-text">{{ t('auth.password') }}</span>
+            </label>
             <input
+              id="emergency-password"
               v-model="password"
               type="password"
               class="input input-bordered w-full"
