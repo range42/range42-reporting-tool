@@ -39,6 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
     setSession(await completeOidcCallback(code, state))
   }
 
+  /** Reserved for a future proactive token-refresh feature; not yet invoked. */
   async function refresh(): Promise<void> {
     if (token.value) setSession(await refreshSession(token.value))
   }

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { listExercises, type Exercise } from '@/services/exercises'
+import { ApiError } from '@/services/http'
 
 const { t } = useI18n()
 const router = useRouter()
 const auth = useAuthStore()
 const exercises = ref<Exercise[]>([])
 const loading = ref(true)
+const error = ref('')
 
 const badgeClass: Record<Exercise['status'], string> = {
   draft: 'badge-warning',
@@ -18,13 +20,15 @@ const badgeClass: Record<Exercise['status'], string> = {
 }
 
 onMounted(async () => {
-  if (auth.token) {
-    try {
-      exercises.value = await listExercises(auth.token)
-    } finally {
-      loading.value = false
-    }
-  } else {
+  if (!auth.token) {
+    loading.value = false
+    return
+  }
+  try {
+    exercises.value = await listExercises(auth.token)
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : t('exercises.loadError')
+  } finally {
     loading.value = false
   }
 })
@@ -49,6 +53,10 @@ async function logout(): Promise<void> {
         <button class="btn btn-ghost btn-sm" @click="logout">{{ t('exercises.logout') }}</button>
       </div>
     </header>
+
+    <div v-if="error" class="alert alert-error mb-4">
+      <span>{{ error }}</span>
+    </div>
 
     <div v-if="loading" class="flex justify-center py-12">
       <span class="loading loading-spinner loading-lg"></span>

@@ -46,6 +46,7 @@ describe('ExercisePicker.vue', () => {
     expect(wrapper.findAll('[data-test="exercise-card"]')).toHaveLength(2)
     expect(wrapper.text()).toContain('Alpha')
     expect(wrapper.text()).toContain('Bravo')
+    expect(svc.listExercises).toHaveBeenCalledWith('tok')
   })
 
   it('shows the empty state when there are none', async () => {

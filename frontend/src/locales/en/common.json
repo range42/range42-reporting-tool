@@ -15,6 +15,7 @@
     "title": "Exercises",
     "subtitle": "Select an exercise to work in",
     "empty": "No exercises available to you yet.",
+    "loadError": "Could not load exercises. Please try again.",
     "manageRoles": "Manage roles",
     "logout": "Sign out",
     "status": { "draft": "Draft", "active": "Active", "archived": "Archived" }
