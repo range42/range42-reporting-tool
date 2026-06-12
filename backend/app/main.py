@@ -21,6 +21,7 @@ from app.routes.v1 import config as config_route
 from app.routes.v1 import exercises as exercises_route
 from app.routes.v1 import health as health_route
 from app.routes.v1 import ping as ping_route
+from app.routes.v1 import roles as roles_route
 from app.routes.v1 import teams as teams_route
 from app.routes.v1._stubs import routers as stub_routers
 
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
         auth_route.router,
         exercises_route.router,
         teams_route.router,
+        roles_route.router,
     ):
         app.include_router(r, prefix="/api/v1")
     # SCAFFOLDING (F4): probe route exists only to emit the SectionBody

@@ -7,6 +7,24 @@ from app.core.middleware_trace import trace_id_var
 from app.schemas.common import ErrorBody, ErrorEnvelope
 
 
+def _sanitize_item(obj: object) -> object:
+    """Recursively replace Exception instances with their string representation.
+
+    Pydantic ``field_validator`` errors place the raw exception in ``ctx["error"]``,
+    which is not JSON-serialisable.  This walk converts those to strings before
+    the payload is handed to ``JSONResponse``.
+    """
+    if isinstance(obj, dict):
+        return {k: (str(v) if isinstance(v, Exception) else _sanitize_item(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_item(item) for item in obj]
+    return obj
+
+
+def _sanitize_errors(errors: list[object]) -> list[object]:
+    return [_sanitize_item(e) for e in errors]
+
+
 def _envelope(code: str, message: str, details: list[object], status: int) -> JSONResponse:
     body = ErrorEnvelope(
         error=ErrorBody(code=code, message=message, details=details),
@@ -22,4 +40,4 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, exc: RequestValidationError) -> JSONResponse:
-        return _envelope("VALIDATION_ERROR", "Invalid request", list(exc.errors()), 422)
+        return _envelope("VALIDATION_ERROR", "Invalid request", _sanitize_errors(list(exc.errors())), 422)
