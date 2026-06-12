@@ -2,11 +2,12 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
 from app.core.rbac import require_global_admin
@@ -26,8 +27,9 @@ async def _get_role(db: AsyncSession, role_id: uuid.UUID) -> RoleDefinition:
 
 @router.post("/roles", status_code=201)
 async def create_role(
+    request: Request,
     body: RoleCreate,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[RoleOut]:
     r = RoleDefinition(
@@ -42,6 +44,15 @@ async def create_role(
         await db.flush()
     except IntegrityError:
         raise HTTPException(status_code=409, detail="role_key already exists") from None
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="role.create",
+        resource_type="role",
+        resource_id=r.id,
+        details={"role_key": r.role_key},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=RoleOut.from_model(r))
 
 
@@ -71,14 +82,16 @@ async def list_roles(
 
 @router.patch("/roles/{role_id}")
 async def update_role(
+    request: Request,
     role_id: uuid.UUID,
     body: RoleUpdate,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[RoleOut]:
     r = await _get_role(db, role_id)
     if r.is_system:
         raise HTTPException(status_code=409, detail="cannot modify a system role")
+    changed = sorted(body.model_dump(exclude_unset=True).keys())
     data = body.model_dump(exclude_unset=True)
     if data.get("permissions") is not None:
         data["permissions"] = sorted(data["permissions"])
@@ -86,13 +99,23 @@ async def update_role(
         setattr(r, k, v)
     await db.flush()
     await db.refresh(r)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="role.update",
+        resource_type="role",
+        resource_id=r.id,
+        details={"changed": changed},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=RoleOut.from_model(r))
 
 
 @router.delete("/roles/{role_id}", status_code=204)
 async def delete_role(
+    request: Request,
     role_id: uuid.UUID,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     r = await _get_role(db, role_id)
@@ -103,3 +126,12 @@ async def delete_role(
         raise HTTPException(status_code=409, detail="role has active assignments")
     await db.delete(r)
     await db.flush()
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="role.delete",
+        resource_type="role",
+        resource_id=role_id,
+        details=None,
+        ip=client_ip(request),
+    )
