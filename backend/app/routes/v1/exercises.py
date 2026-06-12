@@ -258,6 +258,11 @@ async def delete_team_type(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     t = await _get_team_type(db, exercise_id, type_id)
+    in_use = (
+        await db.execute(select(Team.id).where(Team.exercise_id == exercise_id, Team.team_type == t.type_key).limit(1))
+    ).first()
+    if in_use is not None:
+        raise HTTPException(status_code=409, detail="team type is in use by a team")
     await db.delete(t)
     await db.flush()
     await record_audit(
