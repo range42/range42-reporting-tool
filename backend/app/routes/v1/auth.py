@@ -17,6 +17,7 @@ from starlette.responses import RedirectResponse
 from app.auth.emergency import emergency_claims, verify_emergency_password
 from app.auth.oidc import OIDCProvider
 from app.auth.session import RefreshDenied, refresh_session, revoke_session, start_session
+from app.core.audit import client_ip, record_audit
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.rbac import AuthContext, get_auth_context, get_oidc_provider
@@ -52,6 +53,15 @@ async def callback(
     id_token = await provider.exchange(code, verifier)
     claims = provider.claims(id_token)
     issued = await start_session(db, claims, settings)
+    await record_audit(
+        db,
+        user_id=issued.user.id,
+        action="auth.login",
+        resource_type="session",
+        resource_id=issued.user.id,
+        details={"provider": claims.provider},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=TokenResponse(access_token=issued.token, user=UserOut.from_model(issued.user)))
 
 
@@ -88,6 +98,7 @@ class EmergencyLoginIn(BaseModel):
 
 @router.post("/auth/emergency-login")
 async def emergency_login(
+    request: Request,
     body: EmergencyLoginIn,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -97,4 +108,13 @@ async def emergency_login(
     if not verify_emergency_password(body.password, settings.emergency_admin_password_hash):
         raise HTTPException(status_code=401, detail="invalid credentials")
     issued = await start_session(db, emergency_claims(), settings, force_global_admin=True)
+    await record_audit(
+        db,
+        user_id=issued.user.id,
+        action="auth.emergency_login",
+        resource_type="session",
+        resource_id=issued.user.id,
+        details={"provider": "emergency"},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=TokenResponse(access_token=issued.token, user=UserOut.from_model(issued.user)))
