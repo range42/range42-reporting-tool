@@ -3,15 +3,21 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.models import Exercise, ExerciseRole, Team, TeamMember, TeamTypeConfig, User
 
 ExerciseStatus = Literal["draft", "active", "archived"]
 
 
+def _reject_null(v: object) -> object:
+    if v is None:
+        raise ValueError("field may not be null")
+    return v
+
+
 class ExerciseCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=255)
     description: str | None = None
     starts_at: datetime | None = None
     ends_at: datetime | None = None
@@ -22,7 +28,7 @@ class ExerciseCreate(BaseModel):
 
 
 class ExerciseUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     status: ExerciseStatus | None = None
     starts_at: datetime | None = None
@@ -31,6 +37,11 @@ class ExerciseUpdate(BaseModel):
     tlp: str | None = None
     classification_caveats: list[str] | None = None
     metadata: dict[str, Any] | None = None
+
+    @field_validator("name", "status", mode="before")
+    @classmethod
+    def _nn(cls, v: object) -> object:
+        return _reject_null(v)
 
 
 class ExerciseOut(BaseModel):
@@ -70,14 +81,19 @@ class ExerciseOut(BaseModel):
 class TeamTypeConfigCreate(BaseModel):
     type_key: str
     display_label: str
-    default_color: str | None = None
+    default_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     is_visible_to_others: bool = True
 
 
 class TeamTypeConfigUpdate(BaseModel):
     display_label: str | None = None
-    default_color: str | None = None
+    default_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     is_visible_to_others: bool | None = None
+
+    @field_validator("display_label", mode="before")
+    @classmethod
+    def _nn(cls, v: object) -> object:
+        return _reject_null(v)
 
 
 class TeamTypeConfigOut(BaseModel):
@@ -101,17 +117,22 @@ class TeamTypeConfigOut(BaseModel):
 
 
 class TeamCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=255)
     team_type: str
-    color: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     metadata: dict[str, Any] | None = None
 
 
 class TeamUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
     team_type: str | None = None
-    color: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
     metadata: dict[str, Any] | None = None
+
+    @field_validator("name", "team_type", mode="before")
+    @classmethod
+    def _nn(cls, v: object) -> object:
+        return _reject_null(v)
 
 
 class TeamMemberOut(BaseModel):

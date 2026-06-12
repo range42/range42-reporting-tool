@@ -35,7 +35,9 @@ class RoleUpdate(BaseModel):
     @field_validator("permissions")
     @classmethod
     def _check(cls, v: list[str] | None) -> list[str] | None:
-        return None if v is None else _validate_perms(v)
+        if v is None:
+            raise ValueError("permissions may not be null")
+        return _validate_perms(v)
 
 
 class RoleOut(BaseModel):
