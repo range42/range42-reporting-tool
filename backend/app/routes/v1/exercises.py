@@ -2,11 +2,12 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, nulls_last, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
 from app.core.permissions import EXERCISES_READ, TEAMS_READ
@@ -37,6 +38,7 @@ async def _get_exercise(db: AsyncSession, exercise_id: uuid.UUID) -> Exercise:
 
 @router.post("/exercises", status_code=201)
 async def create_exercise(
+    request: Request,
     body: ExerciseCreate,
     admin: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
@@ -55,6 +57,15 @@ async def create_exercise(
     db.add(ex)
     await db.flush()
     await seed_exercise_defaults(db, ex.id)
+    await record_audit(
+        db,
+        user_id=admin.id,
+        action="exercise.create",
+        resource_type="exercise",
+        resource_id=ex.id,
+        details={"name": ex.name},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=ExerciseOut.from_model(ex))
 
 
@@ -98,32 +109,53 @@ async def get_exercise(
 
 @router.patch("/exercises/{exercise_id}")
 async def update_exercise(
+    request: Request,
     exercise_id: uuid.UUID,
     body: ExerciseUpdate,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[ExerciseOut]:
     ex = await _get_exercise(db, exercise_id)
     data = body.model_dump(exclude_unset=True)
+    changed = sorted(data.keys())
     if "metadata" in data:
         ex.metadata_ = data.pop("metadata")
     for k, v in data.items():
         setattr(ex, k, v)
     await db.flush()
     await db.refresh(ex)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="exercise.update",
+        resource_type="exercise",
+        resource_id=ex.id,
+        details={"changed": changed},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=ExerciseOut.from_model(ex))
 
 
 @router.delete("/exercises/{exercise_id}")
 async def archive_exercise(
+    request: Request,
     exercise_id: uuid.UUID,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[ExerciseOut]:
     ex = await _get_exercise(db, exercise_id)
     ex.status = "archived"
     await db.flush()
     await db.refresh(ex)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="exercise.archive",
+        resource_type="exercise",
+        resource_id=ex.id,
+        details=None,
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=ExerciseOut.from_model(ex))
 
 
@@ -149,9 +181,10 @@ async def list_team_types(
 
 @router.post("/exercises/{exercise_id}/team-types", status_code=201)
 async def create_team_type(
+    request: Request,
     exercise_id: uuid.UUID,
     body: TeamTypeConfigCreate,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[TeamTypeConfigOut]:
     await _get_exercise(db, exercise_id)
@@ -167,6 +200,15 @@ async def create_team_type(
         await db.flush()
     except IntegrityError:
         raise HTTPException(status_code=409, detail="team type already exists") from None
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="team_type.create",
+        resource_type="team_type",
+        resource_id=t.id,
+        details={"type_key": t.type_key, "exercise_id": str(exercise_id)},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=TeamTypeConfigOut.from_model(t))
 
 
@@ -183,36 +225,58 @@ async def _get_team_type(db: AsyncSession, exercise_id: uuid.UUID, type_id: uuid
 
 @router.patch("/exercises/{exercise_id}/team-types/{type_id}")
 async def update_team_type(
+    request: Request,
     exercise_id: uuid.UUID,
     type_id: uuid.UUID,
     body: TeamTypeConfigUpdate,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[TeamTypeConfigOut]:
     t = await _get_team_type(db, exercise_id, type_id)
+    changed = sorted(body.model_dump(exclude_unset=True).keys())
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(t, k, v)
     await db.flush()
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="team_type.update",
+        resource_type="team_type",
+        resource_id=t.id,
+        details={"changed": changed},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=TeamTypeConfigOut.from_model(t))
 
 
 @router.delete("/exercises/{exercise_id}/team-types/{type_id}", status_code=204)
 async def delete_team_type(
+    request: Request,
     exercise_id: uuid.UUID,
     type_id: uuid.UUID,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     t = await _get_team_type(db, exercise_id, type_id)
     await db.delete(t)
     await db.flush()
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="team_type.delete",
+        resource_type="team_type",
+        resource_id=type_id,
+        details=None,
+        ip=client_ip(request),
+    )
 
 
 @router.post("/exercises/{exercise_id}/roles", status_code=201)
 async def assign_role(
+    request: Request,
     exercise_id: uuid.UUID,
     body: ExerciseRoleCreate,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[ExerciseRoleOut]:
     await _get_exercise(db, exercise_id)
@@ -234,6 +298,15 @@ async def assign_role(
         await db.flush()
     except IntegrityError:
         raise HTTPException(status_code=409, detail="user already holds this role in the exercise") from None
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="exercise_role.assign",
+        resource_type="exercise_role",
+        resource_id=r.id,
+        details={"user_id": str(user.id), "role_key": body.role_key, "exercise_id": str(exercise_id)},
+        ip=client_ip(request),
+    )
     return DataEnvelope(data=ExerciseRoleOut.from_model(r))
 
 
@@ -249,9 +322,10 @@ async def list_role_assignments(
 
 @router.delete("/exercises/{exercise_id}/roles/{assignment_id}", status_code=204)
 async def remove_role_assignment(
+    request: Request,
     exercise_id: uuid.UUID,
     assignment_id: uuid.UUID,
-    _: User = Depends(require_global_admin),
+    actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     r = (
@@ -263,3 +337,12 @@ async def remove_role_assignment(
         raise HTTPException(status_code=404, detail="assignment not found")
     await db.delete(r)
     await db.flush()
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="exercise_role.revoke",
+        resource_type="exercise_role",
+        resource_id=assignment_id,
+        details=None,
+        ip=client_ip(request),
+    )
