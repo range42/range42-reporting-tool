@@ -18,5 +18,21 @@
     "manageRoles": "Manage roles",
     "logout": "Sign out",
     "status": { "draft": "Draft", "active": "Active", "archived": "Archived" }
+  },
+  "roles": {
+    "title": "Roles",
+    "subtitle": "Define custom roles and their permissions",
+    "create": "Create role",
+    "system": "System",
+    "key": "Key",
+    "label": "Display label",
+    "description": "Description",
+    "permissions": "Permissions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "deleteConfirm": "Delete this role?",
+    "back": "Back to exercises"
   }
 }
