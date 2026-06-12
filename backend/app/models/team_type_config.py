@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,5 +18,7 @@ class TeamTypeConfig(Base, UUIDMixin):
     type_key: Mapped[str] = mapped_column(String(50), nullable=False)
     display_label: Mapped[str] = mapped_column(String(100), nullable=False)
     default_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
-    is_visible_to_others: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    is_visible_to_others: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

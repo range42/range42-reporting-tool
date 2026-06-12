@@ -10,7 +10,7 @@ def test_domain_tables_registered() -> None:
 def test_exercise_defaults_and_columns() -> None:
     cols = Exercise.__table__.c
     assert cols["status"].server_default is not None
-    assert cols["status"].server_default.arg == "draft"
+    assert str(cols["status"].server_default.arg) == "'draft'"
     assert cols["name"].nullable is False
     assert "classification_caveats" in cols
     assert cols["created_by"].foreign_keys

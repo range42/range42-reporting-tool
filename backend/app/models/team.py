@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint
+from sqlalchemy import ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,5 +18,5 @@ class Team(Base, UUIDMixin, TimestampMixin, MetadataMixin):
     # team_type: soft reference to team_type_config.type_key — no DB FK because
     # team_type_config uniqueness is composite (exercise_id, type_key); a single-
     # column FK can't express it. Validated at the service layer (route handlers).
-    team_type: Mapped[str] = mapped_column(String(50), nullable=False, default="blue", server_default="blue")
+    team_type: Mapped[str] = mapped_column(String(50), nullable=False, default="blue", server_default=text("'blue'"))
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)
