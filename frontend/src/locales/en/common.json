@@ -1,1 +1,14 @@
-{ "appName": "Reporting Tool" }
+{
+  "appName": "Reporting Tool",
+  "auth": {
+    "title": "Sign in",
+    "sso": "Sign in with SSO",
+    "or": "or",
+    "emergencyHeading": "Emergency admin",
+    "password": "Password",
+    "emergencySubmit": "Break-glass sign in",
+    "invalid": "Sign in failed. Check your credentials.",
+    "completing": "Completing sign in…",
+    "callbackFailed": "Sign in could not be completed."
+  }
+}
