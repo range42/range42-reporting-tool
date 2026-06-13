@@ -2,6 +2,6 @@
 import ClassificationBanner from '@/components/ClassificationBanner.vue'
 </script>
 <template>
-  <ClassificationBanner marking="UNCLASSIFIED" />
+  <ClassificationBanner marking="UNCLASSIFIED // TLP:AMBER" />
   <RouterView />
 </template>

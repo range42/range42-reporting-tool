@@ -1,2 +1,70 @@
 @import 'tailwindcss';
-@plugin "daisyui";
+
+/* Class-based dark mode (mockup uses html.dark, default dark) instead of the
+   prefers-color-scheme default, so the theme toggle controls it. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens ported from the reporting-tool mockup (_shared.css):
+   zinc neutrals + indigo accent, dark-first. */
+:root {
+  color-scheme: light dark;
+  --rt-bg: #fafafa;
+  --rt-bg-elev: #ffffff;
+  --rt-border: #e4e4e7;
+  --rt-fg: #18181b;
+  --rt-fg-muted: #52525b;
+  --rt-accent: #6366f1;
+}
+
+html.dark {
+  --rt-bg: #09090b;
+  --rt-bg-elev: #18181b;
+  --rt-border: #27272a;
+  --rt-fg: #fafafa;
+  --rt-fg-muted: #a1a1aa;
+  --rt-accent: #818cf8;
+}
+
+html,
+body {
+  background: var(--rt-bg);
+  color: var(--rt-fg);
+  font-family:
+    'Inter Variable',
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Classification / handling marking banner */
+.rt-classification {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+/* Focus ring matches the accent */
+:focus-visible {
+  outline: 2px solid var(--rt-accent);
+  outline-offset: 2px;
+}
+
+/* Subtle scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rt-border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--rt-border);
+  border-radius: 8px;
+}
