@@ -2,6 +2,7 @@
   "appName": "Reporting Tool",
   "auth": {
     "title": "Sign in",
+    "subtitle": "Sign in with your organization's identity provider",
     "sso": "Sign in with SSO",
     "or": "or",
     "emergencyHeading": "Emergency admin",
