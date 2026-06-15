@@ -61,8 +61,10 @@ def section_invariant_error(
         for c in rubric_criteria:
             if float(c.get("max_score", 0)) <= 0 or float(c.get("weight", 0)) <= 0:
                 return "each rubric criterion needs max_score>0 and weight>0"
-    if grade_mode in ("pass_fail", "not_graded") and (grade_min is not None or grade_max is not None):
-        return f"{grade_mode} grading must not set grade_min/grade_max"
+    if grade_mode in ("pass_fail", "not_graded") and (
+        grade_min is not None or grade_max is not None or rubric_criteria is not None
+    ):
+        return f"{grade_mode} grading must not set grade_min/grade_max/rubric_criteria"
     return None
 
 

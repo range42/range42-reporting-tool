@@ -74,6 +74,73 @@ def test_choice_duplicate_codes_rejected() -> None:
     assert err is not None
 
 
+def test_valid_choice_returns_none() -> None:
+    assert (
+        section_invariant_error(
+            field_type="choice",
+            char_limit=None,
+            choice_config={
+                "selection": "multiple",
+                "values": [{"code": "a", "label": "A", "position": 0, "deprecated_at": None}],
+            },
+            grade_mode="not_graded",
+            grade_min=None,
+            grade_max=None,
+            rubric_criteria=None,
+            grade_weight=1.0,
+        )
+        is None
+    )
+
+
+def test_rubric_criterion_bounds_rejected() -> None:
+    assert (
+        section_invariant_error(
+            field_type="rich_text",
+            char_limit=None,
+            choice_config=None,
+            grade_mode="rubric",
+            grade_min=None,
+            grade_max=None,
+            rubric_criteria=[{"name": "C", "weight": 1.0, "max_score": 0}],
+            grade_weight=1.0,
+        )
+        is not None
+    )
+
+
+def test_pass_fail_with_grade_min_rejected() -> None:
+    assert (
+        section_invariant_error(
+            field_type="rich_text",
+            char_limit=None,
+            choice_config=None,
+            grade_mode="pass_fail",
+            grade_min=0.0,
+            grade_max=None,
+            rubric_criteria=None,
+            grade_weight=1.0,
+        )
+        is not None
+    )
+
+
+def test_not_graded_with_rubric_rejected() -> None:
+    assert (
+        section_invariant_error(
+            field_type="rich_text",
+            char_limit=None,
+            choice_config=None,
+            grade_mode="not_graded",
+            grade_min=None,
+            grade_max=None,
+            rubric_criteria=[{"name": "C", "weight": 1.0, "max_score": 10}],
+            grade_weight=1.0,
+        )
+        is not None
+    )
+
+
 def test_bundle_schema_version() -> None:
     b = TemplateBundle(schema_version=1, name="T", report_type="spot", description=None, sections=[])
     assert b.schema_version == 1
