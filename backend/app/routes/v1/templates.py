@@ -1,3 +1,4 @@
+import copy
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -273,9 +274,9 @@ async def clone_template(
                 grade_min=s.grade_min,
                 grade_max=s.grade_max,
                 grade_weight=s.grade_weight,
-                rubric_criteria=s.rubric_criteria,
+                rubric_criteria=copy.deepcopy(s.rubric_criteria),
                 evaluation_criteria=s.evaluation_criteria,
-                choice_config=s.choice_config,
+                choice_config=copy.deepcopy(s.choice_config),
                 mitre_attack_tags=list(s.mitre_attack_tags),
                 capec_tags=list(s.capec_tags),
                 cwe_tags=list(s.cwe_tags),
