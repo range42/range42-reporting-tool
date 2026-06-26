@@ -42,6 +42,11 @@ describe('TemplateBuilder.vue', () => {
     vi.spyOn(svc, 'listVersions').mockResolvedValue([
       { id: 't1', version: 1, status: 'draft', created_at: '' },
     ])
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:x'),
+      revokeObjectURL: vi.fn(),
+    })
   })
 
   it('loads and shows the template name', async () => {
@@ -93,5 +98,52 @@ describe('TemplateBuilder.vue', () => {
     await flushPromises()
     expect(wrapper.get('[data-test="template-name"]').attributes('disabled')).toBeDefined()
     expect(wrapper.find('[data-test="add-section"]').exists()).toBe(false)
+  })
+
+  it('reorders sections via the service', async () => {
+    const A = {
+      id: 'a',
+      template_id: 't1',
+      position: 0,
+      name: 'A',
+      description: null,
+      field_type: 'rich_text',
+      char_limit: null,
+      is_required: true,
+      grade_mode: 'not_graded',
+      grade_min: null,
+      grade_max: null,
+      grade_weight: 1,
+      rubric_criteria: null,
+      evaluation_criteria: null,
+      choice_config: null,
+      mitre_attack_tags: [],
+      capec_tags: [],
+      cwe_tags: [],
+    } as svc.Section
+    const B = { ...A, id: 'b', name: 'B', position: 1 } as svc.Section
+    vi.spyOn(svc, 'getTemplate').mockResolvedValue({ ...DRAFT, sections: [A, B] })
+    const reorder = vi.spyOn(svc, 'reorderSections').mockResolvedValue([B, A])
+    const wrapper = mountBuilder()
+    await flushPromises()
+    await wrapper.get('[data-test="move-up-b"]').trigger('click') // up/down buttons also drive reorder
+    await flushPromises()
+    expect(reorder).toHaveBeenCalledWith('tok', 't1', ['b', 'a'])
+  })
+
+  it('exports the template as a JSON download', async () => {
+    vi.spyOn(svc, 'getTemplate').mockResolvedValue({ ...DRAFT, status: 'published' })
+    vi.spyOn(svc, 'exportTemplate').mockResolvedValue({
+      schema_version: 1,
+      name: 'Spot',
+      report_type: 'spot',
+      description: null,
+      sections: [],
+    })
+    const wrapper = mountBuilder()
+    await flushPromises()
+    await wrapper.get('[data-test="export"]').trigger('click')
+    await flushPromises()
+    expect(svc.exportTemplate).toHaveBeenCalledWith('tok', 't1')
   })
 })
