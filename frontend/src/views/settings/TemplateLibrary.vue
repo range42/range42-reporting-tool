@@ -127,9 +127,11 @@ const statusBadge: Record<string, string> = {
               {{ t('templates.sections') }}
             </th>
             <th class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              Status
+              {{ t('templates.status') }}
             </th>
-            <th class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500">v</th>
+            <th class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+              {{ t('templates.version') }}
+            </th>
           </tr>
         </thead>
         <tbody>

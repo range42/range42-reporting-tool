@@ -54,6 +54,8 @@
     "reportType": "Report type",
     "description": "Description",
     "sections": "Sections",
+    "status": "Status",
+    "version": "Version",
     "addSection": "Add section",
     "fieldType": "Field type",
     "charLimit": "Character limit",

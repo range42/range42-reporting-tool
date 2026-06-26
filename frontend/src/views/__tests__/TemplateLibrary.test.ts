@@ -75,4 +75,55 @@ describe('TemplateLibrary.vue', () => {
     expect(svc.createTemplate).toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith('/settings/templates/new')
   })
+
+  it('imports a valid JSON bundle and routes to the builder', async () => {
+    vi.spyOn(svc, 'listTemplates').mockResolvedValue([])
+    vi.spyOn(svc, 'importTemplate').mockResolvedValue({
+      id: 'imported',
+      lineage_id: 'l2',
+      version: 1,
+      name: 'Imported',
+      report_type: 'custom',
+      description: null,
+      status: 'draft',
+      metadata: null,
+      sections: [],
+    })
+    const wrapper = mountLib()
+    await flushPromises()
+
+    const bundle = { name: 'Imported', sections: [] }
+    const mockFile = { text: vi.fn().mockResolvedValue(JSON.stringify(bundle)) }
+    const fileInput = wrapper.find('input[type="file"]')
+    Object.defineProperty(fileInput.element, 'files', {
+      value: { 0: mockFile, length: 1 },
+      configurable: true,
+    })
+
+    await fileInput.trigger('change')
+    await flushPromises()
+
+    expect(svc.importTemplate).toHaveBeenCalledWith('tok', bundle)
+    expect(push).toHaveBeenCalledWith('/settings/templates/imported')
+    expect(wrapper.find('.alert-error').exists()).toBe(false)
+  })
+
+  it('shows alert-error when import JSON is malformed', async () => {
+    vi.spyOn(svc, 'listTemplates').mockResolvedValue([])
+    const wrapper = mountLib()
+    await flushPromises()
+
+    const mockFile = { text: vi.fn().mockResolvedValue('not-json{{{') }
+    const fileInput = wrapper.find('input[type="file"]')
+    Object.defineProperty(fileInput.element, 'files', {
+      value: { 0: mockFile, length: 1 },
+      configurable: true,
+    })
+
+    await fileInput.trigger('change')
+    await flushPromises()
+
+    expect(wrapper.find('.alert-error').exists()).toBe(true)
+    expect(push).not.toHaveBeenCalled()
+  })
 })
