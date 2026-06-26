@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { FileCheck2 } from 'lucide-vue-next'
+import { FileCheck2 } from '@lucide/vue'
 import { useBrandingStore } from '@/stores/branding'
 import { useAuthStore } from '@/stores/auth'
 import ThemeToggle from '@/components/ThemeToggle.vue'

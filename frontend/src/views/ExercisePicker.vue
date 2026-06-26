@@ -2,7 +2,7 @@
 import { onMounted, ref, type Component } from 'vue'
 import { useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Activity, Archive, ArrowRight, LogOut, Pencil, TriangleAlert } from 'lucide-vue-next'
+import { Activity, Archive, ArrowRight, LogOut, Pencil, TriangleAlert } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { listExercises, type Exercise } from '@/services/exercises'
 import { ApiError } from '@/services/http'

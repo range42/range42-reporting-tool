@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { FileCheck2, KeyRound, ShieldCheck, TriangleAlert } from 'lucide-vue-next'
+import { FileCheck2, KeyRound, ShieldCheck, TriangleAlert } from '@lucide/vue'
 import { useBrandingStore } from '@/stores/branding'
 import { useAuthStore } from '@/stores/auth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
