@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter, RouterLink } from 'vue-router'
+import { useRoute, RouterLink } from 'vue-router'
 import { TriangleAlert, Save, Plus, Trash2 } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/services/http'
@@ -21,7 +21,6 @@ import {
 
 const { t } = useI18n()
 const route = useRoute()
-const router = useRouter()
 const auth = useAuthStore()
 
 const id = route.params.id as string
@@ -132,7 +131,7 @@ async function publish(): Promise<void> {
   error.value = ''
   try {
     await publishTemplate(token.value, id)
-    router.push('/settings/templates')
+    tpl.value = await getTemplate(token.value, id)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'Failed to publish'
   }
