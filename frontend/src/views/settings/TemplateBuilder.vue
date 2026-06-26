@@ -26,6 +26,7 @@ import {
   addSection,
   updateSection,
   deleteSection,
+  deleteTemplate,
   publishTemplate,
   listVersions,
   reorderSections,
@@ -320,6 +321,17 @@ async function doArchive(): Promise<void> {
   }
 }
 
+async function doDelete(): Promise<void> {
+  if (!window.confirm(t('templates.deleteConfirm'))) return
+  error.value = ''
+  try {
+    await deleteTemplate(token.value, id)
+    await router.push('/settings/templates')
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : 'Delete failed'
+  }
+}
+
 const inputClass =
   'h-10 w-full rounded-md border border-zinc-200 bg-white px-3 outline-none transition focus:border-indigo-400 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900'
 </script>
@@ -352,6 +364,17 @@ const inputClass =
       >
         <Archive class="h-4 w-4" />
         {{ t('templates.archive') }}
+      </button>
+      <!-- Delete: draft only -->
+      <button
+        v-if="!readonly"
+        type="button"
+        data-test="delete-template"
+        class="flex h-9 items-center gap-1.5 rounded-md px-3 text-sm text-red-500 transition hover:bg-red-500/10"
+        @click="doDelete"
+      >
+        <Trash2 class="h-4 w-4" />
+        {{ t('templates.delete') }}
       </button>
       <!-- Publish: draft only -->
       <button

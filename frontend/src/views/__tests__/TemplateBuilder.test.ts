@@ -8,8 +8,10 @@ import { useAuthStore } from '@/stores/auth'
 import * as svc from '@/services/templates'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
+
+const { mockPush } = vi.hoisted(() => ({ mockPush: vi.fn() }))
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
   useRoute: () => ({ params: { id: 't1' } }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
@@ -34,6 +36,7 @@ describe('TemplateBuilder.vue', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    mockPush.mockClear()
     useAuthStore().setSession({
       access_token: 'tok',
       token_type: 'bearer',
@@ -161,5 +164,25 @@ describe('TemplateBuilder.vue', () => {
     await wrapper.get('[data-test="export"]').trigger('click')
     await flushPromises()
     expect(svc.exportTemplate).toHaveBeenCalledWith('tok', 't1')
+  })
+
+  it('deletes a draft template and navigates to the template list', async () => {
+    vi.spyOn(svc, 'getTemplate').mockResolvedValue(DRAFT)
+    vi.stubGlobal('confirm', () => true)
+    const del = vi.spyOn(svc, 'deleteTemplate').mockResolvedValue(undefined)
+    const wrapper = mountBuilder()
+    await flushPromises()
+    await wrapper.get('[data-test="delete-template"]').trigger('click')
+    await flushPromises()
+    expect(del).toHaveBeenCalledWith('tok', 't1')
+    expect(mockPush).toHaveBeenCalledWith('/settings/templates')
+    expect(wrapper.find('.alert-error').exists()).toBe(false)
+  })
+
+  it('does not show the delete button for a published template', async () => {
+    vi.spyOn(svc, 'getTemplate').mockResolvedValue({ ...DRAFT, status: 'published' })
+    const wrapper = mountBuilder()
+    await flushPromises()
+    expect(wrapper.find('[data-test="delete-template"]').exists()).toBe(false)
   })
 })
