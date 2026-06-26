@@ -16,6 +16,7 @@ from app.schemas.template import (
     SectionCreate,
     SectionOut,
     SectionUpdate,
+    TemplateBundle,
     TemplateCreate,
     TemplateDetailOut,
     TemplateOut,
@@ -500,3 +501,71 @@ async def reorder_sections(
         ip=client_ip(request),
     )
     return DataEnvelope(data=[SectionOut.from_model(s) for s in await _sections(db, template_id)])
+
+
+# ---------------------------------------------------------------------------
+# JSON export / import (portable, id-free bundle; import always starts a new lineage)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/templates/{template_id}/export")
+async def export_template(
+    template_id: uuid.UUID,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[TemplateBundle]:
+    t = await _get_template(db, template_id)
+    return DataEnvelope(data=TemplateBundle.from_model(t, await _sections(db, template_id)))
+
+
+@router.post("/templates/import", status_code=201)
+async def import_template(
+    request: Request,
+    body: TemplateBundle,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[TemplateDetailOut]:
+    t = ReportTemplate(
+        lineage_id=uuid.uuid4(),
+        version=1,
+        name=body.name,
+        report_type=body.report_type,
+        description=body.description,
+        status="draft",
+        created_by=actor.id,
+    )
+    db.add(t)
+    await db.flush()
+    for i, sec in enumerate(body.sections):
+        db.add(
+            TemplateSectionDef(
+                template_id=t.id,
+                position=i,
+                name=sec.name,
+                description=sec.description,
+                field_type=sec.field_type,
+                char_limit=sec.char_limit,
+                is_required=sec.is_required,
+                grade_mode=sec.grade_mode,
+                grade_min=sec.grade_min,
+                grade_max=sec.grade_max,
+                grade_weight=sec.grade_weight,
+                rubric_criteria=sec.rubric_criteria,
+                evaluation_criteria=sec.evaluation_criteria,
+                choice_config=sec.choice_config,
+                mitre_attack_tags=sec.mitre_attack_tags,
+                capec_tags=sec.capec_tags,
+                cwe_tags=sec.cwe_tags,
+            )
+        )
+    await db.flush()
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="template.import",
+        resource_type="report_template",
+        resource_id=t.id,
+        details={"name": t.name, "sections": len(body.sections)},
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=TemplateDetailOut.from_model(t, await _sections(db, t.id)))
