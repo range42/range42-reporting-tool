@@ -60,6 +60,13 @@ async function logout(): Promise<void> {
     <template #actions>
       <RouterLink
         v-if="auth.isAdmin"
+        to="/settings/templates"
+        class="flex h-9 items-center rounded-md border border-zinc-200 px-3 text-sm font-medium transition hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800"
+      >
+        {{ t('exercises.manageTemplates') }}
+      </RouterLink>
+      <RouterLink
+        v-if="auth.isAdmin"
         to="/settings/roles"
         class="flex h-9 items-center rounded-md border border-zinc-200 px-3 text-sm font-medium transition hover:bg-zinc-100 dark:border-zinc-800 dark:hover:bg-zinc-800"
       >

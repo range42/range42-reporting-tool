@@ -25,6 +25,16 @@ export const router = createRouter({
       component: () => import('@/views/settings/Roles.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
     },
+    {
+      path: '/settings/templates',
+      component: () => import('@/views/settings/TemplateLibrary.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/settings/templates/:id',
+      component: () => import('@/views/settings/TemplateBuilder.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
   ],
 })
 
