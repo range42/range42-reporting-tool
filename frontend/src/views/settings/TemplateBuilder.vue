@@ -169,6 +169,7 @@ async function publish(): Promise<void> {
   try {
     await publishTemplate(token.value, id)
     tpl.value = await getTemplate(token.value, id)
+    versions.value = await listVersions(token.value, id)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'Failed to publish'
   }
@@ -313,6 +314,7 @@ async function doArchive(): Promise<void> {
   try {
     await archiveTemplate(token.value, id)
     tpl.value = await getTemplate(token.value, id)
+    versions.value = await listVersions(token.value, id)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : 'Archive failed'
   }

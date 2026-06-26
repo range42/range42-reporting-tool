@@ -131,6 +131,22 @@ describe('TemplateBuilder.vue', () => {
     expect(reorder).toHaveBeenCalledWith('tok', 't1', ['b', 'a'])
   })
 
+  it('re-fetches version history after publish', async () => {
+    vi.spyOn(svc, 'getTemplate').mockResolvedValue(DRAFT)
+    vi.spyOn(svc, 'publishTemplate').mockResolvedValue({ ...DRAFT, section_count: 0 })
+    // Re-spy and clear accumulated calls from prior tests
+    const listSpy = vi
+      .spyOn(svc, 'listVersions')
+      .mockResolvedValue([{ id: 't1', version: 1, status: 'draft', created_at: '' }])
+    listSpy.mockClear()
+    const wrapper = mountBuilder()
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledTimes(1) // once on mount
+    await wrapper.get('[data-test="publish"]').trigger('click')
+    await flushPromises()
+    expect(listSpy).toHaveBeenCalledTimes(2) // once more after publish
+  })
+
   it('exports the template as a JSON download', async () => {
     vi.spyOn(svc, 'getTemplate').mockResolvedValue({ ...DRAFT, status: 'published' })
     vi.spyOn(svc, 'exportTemplate').mockResolvedValue({
