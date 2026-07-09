@@ -29,10 +29,14 @@ _CLEAN_PER_TEST = ("DATABASE_URL", "JWT_SECRET")
 
 @pytest.fixture(autouse=True)
 def _clean_collection_env() -> Iterator[None]:
+    from app.core.config import get_settings
+
     saved = {k: os.environ.pop(k, None) for k in _CLEAN_PER_TEST}
+    get_settings.cache_clear()
     try:
         yield
     finally:
         for k, v in saved.items():
             if v is not None:
                 os.environ[k] = v
+        get_settings.cache_clear()

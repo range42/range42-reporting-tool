@@ -16,7 +16,7 @@ logs:
     docker compose -f deploy/docker-compose.yml logs -f
 
 seed:
-    @echo "seed is a no-op in the skeleton (domain seed lands in WP2)"
+    cd backend && uv run python -m app.seed
 
 lint:
     cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy app

@@ -23,6 +23,7 @@ class NormalizedClaims:
     email: str
     display_name: str
     provider: str
+    avatar_url: str | None = None
 
 
 class AuthProvider(Protocol):
@@ -30,6 +31,6 @@ class AuthProvider(Protocol):
 
     def build_login_url(self, state: str, challenge: str) -> str: ...
 
-    async def exchange(self, code: str) -> RawToken: ...
+    async def exchange(self, code: str, code_verifier: str) -> RawToken: ...
 
     def claims(self, token: RawToken) -> NormalizedClaims: ...

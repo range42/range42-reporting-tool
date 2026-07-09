@@ -1,4 +1,27 @@
+import json
+
+from app.core.errors import _sanitize_errors
 from app.schemas.common import ErrorBody, ErrorEnvelope
+
+
+def test_sanitize_handles_exception_nested_in_list() -> None:
+    """An Exception nested inside a list must be stringified, not returned raw."""
+    raw = [
+        {
+            "type": "x",
+            "loc": ["body", "f"],
+            "msg": "bad",
+            "ctx": {"error": ValueError("boom")},
+            "extras": [ValueError("nested-in-list")],
+        }
+    ]
+    cleaned = _sanitize_errors(raw)
+    # Must not raise — result must be fully JSON-serialisable
+    json.dumps(cleaned)
+    # Dict-nested exception becomes str (existing path)
+    assert cleaned[0]["ctx"]["error"] == "boom"  # type: ignore[index]
+    # List-nested exception becomes str (new path under test)
+    assert cleaned[0]["extras"] == ["nested-in-list"]  # type: ignore[index]
 
 
 def test_error_envelope_shape() -> None:

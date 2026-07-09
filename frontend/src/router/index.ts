@@ -1,7 +1,41 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Boot from '@/views/Boot.vue'
+import { resolveNavigation, type RouteFlags } from '@/router/guards'
 
 export const router = createRouter({
   history: createWebHistory(),
-  routes: [{ path: '/', component: Boot }],
+  routes: [
+    { path: '/', redirect: '/exercises' },
+    {
+      path: '/login',
+      component: () => import('@/views/Login.vue'),
+      meta: { public: true, loginPage: true },
+    },
+    {
+      path: '/auth/callback',
+      component: () => import('@/views/AuthCallback.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/exercises',
+      component: () => import('@/views/ExercisePicker.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/settings/roles',
+      component: () => import('@/views/settings/Roles.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/settings/templates',
+      component: () => import('@/views/settings/TemplateLibrary.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/settings/templates/:id',
+      component: () => import('@/views/settings/TemplateBuilder.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+  ],
 })
+
+router.beforeEach((to) => resolveNavigation(to.meta as RouteFlags, to.path) ?? true)
