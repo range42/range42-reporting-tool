@@ -138,6 +138,48 @@ def require_permission(perm: str) -> Callable[..., Awaitable[None]]:
     return _dependency
 
 
+def require_permission_any(perms: list[str]) -> Callable[..., Awaitable[None]]:
+    """Build a dependency asserting the caller holds AT LEAST ONE of ``perms`` in the path's exercise.
+
+    Global admins bypass. Exercise-scoped (reads the ``exercise_id`` path param), same resolver
+    as ``require_permission``.
+    """
+
+    async def _dependency(
+        exercise_id: uuid.UUID,
+        user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> None:
+        if user.is_global_admin:
+            return
+        role_keys = (
+            (
+                await db.execute(
+                    select(ExerciseRole.role_key).where(
+                        ExerciseRole.exercise_id == exercise_id,
+                        ExerciseRole.user_id == user.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not role_keys:
+            raise HTTPException(status_code=403, detail="insufficient permissions")
+        granted = (
+            (await db.execute(select(RoleDefinition.permissions).where(RoleDefinition.role_key.in_(role_keys))))
+            .scalars()
+            .all()
+        )
+        allowed: set[str] = set()
+        for p in granted:
+            allowed.update(p)
+        if not any(perm in allowed for perm in perms):
+            raise HTTPException(status_code=403, detail="insufficient permissions")
+
+    return _dependency
+
+
 async def require_team_membership(
     team_id: uuid.UUID,
     user: User = Depends(get_current_user),

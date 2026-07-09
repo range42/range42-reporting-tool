@@ -6,13 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
-from app.core.permissions import REPORTS_READ_ALL
-from app.core.rbac import require_global_admin
+from app.core.pagination import PageParams, page_params
+from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_OWN
+from app.core.rbac import get_current_user, require_global_admin, require_permission_any
 from app.models import Report, ReportSection, ReportTemplate, Team, TeamMember, TemplateSectionDef, User
 from app.models.exercise_role import ExerciseRole
 from app.models.role_definition import RoleDefinition
-from app.schemas.common import DataEnvelope
-from app.schemas.report import ReportCreate, ReportDetailOut
+from app.schemas.common import DataEnvelope, Page
+from app.schemas.report import ReportCreate, ReportDetailOut, ReportOut
 
 router = APIRouter(tags=["reports"])
 
@@ -180,3 +181,60 @@ async def create_report(
         ip=client_ip(request),
     )
     return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, report.id)))
+
+
+# --- list + detail ---------------------------------------------------------
+
+
+@router.get("/exercises/{exercise_id}/reports")
+async def list_reports(
+    exercise_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ALL])),
+    db: AsyncSession = Depends(get_db),
+    pp: PageParams = Depends(page_params),
+    team_id: uuid.UUID | None = None,
+    status: str | None = None,
+) -> DataEnvelope[list[ReportOut]]:
+    filt = [Report.exercise_id == exercise_id]
+    if team_id is not None:
+        filt.append(Report.team_id == team_id)
+    if status is not None:
+        filt.append(Report.status == status)
+    # team scoping unless caller can read all (or is admin)
+    if not (user.is_global_admin or await _has_permission(db, exercise_id, user, REPORTS_READ_ALL)):
+        team_ids = await _caller_team_ids(db, exercise_id, user)
+        if not team_ids:
+            return DataEnvelope(data=[], meta=Page(page=pp.page, per_page=pp.per_page, total=0))
+        filt.append(Report.team_id.in_(team_ids))
+
+    base = select(Report).where(*filt)
+    total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
+    rows = (await db.execute(base.order_by(Report.created_at.desc()).offset(pp.offset).limit(pp.limit))).scalars().all()
+    counts = {
+        rid: cnt
+        for rid, cnt in (
+            await db.execute(
+                select(ReportSection.report_id, func.count())
+                .where(ReportSection.report_id.in_([r.id for r in rows]))
+                .group_by(ReportSection.report_id)
+            )
+        ).all()
+    }
+    return DataEnvelope(
+        data=[ReportOut.from_model(r, counts.get(r.id, 0)) for r in rows],
+        meta=Page(page=pp.page, per_page=pp.per_page, total=total),
+    )
+
+
+@router.get("/exercises/{exercise_id}/reports/{rid}")
+async def get_report(
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ALL])),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportDetailOut]:
+    report = await _get_report(db, exercise_id, rid)
+    await _assert_report_access(db, exercise_id, report, user, write=False)
+    return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, rid)))
