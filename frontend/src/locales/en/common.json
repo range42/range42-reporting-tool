@@ -45,7 +45,6 @@
     "new": "New template",
     "import": "Import JSON",
     "export": "Export JSON",
-    "clone": "Clone to new version",
     "publish": "Publish",
     "archive": "Archive",
     "cloneToEdit": "Clone to edit",
@@ -66,7 +65,6 @@
     "addValue": "Add value",
     "rubric": "Rubric criteria",
     "addCriterion": "Add criterion",
-    "tags": "Tags (MITRE / CWE)",
     "preview": "Live preview",
     "versions": "Version history",
     "composition": "Section composition",
@@ -75,8 +73,7 @@
     "delete": "Delete",
     "deleteConfirm": "Delete this draft template?",
     "deleteSectionConfirm": "Delete this section?",
-    "save": "Save",
-    "cancel": "Cancel"
+    "save": "Save"
   },
   "reports": {
     "title": "Reports",
