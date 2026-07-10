@@ -27,6 +27,12 @@ export const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/exercises/:exerciseId/reports/new',
+      name: 'report-create',
+      component: () => import('@/views/reports/ReportCreate.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/settings/roles',
       component: () => import('@/views/settings/Roles.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },

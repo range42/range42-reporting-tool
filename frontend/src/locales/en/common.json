@@ -91,6 +91,17 @@
     "overdue": "Overdue",
     "dueIn": "Due in {time}",
     "loadError": "Could not load reports. Please try again.",
+    "createTitle": "New report",
+    "createSubtitle": "Instantiate a report from a published template for a team.",
+    "createError": "Could not create the report. Please try again.",
+    "template": "Template",
+    "team": "Team",
+    "selectTemplate": "Select a published template…",
+    "selectTeam": "Select a team…",
+    "namePlaceholder": "e.g. Day 1 situation report",
+    "approvalRequired": "Requires approval before submission",
+    "create": "Create report",
+    "cancel": "Cancel",
     "statusLabel": {
       "draft": "Draft",
       "submitted": "Submitted"
