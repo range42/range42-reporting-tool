@@ -77,5 +77,23 @@
     "deleteSectionConfirm": "Delete this section?",
     "save": "Save",
     "cancel": "Cancel"
+  },
+  "reports": {
+    "title": "Reports",
+    "subtitle": "Reports for this exercise",
+    "empty": "No reports yet.",
+    "new": "New report",
+    "name": "Name",
+    "status": "Status",
+    "sections": "Sections",
+    "due": "Due",
+    "noDue": "—",
+    "overdue": "Overdue",
+    "dueIn": "Due in {time}",
+    "loadError": "Could not load reports. Please try again.",
+    "statusLabel": {
+      "draft": "Draft",
+      "submitted": "Submitted"
+    }
   }
 }
