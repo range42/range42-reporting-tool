@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
-from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_OWN, REPORTS_WRITE
+from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_OWN, REPORTS_SUBMIT, REPORTS_WRITE
 from app.core.rbac import get_current_user, require_global_admin, require_permission, require_permission_any
 from app.core.sanitize import html_to_plain, sanitize_html
 from app.models import Report, ReportSection, ReportTemplate, Team, TeamMember, TemplateSectionDef, User
@@ -398,3 +398,48 @@ async def save_section(
         ip=client_ip(request),
     )
     return DataEnvelope(data=ReportSectionOut.from_models(section, section_def))
+
+
+# --- submit (draft -> submitted, required-empty gate) ----------------------
+
+
+@router.post("/exercises/{exercise_id}/reports/{rid}/submit")
+async def submit_report(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission(REPORTS_SUBMIT)),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportDetailOut]:
+    report = await _get_report(db, exercise_id, rid)
+    _require_draft(report)
+    await _assert_report_access(db, exercise_id, report, user, write=True)
+
+    pairs = await _section_pairs(db, rid)
+    missing: list[str] = []
+    for section, d in pairs:
+        if not d.is_required:
+            continue
+        if d.field_type == "rich_text":
+            if section.char_count == 0:
+                missing.append(str(d.id))
+        elif not section.choice_values:
+            missing.append(str(d.id))
+    if missing:
+        raise HTTPException(status_code=409, detail={"error": "required_section_empty", "section_def_ids": missing})
+
+    report.status = "submitted"
+    report.submitted_at = datetime.now(UTC)
+    await db.flush()
+    await db.refresh(report)
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="report.submit",
+        resource_type="report",
+        resource_id=report.id,
+        details=None,
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, rid)))
