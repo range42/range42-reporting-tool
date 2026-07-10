@@ -1,5 +1,6 @@
 import copy
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -38,6 +39,18 @@ async def _get_template(db: AsyncSession, template_id: uuid.UUID) -> ReportTempl
 def _require_draft(t: ReportTemplate) -> None:
     if t.status != "draft":
         raise HTTPException(status_code=409, detail="template is not a draft")
+
+
+def _renormalize_choice_positions(choice_config: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Rewrite values[].position to dense 0..n-1 by current position then array order."""
+    if not choice_config or not choice_config.get("values"):
+        return choice_config
+    values = sorted(
+        enumerate(choice_config["values"]),
+        key=lambda iv: (iv[1].get("position", iv[0]), iv[0]),
+    )
+    renormed = [{**v, "position": i} for i, (_, v) in enumerate(values)]
+    return {**choice_config, "values": renormed}
 
 
 async def _section_count(db: AsyncSession, template_id: uuid.UUID) -> int:
@@ -385,7 +398,7 @@ async def create_section(
         grade_weight=body.grade_weight,
         rubric_criteria=body.rubric_criteria,
         evaluation_criteria=body.evaluation_criteria,
-        choice_config=body.choice_config,
+        choice_config=_renormalize_choice_positions(body.choice_config),
         mitre_attack_tags=body.mitre_attack_tags,
         capec_tags=body.capec_tags,
         cwe_tags=body.cwe_tags,
@@ -432,6 +445,8 @@ async def update_section(
     )
     if err:
         raise HTTPException(status_code=422, detail=err)
+    if s.field_type == "choice":
+        s.choice_config = _renormalize_choice_positions(s.choice_config)
     await db.flush()
     await db.refresh(s)
     await record_audit(
