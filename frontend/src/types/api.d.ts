@@ -583,7 +583,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/_schema_probe": {
+    "/api/v1/exercises/{exercise_id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Reports */
+        get: operations["list_reports_api_v1_exercises__exercise_id__reports_get"];
+        put?: never;
+        /** Create Report */
+        post: operations["create_report_api_v1_exercises__exercise_id__reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Report */
+        get: operations["get_report_api_v1_exercises__exercise_id__reports__rid__get"];
+        put?: never;
+        post?: never;
+        /** Delete Report */
+        delete: operations["delete_report_api_v1_exercises__exercise_id__reports__rid__delete"];
+        options?: never;
+        head?: never;
+        /** Update Report */
+        patch: operations["update_report_api_v1_exercises__exercise_id__reports__rid__patch"];
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/sections/{sid}": {
         parameters: {
             query?: never;
             header?: never;
@@ -592,11 +629,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Schema Probe
-         * @description Echo the discriminated-union body. SCAFFOLDING — see module docstring.
-         */
-        post: operations["schema_probe_api_v1__schema_probe_post"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Save Section */
+        patch: operations["save_section_api_v1_exercises__exercise_id__reports__rid__sections__sid__patch"];
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Report */
+        post: operations["submit_report_api_v1_exercises__exercise_id__reports__rid__submit_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -617,12 +668,6 @@ export interface components {
             /** Choice Values */
             choice_values: string[];
         };
-        /** DataEnvelope[Annotated[Union[RichTextBody, ChoiceBody], FieldInfo(annotation=NoneType, required=True, discriminator='kind')]] */
-        DataEnvelope_Annotated_Union_RichTextBody__ChoiceBody___FieldInfo_annotation_NoneType__required_True__discriminator__kind____: {
-            /** Data */
-            data: components["schemas"]["RichTextBody"] | components["schemas"]["ChoiceBody"];
-            meta?: components["schemas"]["Page"] | null;
-        };
         /** DataEnvelope[ExerciseOut] */
         DataEnvelope_ExerciseOut_: {
             data: components["schemas"]["ExerciseOut"];
@@ -631,6 +676,21 @@ export interface components {
         /** DataEnvelope[ExerciseRoleOut] */
         DataEnvelope_ExerciseRoleOut_: {
             data: components["schemas"]["ExerciseRoleOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[ReportDetailOut] */
+        DataEnvelope_ReportDetailOut_: {
+            data: components["schemas"]["ReportDetailOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[ReportOut] */
+        DataEnvelope_ReportOut_: {
+            data: components["schemas"]["ReportOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[ReportSectionOut] */
+        DataEnvelope_ReportSectionOut_: {
+            data: components["schemas"]["ReportSectionOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[RoleOut] */
@@ -717,6 +777,12 @@ export interface components {
         DataEnvelope_list_ExerciseRoleOut__: {
             /** Data */
             data: components["schemas"]["ExerciseRoleOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[ReportOut]] */
+        DataEnvelope_list_ReportOut__: {
+            /** Data */
+            data: components["schemas"]["ReportOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[list[RoleOut]] */
@@ -898,6 +964,172 @@ export interface components {
             /** Ordered Ids */
             ordered_ids: string[];
         };
+        /** ReportCreate */
+        ReportCreate: {
+            /** Template Id */
+            template_id: string;
+            /** Team Id */
+            team_id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Due At */
+            due_at?: string | null;
+            /**
+             * Approval Required
+             * @default false
+             */
+            approval_required: boolean;
+            /** Assigned Writer Id */
+            assigned_writer_id?: string | null;
+        };
+        /** ReportDetailOut */
+        ReportDetailOut: {
+            /** Id */
+            id: string;
+            /** Exercise Id */
+            exercise_id: string;
+            /** Team Id */
+            team_id: string;
+            /** Template Id */
+            template_id: string;
+            /** Template Version At Creation */
+            template_version_at_creation: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Status */
+            status: string;
+            /** Approval Required */
+            approval_required: boolean;
+            /** Due At */
+            due_at: string | null;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Assigned Writer Id */
+            assigned_writer_id: string | null;
+            /** Writer Notes */
+            writer_notes: string | null;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            } | null;
+            /** Sections */
+            sections: components["schemas"]["ReportSectionOut"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ReportOut */
+        ReportOut: {
+            /** Id */
+            id: string;
+            /** Exercise Id */
+            exercise_id: string;
+            /** Team Id */
+            team_id: string;
+            /** Template Id */
+            template_id: string;
+            /** Template Version At Creation */
+            template_version_at_creation: number;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Status */
+            status: string;
+            /** Approval Required */
+            approval_required: boolean;
+            /** Due At */
+            due_at: string | null;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Assigned Writer Id */
+            assigned_writer_id: string | null;
+            /** Section Count */
+            section_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ReportSectionOut */
+        ReportSectionOut: {
+            /** Id */
+            id: string;
+            /** Report Id */
+            report_id: string;
+            /** Section Def Id */
+            section_def_id: string;
+            /** Content */
+            content: string | null;
+            /** Content Plain */
+            content_plain: string | null;
+            /** Char Count */
+            char_count: number;
+            /** Choice Values */
+            choice_values: string[] | null;
+            /** Version */
+            version: number;
+            /** Last Edited By */
+            last_edited_by: string | null;
+            /** Last Edited At */
+            last_edited_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Field Type */
+            field_type: string;
+            /** Position */
+            position: number;
+            /** Char Limit */
+            char_limit: number | null;
+            /** Is Required */
+            is_required: boolean;
+            /** Choice Config */
+            choice_config: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** ReportUpdate */
+        ReportUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Due At */
+            due_at?: string | null;
+            /** Approval Required */
+            approval_required?: boolean | null;
+            /** Assigned Writer Id */
+            assigned_writer_id?: string | null;
+        };
         /** RichTextBody */
         RichTextBody: {
             /**
@@ -952,6 +1184,13 @@ export interface components {
             description?: string | null;
             /** Permissions */
             permissions?: string[] | null;
+        };
+        /** SectionAnswerUpdate */
+        SectionAnswerUpdate: {
+            /** Version */
+            version: number;
+            /** Body */
+            body: components["schemas"]["RichTextBody"] | components["schemas"]["ChoiceBody"];
         };
         /** SectionCreate */
         SectionCreate: {
@@ -2860,16 +3099,152 @@ export interface operations {
             };
         };
     };
-    schema_probe_api_v1__schema_probe_post: {
+    list_reports_api_v1_exercises__exercise_id__reports_get: {
+        parameters: {
+            query?: {
+                team_id?: string | null;
+                status?: string | null;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path: {
+                exercise_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_ReportOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_report_api_v1_exercises__exercise_id__reports_post: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                exercise_id: string;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RichTextBody"] | components["schemas"]["ChoiceBody"];
+                "application/json": components["schemas"]["ReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportDetailOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_report_api_v1_exercises__exercise_id__reports__rid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportDetailOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_report_api_v1_exercises__exercise_id__reports__rid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_report_api_v1_exercises__exercise_id__reports__rid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportUpdate"];
             };
         };
         responses: {
@@ -2879,7 +3254,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataEnvelope_Annotated_Union_RichTextBody__ChoiceBody___FieldInfo_annotation_NoneType__required_True__discriminator__kind____"];
+                    "application/json": components["schemas"]["DataEnvelope_ReportOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_section_api_v1_exercises__exercise_id__reports__rid__sections__sid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionAnswerUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportSectionOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_report_api_v1_exercises__exercise_id__reports__rid__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportDetailOut_"];
                 };
             };
             /** @description Validation Error */
