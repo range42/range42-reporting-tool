@@ -13,7 +13,7 @@ from app.models import Report, ReportSection, ReportTemplate, Team, TeamMember, 
 from app.models.exercise_role import ExerciseRole
 from app.models.role_definition import RoleDefinition
 from app.schemas.common import DataEnvelope, Page
-from app.schemas.report import ReportCreate, ReportDetailOut, ReportOut
+from app.schemas.report import ReportCreate, ReportDetailOut, ReportOut, ReportUpdate
 
 router = APIRouter(tags=["reports"])
 
@@ -238,3 +238,69 @@ async def get_report(
     report = await _get_report(db, exercise_id, rid)
     await _assert_report_access(db, exercise_id, report, user, write=False)
     return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, rid)))
+
+
+# --- metadata update + delete (GA, draft-only) -----------------------------
+
+
+@router.patch("/exercises/{exercise_id}/reports/{rid}")
+async def update_report(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    body: ReportUpdate,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportOut]:
+    report = await _get_report(db, exercise_id, rid)
+    _require_draft(report)
+    data = body.model_dump(exclude_unset=True)
+    changed = sorted(data.keys())
+    if "assigned_writer_id" in data and data["assigned_writer_id"] is not None:
+        member = (
+            await db.execute(
+                select(TeamMember.id).where(
+                    TeamMember.team_id == report.team_id, TeamMember.user_id == uuid.UUID(data["assigned_writer_id"])
+                )
+            )
+        ).first()
+        if member is None:
+            raise HTTPException(status_code=422, detail="assigned writer is not a member of the team")
+        data["assigned_writer_id"] = uuid.UUID(data["assigned_writer_id"])
+    for k, v in data.items():
+        setattr(report, k, v)
+    await db.flush()
+    await db.refresh(report)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="report.update",
+        resource_type="report",
+        resource_id=report.id,
+        details={"changed": changed},
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=ReportOut.from_model(report, await _section_count(db, rid)))
+
+
+@router.delete("/exercises/{exercise_id}/reports/{rid}", status_code=204)
+async def delete_report(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    report = await _get_report(db, exercise_id, rid)
+    _require_draft(report)
+    await db.delete(report)
+    await db.flush()
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="report.delete",
+        resource_type="report",
+        resource_id=rid,
+        details=None,
+        ip=client_ip(request),
+    )
