@@ -102,6 +102,17 @@
     "approvalRequired": "Requires approval before submission",
     "create": "Create report",
     "cancel": "Cancel",
+    "save": "Save",
+    "savedNow": "Saved just now",
+    "saveError": "Could not save this section. Please try again.",
+    "submit": "Submit report",
+    "submitBlocked": "Fill in every required section before submitting.",
+    "submitError": "Could not submit the report. Please try again.",
+    "conflict": "This section changed elsewhere since you loaded it.",
+    "reload": "Reload",
+    "restorePrompt": "You have a newer unsaved draft for this section.",
+    "restore": "Restore draft",
+    "discard": "Discard",
     "statusLabel": {
       "draft": "Draft",
       "submitted": "Submitted"

@@ -37,6 +37,8 @@ export interface ReportSection {
   version: number
   last_edited_by: string | null
   last_edited_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface ReportDetail {

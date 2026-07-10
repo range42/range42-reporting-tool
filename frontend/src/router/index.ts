@@ -33,6 +33,12 @@ export const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/exercises/:exerciseId/reports/:rid',
+      name: 'report-editor',
+      component: () => import('@/views/reports/ReportEditor.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/settings/roles',
       component: () => import('@/views/settings/Roles.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },

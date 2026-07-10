@@ -4,6 +4,7 @@ export class ApiError extends Error {
     message: string,
     public details: unknown[] = [],
     public traceId?: string,
+    public status?: number,
   ) {
     super(message)
   }
@@ -49,7 +50,7 @@ async function request<T>(
   }
   if (!res.ok) {
     const e = parsed as ErrorEnvelope
-    throw new ApiError(e.error.code, e.error.message, e.error.details, e.trace_id)
+    throw new ApiError(e.error.code, e.error.message, e.error.details, e.trace_id, res.status)
   }
   return (parsed as DataEnvelope<T>).data
 }
