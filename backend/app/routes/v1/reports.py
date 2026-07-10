@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -7,13 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
-from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_OWN
-from app.core.rbac import get_current_user, require_global_admin, require_permission_any
+from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_OWN, REPORTS_WRITE
+from app.core.rbac import get_current_user, require_global_admin, require_permission, require_permission_any
+from app.core.sanitize import html_to_plain, sanitize_html
 from app.models import Report, ReportSection, ReportTemplate, Team, TeamMember, TemplateSectionDef, User
 from app.models.exercise_role import ExerciseRole
 from app.models.role_definition import RoleDefinition
 from app.schemas.common import DataEnvelope, Page
-from app.schemas.report import ReportCreate, ReportDetailOut, ReportOut, ReportUpdate
+from app.schemas.report import (
+    ReportCreate,
+    ReportDetailOut,
+    ReportOut,
+    ReportSectionOut,
+    ReportUpdate,
+    SectionAnswerUpdate,
+)
 
 router = APIRouter(tags=["reports"])
 
@@ -102,6 +111,15 @@ async def _assert_report_access(
 def _require_draft(r: Report) -> None:
     if r.status != "draft":
         raise HTTPException(status_code=409, detail="report is not a draft")
+
+
+async def _get_report_section(db: AsyncSession, report_id: uuid.UUID, sid: uuid.UUID) -> ReportSection:
+    s = (
+        await db.execute(select(ReportSection).where(ReportSection.id == sid, ReportSection.report_id == report_id))
+    ).scalar_one_or_none()
+    if s is None:
+        raise HTTPException(status_code=404, detail="section not found")
+    return s
 
 
 # --- instantiate -----------------------------------------------------------
@@ -304,3 +322,79 @@ async def delete_report(
         details=None,
         ip=client_ip(request),
     )
+
+
+# --- section save (sanitize + optimistic concurrency + validation) ---------
+
+
+@router.patch("/exercises/{exercise_id}/reports/{rid}/sections/{sid}")
+async def save_section(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    sid: uuid.UUID,
+    body: SectionAnswerUpdate,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission(REPORTS_WRITE)),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportSectionOut]:
+    report = await _get_report(db, exercise_id, rid)
+    _require_draft(report)
+    await _assert_report_access(db, exercise_id, report, user, write=True)
+    section = await _get_report_section(db, rid, sid)
+    section_def = (
+        await db.execute(select(TemplateSectionDef).where(TemplateSectionDef.id == section.section_def_id))
+    ).scalar_one()
+
+    if body.version != section.version:
+        # 409 carries the current section state so the client can resolve the conflict (spec §6.1)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "stale_version",
+                "section": ReportSectionOut.from_models(section, section_def).model_dump(mode="json"),
+            },
+        )
+    section_body = body.body  # narrow the discriminated union via a local (mypy-safe)
+    if section_body.kind != section_def.field_type:
+        raise HTTPException(status_code=422, detail="field_type_mismatch")
+
+    if section_body.kind == "rich_text":
+        clean = sanitize_html(section_body.content)
+        plain = html_to_plain(section_body.content)
+        if section_def.char_limit is not None and len(plain) > section_def.char_limit:
+            raise HTTPException(status_code=422, detail="content exceeds char_limit")
+        section.content = clean
+        section.content_plain = plain
+        section.char_count = len(plain)
+        section.choice_values = None
+    else:  # choice
+        cfg = section_def.choice_config or {}
+        valid = {v["code"] for v in cfg.get("values", []) if not v.get("deprecated_at")}
+        codes = section_body.choice_values
+        if any(code not in valid for code in codes):
+            raise HTTPException(status_code=422, detail="unknown choice code")
+        if cfg.get("selection") == "single" and len(codes) > 1:
+            raise HTTPException(status_code=422, detail="single-selection allows at most one value")
+        if len(set(codes)) != len(codes):
+            raise HTTPException(status_code=422, detail="duplicate choice codes")
+        section.choice_values = codes
+        section.content = None
+        section.content_plain = None
+        section.char_count = 0
+
+    section.version += 1
+    section.last_edited_by = user.id
+    section.last_edited_at = datetime.now(UTC)
+    await db.flush()
+    await db.refresh(section)
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="report_section.update",
+        resource_type="report_section",
+        resource_id=section.id,
+        details={"report_id": str(rid)},
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=ReportSectionOut.from_models(section, section_def))
