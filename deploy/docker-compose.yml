@@ -6,7 +6,10 @@ services:
       POSTGRES_USER: reporting
       POSTGRES_PASSWORD: changeme
       POSTGRES_DB: reporting
-    ports: ["5432:5432"]
+    # No host publish: backend/migrate reach this over the compose network as
+    # `postgres:5432`. Publishing 5432 collides with a host Postgres (systemd
+    # postgresql), which auto-starts on boot. Add a remap like ["5433:5432"]
+    # only when you need a host DB client.
     volumes: ["pg_data:/var/lib/postgresql"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U reporting"]
