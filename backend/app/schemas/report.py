@@ -5,6 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.models.approval_record import ApprovalRecord
 from app.models.report import Report
 from app.models.report_section import ReportSection
 from app.models.template_section_def import TemplateSectionDef
@@ -35,6 +36,47 @@ class ReportUpdate(BaseModel):
     @classmethod
     def _nn(cls, v: object) -> object:
         return _reject_null(v)
+
+
+class ApproveRequest(BaseModel):
+    # step/on_behalf_of drive multi-step chains (#38) and admin override (#39);
+    # ignored on the single-step path.
+    step: int | None = Field(default=None, ge=1)
+    on_behalf_of: str | None = None
+    comment: str | None = None
+
+
+class RejectRequest(BaseModel):
+    comment: str = Field(min_length=1)
+    step: int | None = Field(default=None, ge=1)
+
+
+class RecallRequest(BaseModel):
+    comment: str | None = None
+
+
+class ApprovalRecordOut(BaseModel):
+    id: str
+    report_id: str
+    approver_id: str
+    step: int
+    action: str
+    is_admin_override: bool
+    comment: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, r: ApprovalRecord) -> ApprovalRecordOut:
+        return cls(
+            id=str(r.id),
+            report_id=str(r.report_id),
+            approver_id=str(r.approver_id),
+            step=r.step,
+            action=r.action,
+            is_admin_override=r.is_admin_override,
+            comment=r.comment,
+            created_at=r.created_at,
+        )
 
 
 class SectionAnswerUpdate(BaseModel):
@@ -112,6 +154,7 @@ class ReportOut(BaseModel):
     due_at: datetime | None
     submitted_at: datetime | None
     assigned_writer_id: str | None
+    approval_chain: list[dict[str, Any]] | None
     section_count: int
     created_at: datetime
     updated_at: datetime
@@ -131,6 +174,7 @@ class ReportOut(BaseModel):
             due_at=r.due_at,
             submitted_at=r.submitted_at,
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
+            approval_chain=r.approval_chain,
             section_count=section_count,
             created_at=r.created_at,
             updated_at=r.updated_at,
@@ -151,13 +195,20 @@ class ReportDetailOut(BaseModel):
     submitted_at: datetime | None
     assigned_writer_id: str | None
     writer_notes: str | None
+    approval_chain: list[dict[str, Any]] | None
+    approval_records: list[ApprovalRecordOut]
     metadata: dict[str, Any] | None
     sections: list[ReportSectionOut]
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_models(cls, r: Report, pairs: list[tuple[ReportSection, TemplateSectionDef]]) -> ReportDetailOut:
+    def from_models(
+        cls,
+        r: Report,
+        pairs: list[tuple[ReportSection, TemplateSectionDef]],
+        approval_records: list[ApprovalRecord] | None = None,
+    ) -> ReportDetailOut:
         return cls(
             id=str(r.id),
             exercise_id=str(r.exercise_id),
@@ -172,6 +223,8 @@ class ReportDetailOut(BaseModel):
             submitted_at=r.submitted_at,
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
             writer_notes=r.writer_notes,
+            approval_chain=r.approval_chain,
+            approval_records=[ApprovalRecordOut.from_model(a) for a in (approval_records or [])],
             metadata=r.metadata_,
             sections=[ReportSectionOut.from_models(s, d) for s, d in pairs],
             created_at=r.created_at,

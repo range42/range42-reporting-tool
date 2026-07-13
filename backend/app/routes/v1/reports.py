@@ -8,15 +8,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
-from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_OWN, REPORTS_SUBMIT, REPORTS_WRITE
+from app.core.permissions import (
+    REPORTS_APPROVE,
+    REPORTS_READ_ALL,
+    REPORTS_READ_OWN,
+    REPORTS_SUBMIT,
+    REPORTS_WRITE,
+)
 from app.core.rbac import get_current_user, require_global_admin, require_permission, require_permission_any
 from app.core.sanitize import html_to_plain, sanitize_html
-from app.models import Report, ReportSection, ReportTemplate, Team, TeamMember, TemplateSectionDef, User
+from app.models import (
+    ApprovalRecord,
+    Report,
+    ReportSection,
+    ReportTemplate,
+    Team,
+    TeamMember,
+    TemplateSectionDef,
+    User,
+)
 from app.models.exercise_role import ExerciseRole
 from app.models.role_definition import RoleDefinition
 from app.schemas.common import DataEnvelope, Page
 from app.schemas.report import (
     KNOWN_REPORT_STATUSES,
+    ApproveRequest,
+    RejectRequest,
     ReportCreate,
     ReportDetailOut,
     ReportOut,
@@ -134,6 +151,23 @@ async def _apply_transition(
         raise HTTPException(
             status_code=409, detail={"error": "invalid_state", "from": exc.current, "to": exc.target}
         ) from exc
+
+
+def _require_status(r: Report, expected: str) -> None:
+    if r.status != expected:
+        raise HTTPException(status_code=409, detail={"error": "invalid_state", "from": r.status, "to": expected})
+
+
+async def _approval_records(db: AsyncSession, report_id: uuid.UUID) -> list[ApprovalRecord]:
+    return list(
+        (
+            await db.execute(
+                select(ApprovalRecord).where(ApprovalRecord.report_id == report_id).order_by(ApprovalRecord.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    )
 
 
 async def _get_report_section(db: AsyncSession, report_id: uuid.UUID, sid: uuid.UUID) -> ReportSection:
@@ -280,7 +314,9 @@ async def get_report(
 ) -> DataEnvelope[ReportDetailOut]:
     report = await _get_report(db, exercise_id, rid)
     await _assert_report_access(db, exercise_id, report, user, write=False)
-    return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, rid)))
+    return DataEnvelope(
+        data=ReportDetailOut.from_models(report, await _section_pairs(db, rid), await _approval_records(db, rid))
+    )
 
 
 # --- metadata update + delete (GA, draft-only) -----------------------------
@@ -462,3 +498,86 @@ async def submit_report(
     )
     await db.refresh(report)
     return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, rid)))
+
+
+# --- approval: single-step approve / reject --------------------------------
+# Authorized on the reports:approve permission alone (exercise-scoped) — an
+# approver need not be a member of the report's team. Multi-step chains (#38) and
+# admin override (#39) extend approve; reports have no approval_chain until then,
+# so a single approval finalizes here.
+
+
+@router.post("/exercises/{exercise_id}/reports/{rid}/approve")
+async def approve_report(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    body: ApproveRequest | None = None,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission(REPORTS_APPROVE)),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportDetailOut]:
+    report = await _get_report(db, exercise_id, rid)
+    _require_status(report, "pending_approval")
+    db.add(
+        ApprovalRecord(
+            report_id=report.id,
+            approver_id=user.id,
+            step=1,
+            action="approved",
+            is_admin_override=False,
+            comment=body.comment if body else None,
+        )
+    )
+    await db.flush()
+    await _apply_transition(
+        db,
+        report,
+        target_status="submitted",
+        actor_id=user.id,
+        action="report.approve",
+        details={"step": 1},
+        ip=client_ip(request),
+    )
+    await db.refresh(report)
+    return DataEnvelope(
+        data=ReportDetailOut.from_models(report, await _section_pairs(db, rid), await _approval_records(db, rid))
+    )
+
+
+@router.post("/exercises/{exercise_id}/reports/{rid}/reject")
+async def reject_report(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    body: RejectRequest,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission(REPORTS_APPROVE)),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportDetailOut]:
+    report = await _get_report(db, exercise_id, rid)
+    _require_status(report, "pending_approval")
+    db.add(
+        ApprovalRecord(
+            report_id=report.id,
+            approver_id=user.id,
+            step=body.step or 1,
+            action="rejected",
+            is_admin_override=False,
+            comment=body.comment,
+        )
+    )
+    await db.flush()
+    await _apply_transition(
+        db,
+        report,
+        target_status="draft",
+        actor_id=user.id,
+        action="report.reject",
+        details={"comment": body.comment},
+        ip=client_ip(request),
+    )
+    await db.refresh(report)
+    return DataEnvelope(
+        data=ReportDetailOut.from_models(report, await _section_pairs(db, rid), await _approval_records(db, rid))
+    )
