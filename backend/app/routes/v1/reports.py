@@ -170,6 +170,69 @@ async def _approval_records(db: AsyncSession, report_id: uuid.UUID) -> list[Appr
     )
 
 
+def _chain_entries(report: Report) -> list[dict[str, object]]:
+    """The approval chain as an ordered list; empty = single-step default (step 1)."""
+    return report.approval_chain or []
+
+
+def _required_steps(entries: list[dict[str, object]]) -> set[int]:
+    """1-based indices of the steps that must be approved to finalize.
+
+    No chain (single-step default) -> {1}. With a chain, the steps whose
+    ``required`` flag is true (defaulting to true when omitted).
+    """
+    if not entries:
+        return {1}
+    return {i + 1 for i, e in enumerate(entries) if e.get("required", True)}
+
+
+async def _approved_steps(db: AsyncSession, report_id: uuid.UUID) -> set[int]:
+    rows = (
+        await db.execute(
+            select(ApprovalRecord.step).where(
+                ApprovalRecord.report_id == report_id, ApprovalRecord.action == "approved"
+            )
+        )
+    ).scalars()
+    return set(rows)
+
+
+async def _caller_role_keys(db: AsyncSession, exercise_id: uuid.UUID, user: User) -> set[str]:
+    rows = (
+        await db.execute(
+            select(ExerciseRole.role_key).where(
+                ExerciseRole.exercise_id == exercise_id, ExerciseRole.user_id == user.id
+            )
+        )
+    ).scalars()
+    return set(rows)
+
+
+async def _assert_step_eligibility(
+    db: AsyncSession,
+    exercise_id: uuid.UUID,
+    user: User,
+    entries: list[dict[str, object]],
+    step: int,
+) -> None:
+    """The caller must match the step's subject (role_key or user_id). Admins bypass.
+
+    A single-step default (no chain) is already gated by the endpoint permission.
+    """
+    if user.is_global_admin or not entries:
+        return
+    entry = entries[step - 1]
+    uid = entry.get("user_id")
+    if uid is not None:
+        if str(user.id) == uid:
+            return
+        raise HTTPException(status_code=403, detail={"error": "not_eligible_for_step", "step": step})
+    role_key = entry.get("role_key")
+    if role_key is not None and role_key in await _caller_role_keys(db, exercise_id, user):
+        return
+    raise HTTPException(status_code=403, detail={"error": "not_eligible_for_step", "step": step})
+
+
 async def _get_report_section(db: AsyncSession, report_id: uuid.UUID, sid: uuid.UUID) -> ReportSection:
     s = (
         await db.execute(select(ReportSection).where(ReportSection.id == sid, ReportSection.report_id == report_id))
@@ -224,6 +287,7 @@ async def create_report(
         description=body.description,
         status="draft",
         approval_required=body.approval_required,
+        approval_chain=[e.model_dump() for e in body.approval_chain] if body.approval_chain else None,
         due_at=body.due_at,
         assigned_writer_id=uuid.UUID(body.assigned_writer_id) if body.assigned_writer_id else None,
         created_by=actor.id,
@@ -500,11 +564,11 @@ async def submit_report(
     return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, rid)))
 
 
-# --- approval: single-step approve / reject --------------------------------
+# --- approval: approve / reject --------------------------------------------
 # Authorized on the reports:approve permission alone (exercise-scoped) — an
-# approver need not be a member of the report's team. Multi-step chains (#38) and
-# admin override (#39) extend approve; reports have no approval_chain until then,
-# so a single approval finalizes here.
+# approver need not be a member of the report's team. A report stays in
+# pending_approval until all *required* chain steps are approved, then the state
+# machine finalizes it to submitted. No chain (or a single entry) = single step 1.
 
 
 @router.post("/exercises/{exercise_id}/reports/{rid}/approve")
@@ -517,28 +581,61 @@ async def approve_report(
     _: None = Depends(require_permission(REPORTS_APPROVE)),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[ReportDetailOut]:
+    body = body or ApproveRequest()
     report = await _get_report(db, exercise_id, rid)
     _require_status(report, "pending_approval")
+
+    entries = _chain_entries(report)
+    n_steps = len(entries) or 1
+    required = _required_steps(entries)
+    approved = await _approved_steps(db, report.id)
+
+    if body.step is not None:
+        if not (1 <= body.step <= n_steps):
+            raise HTTPException(status_code=422, detail={"error": "invalid_step", "step": body.step})
+        step = body.step
+    else:
+        remaining = sorted(required - approved)
+        step = remaining[0] if remaining else 1
+    if step in approved:
+        raise HTTPException(status_code=409, detail={"error": "step_already_approved", "step": step})
+
+    await _assert_step_eligibility(db, exercise_id, user, entries, step)
+
     db.add(
         ApprovalRecord(
             report_id=report.id,
             approver_id=user.id,
-            step=1,
+            step=step,
             action="approved",
             is_admin_override=False,
-            comment=body.comment if body else None,
+            comment=body.comment,
         )
     )
     await db.flush()
-    await _apply_transition(
-        db,
-        report,
-        target_status="submitted",
-        actor_id=user.id,
-        action="report.approve",
-        details={"step": 1},
-        ip=client_ip(request),
-    )
+
+    approved = approved | {step}
+    if required <= approved:
+        await _apply_transition(
+            db,
+            report,
+            target_status="submitted",
+            actor_id=user.id,
+            action="report.approve",
+            details={"step": step},
+            ip=client_ip(request),
+        )
+    else:
+        # mid-chain approval: one audit row, no status change.
+        await record_audit(
+            db,
+            user_id=user.id,
+            action="report.approve",
+            resource_type="report",
+            resource_id=report.id,
+            details={"step": step, "remaining": sorted(required - approved)},
+            ip=client_ip(request),
+        )
     await db.refresh(report)
     return DataEnvelope(
         data=ReportDetailOut.from_models(report, await _section_pairs(db, rid), await _approval_records(db, rid))

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.approval_record import ApprovalRecord
 from app.models.report import Report
@@ -15,6 +15,31 @@ from app.schemas.section_content import SectionBody
 KNOWN_REPORT_STATUSES = ("draft", "pending_approval", "submitted")
 
 
+class ApprovalChainEntry(BaseModel):
+    """One ordered step of a multi-step approval chain (ARCHITECTURE §7).
+
+    Exactly one of ``role_key``/``user_id`` identifies who may approve the step.
+    ``required`` steps must all be approved before the report leaves
+    ``pending_approval``; optional steps do not gate finalization.
+    """
+
+    role_key: str | None = None
+    user_id: str | None = None
+    required: bool = True
+
+    @model_validator(mode="after")
+    def _exactly_one_subject(self) -> ApprovalChainEntry:
+        if (self.role_key is None) == (self.user_id is None):
+            raise ValueError("exactly one of role_key or user_id must be set")
+        return self
+
+
+def _reject_empty_chain(v: list[ApprovalChainEntry] | None) -> list[ApprovalChainEntry] | None:
+    if v is not None and len(v) == 0:
+        raise ValueError("approval_chain must be a non-empty list or null")
+    return v
+
+
 class ReportCreate(BaseModel):
     template_id: str
     team_id: str
@@ -22,7 +47,10 @@ class ReportCreate(BaseModel):
     description: str | None = None
     due_at: datetime | None = None
     approval_required: bool = False
+    approval_chain: list[ApprovalChainEntry] | None = None
     assigned_writer_id: str | None = None
+
+    _no_empty_chain = field_validator("approval_chain")(_reject_empty_chain)
 
 
 class ReportUpdate(BaseModel):
@@ -30,12 +58,15 @@ class ReportUpdate(BaseModel):
     description: str | None = None
     due_at: datetime | None = None
     approval_required: bool | None = None
+    approval_chain: list[ApprovalChainEntry] | None = None
     assigned_writer_id: str | None = None
 
     @field_validator("name", "approval_required", mode="before")
     @classmethod
     def _nn(cls, v: object) -> object:
         return _reject_null(v)
+
+    _no_empty_chain = field_validator("approval_chain")(_reject_empty_chain)
 
 
 class ApproveRequest(BaseModel):
