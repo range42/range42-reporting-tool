@@ -100,9 +100,10 @@ async function logout(): Promise<void> {
     </div>
 
     <div v-else-if="exercises.length" class="grid gap-3">
-      <div
+      <RouterLink
         v-for="ex in exercises"
         :key="ex.id"
+        :to="`/exercises/${ex.id}/reports`"
         data-test="exercise-card"
         class="group flex items-center gap-5 rounded-xl border border-zinc-200 bg-white p-5 transition hover:border-indigo-400 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-indigo-500"
         :class="statusStyle[ex.status].dim"
@@ -128,7 +129,7 @@ async function logout(): Promise<void> {
         <ArrowRight
           class="h-4 w-4 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-indigo-500"
         />
-      </div>
+      </RouterLink>
     </div>
 
     <div v-else data-test="empty" class="py-16 text-center text-zinc-500">

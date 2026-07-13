@@ -41,7 +41,17 @@ def _envelope(code: str, message: str, details: list[object], status: int) -> JS
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
-        return _envelope("HTTP_ERROR", str(exc.detail), [], exc.status_code)
+        detail = exc.detail
+        # Structured detail (dict/list): carry it in ``details[]`` so JSON clients
+        # can read it, instead of flattening it to a Python-repr string in
+        # ``message`` (which destroyed the 409 stale-version ``section`` payload).
+        # String details keep their existing behaviour (message = the string).
+        if isinstance(detail, dict):
+            message = str(detail.get("error", "error"))
+            return _envelope("HTTP_ERROR", message, [_sanitize_item(detail)], exc.status_code)
+        if isinstance(detail, list):
+            return _envelope("HTTP_ERROR", "error", _sanitize_errors(list(detail)), exc.status_code)
+        return _envelope("HTTP_ERROR", str(detail), [], exc.status_code)
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, exc: RequestValidationError) -> JSONResponse:

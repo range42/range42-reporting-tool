@@ -1,6 +1,8 @@
 from app.models.audit import AuditLog
 from app.models.exercise import Exercise
 from app.models.exercise_role import ExerciseRole
+from app.models.report import Report
+from app.models.report_section import ReportSection
 from app.models.report_template import ReportTemplate
 from app.models.role_definition import RoleDefinition
 from app.models.scoring_config import ScoringConfig
@@ -15,6 +17,8 @@ __all__ = [
     "AuditLog",
     "Exercise",
     "ExerciseRole",
+    "Report",
+    "ReportSection",
     "ReportTemplate",
     "RoleDefinition",
     "ScoringConfig",

@@ -62,6 +62,13 @@ async def callback(
         details={"provider": claims.provider},
         ip=client_ip(request),
     )
+    # Durability-before-token: get_db commits post-yield (after the response is
+    # sent, in modern FastAPI), so a client that calls an authed endpoint the
+    # instant it receives this token can race the session-row commit and get a
+    # 401 "session invalid". Commit here so the session row is durable before the
+    # token leaves the server. Deliberate exception to the "get_db owns the
+    # commit" rule, justified only for the session-minting login paths.
+    await db.commit()
     return DataEnvelope(data=TokenResponse(access_token=issued.token, user=UserOut.from_model(issued.user)))
 
 
@@ -117,4 +124,7 @@ async def emergency_login(
         details={"provider": "emergency"},
         ip=client_ip(request),
     )
+    # See callback(): commit the session row before the token reaches the client
+    # so an immediate follow-up authed request cannot race the post-yield commit.
+    await db.commit()
     return DataEnvelope(data=TokenResponse(access_token=issued.token, user=UserOut.from_model(issued.user)))
