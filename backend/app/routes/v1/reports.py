@@ -16,6 +16,7 @@ from app.models.exercise_role import ExerciseRole
 from app.models.role_definition import RoleDefinition
 from app.schemas.common import DataEnvelope, Page
 from app.schemas.report import (
+    KNOWN_REPORT_STATUSES,
     ReportCreate,
     ReportDetailOut,
     ReportOut,
@@ -23,6 +24,7 @@ from app.schemas.report import (
     ReportUpdate,
     SectionAnswerUpdate,
 )
+from app.services.workflow import state_machine
 
 router = APIRouter(tags=["reports"])
 
@@ -111,6 +113,27 @@ async def _assert_report_access(
 def _require_draft(r: Report) -> None:
     if r.status != "draft":
         raise HTTPException(status_code=409, detail="report is not a draft")
+
+
+async def _apply_transition(
+    db: AsyncSession,
+    report: Report,
+    *,
+    target_status: str,
+    actor_id: uuid.UUID,
+    action: str,
+    details: dict[str, object] | None = None,
+    ip: str | None = None,
+) -> None:
+    """Route through the workflow state machine, mapping a rejected transition to 409."""
+    try:
+        await state_machine.transition(
+            db, report, target_status=target_status, actor_id=actor_id, action=action, details=details, ip=ip
+        )
+    except state_machine.InvalidTransition as exc:
+        raise HTTPException(
+            status_code=409, detail={"error": "invalid_state", "from": exc.current, "to": exc.target}
+        ) from exc
 
 
 async def _get_report_section(db: AsyncSession, report_id: uuid.UUID, sid: uuid.UUID) -> ReportSection:
@@ -214,6 +237,8 @@ async def list_reports(
     team_id: uuid.UUID | None = None,
     status: str | None = None,
 ) -> DataEnvelope[list[ReportOut]]:
+    if status is not None and status not in KNOWN_REPORT_STATUSES:
+        raise HTTPException(status_code=422, detail={"error": "invalid_status"})
     filt = [Report.exercise_id == exercise_id]
     if team_id is not None:
         filt.append(Report.team_id == team_id)
@@ -429,17 +454,11 @@ async def submit_report(
     if missing:
         raise HTTPException(status_code=409, detail={"error": "required_section_empty", "section_def_ids": missing})
 
-    report.status = "submitted"
-    report.submitted_at = datetime.now(UTC)
-    await db.flush()
-    await db.refresh(report)
-    await record_audit(
-        db,
-        user_id=user.id,
-        action="report.submit",
-        resource_type="report",
-        resource_id=report.id,
-        details=None,
-        ip=client_ip(request),
+    # approval_required routes to pending_approval; otherwise straight to submitted.
+    # The state machine is the sole writer of report.status + submitted_at + audit.
+    target = "pending_approval" if report.approval_required else "submitted"
+    await _apply_transition(
+        db, report, target_status=target, actor_id=user.id, action="report.submit", ip=client_ip(request)
     )
+    await db.refresh(report)
     return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, rid)))

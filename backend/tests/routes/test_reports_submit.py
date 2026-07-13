@@ -15,7 +15,7 @@ async def _ga(migrated_db):
     return {"Authorization": f"Bearer {tok}"}
 
 
-async def _mk(c, ah):
+async def _mk(c, ah, *, approval_required: bool = False):
     tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()["data"][
         "id"
     ]
@@ -32,7 +32,7 @@ async def _mk(c, ah):
     detail = (
         await c.post(
             f"/api/v1/exercises/{ex}/reports",
-            json={"template_id": tid, "team_id": team, "name": "R"},
+            json={"template_id": tid, "team_id": team, "name": "R", "approval_required": approval_required},
             headers=ah,
         )
     ).json()["data"]
@@ -64,3 +64,19 @@ async def test_submit_succeeds_when_filled(migrated_db: async_sessionmaker) -> N
         # second submit blocked (not draft)
         again = await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/submit", headers=ah)
         assert again.status_code == 409
+
+
+async def test_submit_with_approval_required_goes_pending(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid = await _mk(c, ah, approval_required=True)
+        await c.patch(
+            f"/api/v1/exercises/{ex}/reports/{rid}/sections/{sid}",
+            json={"version": 1, "body": {"kind": "rich_text", "content": "<p>done</p>"}},
+            headers=ah,
+        )
+        r = await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/submit", headers=ah)
+        assert r.status_code == 200, r.text
+        d = r.json()["data"]
+        assert d["status"] == "pending_approval"
+        assert d["submitted_at"] is None

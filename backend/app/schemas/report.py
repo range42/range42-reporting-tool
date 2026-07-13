@@ -11,7 +11,7 @@ from app.models.template_section_def import TemplateSectionDef
 from app.schemas.domain import _reject_null
 from app.schemas.section_content import SectionBody
 
-KNOWN_REPORT_STATUSES = ("draft", "submitted")
+KNOWN_REPORT_STATUSES = ("draft", "pending_approval", "submitted")
 
 
 class ReportCreate(BaseModel):
