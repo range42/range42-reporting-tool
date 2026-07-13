@@ -116,9 +116,7 @@ _SECTIONS: tuple[dict[str, Any], ...] = (
 
 
 async def _get_or_create_user(session: AsyncSession, p: _Persona) -> User:
-    user = (
-        await session.execute(select(User).where(User.external_id == p.external_id))
-    ).scalar_one_or_none()
+    user = (await session.execute(select(User).where(User.external_id == p.external_id))).scalar_one_or_none()
     if user is None:
         user = User(
             external_id=p.external_id,
@@ -132,9 +130,7 @@ async def _get_or_create_user(session: AsyncSession, p: _Persona) -> User:
 
 
 async def _get_or_create_exercise(session: AsyncSession, *, created_by: uuid.UUID) -> Exercise:
-    exercise = (
-        await session.execute(select(Exercise).where(Exercise.name == EXERCISE_NAME))
-    ).scalar_one_or_none()
+    exercise = (await session.execute(select(Exercise).where(Exercise.name == EXERCISE_NAME))).scalar_one_or_none()
     if exercise is None:
         now = datetime.now(UTC)
         exercise = Exercise(
@@ -156,9 +152,7 @@ async def _get_or_create_team(
     session: AsyncSession, *, exercise_id: uuid.UUID, name: str, team_type: str, color: str
 ) -> Team:
     team = (
-        await session.execute(
-            select(Team).where(Team.exercise_id == exercise_id, Team.name == name)
-        )
+        await session.execute(select(Team).where(Team.exercise_id == exercise_id, Team.name == name))
     ).scalar_one_or_none()
     if team is None:
         team = Team(exercise_id=exercise_id, name=name, team_type=team_type, color=color)
@@ -169,9 +163,7 @@ async def _get_or_create_team(
 
 async def _ensure_team_member(session: AsyncSession, *, team_id: uuid.UUID, user_id: uuid.UUID) -> None:
     exists = (
-        await session.execute(
-            select(TeamMember.id).where(TeamMember.team_id == team_id, TeamMember.user_id == user_id)
-        )
+        await session.execute(select(TeamMember.id).where(TeamMember.team_id == team_id, TeamMember.user_id == user_id))
     ).first()
     if exists is None:
         session.add(TeamMember(team_id=team_id, user_id=user_id))
