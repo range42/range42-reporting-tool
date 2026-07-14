@@ -93,6 +93,23 @@ async def get_team(
     return DataEnvelope(data=TeamOut.from_model(t, members=members))
 
 
+@router.get("/exercises/{exercise_id}/teams/{team_id}/members")
+async def list_team_members(
+    exercise_id: uuid.UUID,
+    team_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_team_membership),
+) -> DataEnvelope[list[TeamMemberOut]]:
+    """Members of a team — powers the assigned-writer selector (L7)."""
+    await _get_team(db, exercise_id, team_id)
+    rows = (
+        await db.execute(
+            select(TeamMember, User).join(User, User.id == TeamMember.user_id).where(TeamMember.team_id == team_id)
+        )
+    ).all()
+    return DataEnvelope(data=[TeamMemberOut.from_row(m, u) for m, u in rows])
+
+
 @router.patch("/exercises/{exercise_id}/teams/{team_id}")
 async def update_team(
     request: Request,

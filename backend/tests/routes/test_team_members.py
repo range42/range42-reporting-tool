@@ -56,3 +56,35 @@ async def test_membership_guards_get_team(migrated_db: async_sessionmaker) -> No
     assert member_resp.status_code == 200
     assert len(member_resp.json()["data"]["members"]) == 1
     assert outsider_resp.status_code == 403
+
+
+async def test_list_members(migrated_db: async_sessionmaker) -> None:
+    token, _ = await make_user_token(migrated_db, jti="ga4", admin=True)
+    _, alice = await make_user_token(migrated_db, jti="alice", admin=False)
+    _, bob = await make_user_token(migrated_db, jti="bob", admin=False)
+    _, carol = await make_user_token(migrated_db, jti="carol", admin=False)  # created but not added
+    h = {"Authorization": f"Bearer {token}"}
+    async with client(migrated_db) as c:
+        ex, tid = await _exercise_and_team(c, h)
+        await c.post(f"/api/v1/exercises/{ex}/teams/{tid}/members", json={"user_id": alice}, headers=h)
+        await c.post(f"/api/v1/exercises/{ex}/teams/{tid}/members", json={"user_id": bob}, headers=h)
+        r = await c.get(f"/api/v1/exercises/{ex}/teams/{tid}/members", headers=h)
+    assert r.status_code == 200, r.text
+    by_uid = {m["user_id"]: m for m in r.json()["data"]}
+    assert set(by_uid) == {alice, bob}  # carol excluded
+    assert carol not in by_uid
+    for m in by_uid.values():
+        assert m["id"] and m["display_name"] and m["email"]
+
+
+async def test_list_members_forbidden_for_non_member(migrated_db: async_sessionmaker) -> None:
+    admin_token, _ = await make_user_token(migrated_db, jti="ga5", admin=True)
+    outsider_token, _ = await make_user_token(migrated_db, jti="out2", admin=False)
+    ah = {"Authorization": f"Bearer {admin_token}"}
+    async with client(migrated_db) as c:
+        ex, tid = await _exercise_and_team(c, ah)
+        r = await c.get(
+            f"/api/v1/exercises/{ex}/teams/{tid}/members",
+            headers={"Authorization": f"Bearer {outsider_token}"},
+        )
+    assert r.status_code == 403
