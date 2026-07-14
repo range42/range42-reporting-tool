@@ -12,6 +12,7 @@ from app.core.permissions import (
     REPORTS_APPROVE,
     REPORTS_READ_ALL,
     REPORTS_READ_OWN,
+    REPORTS_RECALL,
     REPORTS_SUBMIT,
     REPORTS_WRITE,
 )
@@ -33,6 +34,7 @@ from app.schemas.common import DataEnvelope, Page
 from app.schemas.report import (
     KNOWN_REPORT_STATUSES,
     ApproveRequest,
+    RecallRequest,
     RejectRequest,
     ReportCreate,
     ReportDetailOut,
@@ -699,6 +701,47 @@ async def reject_report(
         target_status="draft",
         actor_id=user.id,
         action="report.reject",
+        details={"comment": body.comment},
+        ip=client_ip(request),
+    )
+    await db.refresh(report)
+    return DataEnvelope(
+        data=ReportDetailOut.from_models(report, await _section_pairs(db, rid), await _approval_records(db, rid))
+    )
+
+
+async def _evaluation_started(db: AsyncSession, report: Report) -> bool:
+    """Whether evaluation of ``report`` has begun — recall is blocked once it has.
+
+    WP5: check the evaluation table for an in_progress/completed row for this
+    report. Until WP5 lands there is no evaluation surface, so recall is always
+    permitted. This is the single place the future gate wires in.
+    """
+    return False
+
+
+@router.post("/exercises/{exercise_id}/reports/{rid}/recall")
+async def recall_report(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    body: RecallRequest | None = None,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission(REPORTS_RECALL)),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportDetailOut]:
+    body = body or RecallRequest()
+    report = await _get_report(db, exercise_id, rid)
+    _require_status(report, "submitted")
+    if await _evaluation_started(db, report):
+        raise HTTPException(status_code=409, detail={"error": "evaluation_in_progress"})
+    # Recall is not an approval action -> no approval_record, just the state transition.
+    await _apply_transition(
+        db,
+        report,
+        target_status="draft",
+        actor_id=user.id,
+        action="report.recall",
         details={"comment": body.comment},
         ip=client_ip(request),
     )
