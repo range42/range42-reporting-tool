@@ -210,6 +210,27 @@ async def _caller_role_keys(db: AsyncSession, exercise_id: uuid.UUID, user: User
     return set(rows)
 
 
+async def _is_eligible_for_step(
+    db: AsyncSession,
+    exercise_id: uuid.UUID,
+    user: User,
+    entries: list[dict[str, object]],
+    step: int,
+) -> bool:
+    """Whether the caller matches the step's subject (role_key or user_id). Admins bypass.
+
+    A single-step default (no chain) is already gated by the endpoint permission.
+    """
+    if user.is_global_admin or not entries:
+        return True
+    entry = entries[step - 1]
+    uid = entry.get("user_id")
+    if uid is not None:
+        return str(user.id) == uid
+    role_key = entry.get("role_key")
+    return role_key is not None and role_key in await _caller_role_keys(db, exercise_id, user)
+
+
 async def _assert_step_eligibility(
     db: AsyncSession,
     exercise_id: uuid.UUID,
@@ -217,22 +238,37 @@ async def _assert_step_eligibility(
     entries: list[dict[str, object]],
     step: int,
 ) -> None:
-    """The caller must match the step's subject (role_key or user_id). Admins bypass.
-
-    A single-step default (no chain) is already gated by the endpoint permission.
-    """
-    if user.is_global_admin or not entries:
-        return
-    entry = entries[step - 1]
-    uid = entry.get("user_id")
-    if uid is not None:
-        if str(user.id) == uid:
-            return
+    """Raise 403 unless the caller is eligible for ``step`` (see _is_eligible_for_step)."""
+    if not await _is_eligible_for_step(db, exercise_id, user, entries, step):
         raise HTTPException(status_code=403, detail={"error": "not_eligible_for_step", "step": step})
-    role_key = entry.get("role_key")
-    if role_key is not None and role_key in await _caller_role_keys(db, exercise_id, user):
-        return
-    raise HTTPException(status_code=403, detail={"error": "not_eligible_for_step", "step": step})
+
+
+async def _can_approve(
+    db: AsyncSession,
+    exercise_id: uuid.UUID,
+    report: Report,
+    user: User,
+    approved: set[int],
+) -> bool:
+    """Whether ``user`` may approve ``report`` at its current step right now.
+
+    True iff the report is ``pending_approval`` and the caller is eligible for the
+    current (smallest unfinished required) step — holding ``reports:approve`` and,
+    for a chain, matching that step's subject — or is a global admin. False once the
+    caller has already approved the current step.
+    """
+    if report.status != "pending_approval":
+        return False
+    if user.is_global_admin:
+        return True
+    if not await _has_permission(db, exercise_id, user, REPORTS_APPROVE):
+        return False
+    entries = _chain_entries(report)
+    remaining = sorted(_required_steps(entries) - approved)
+    step = remaining[0] if remaining else 1
+    if step in approved:
+        return False
+    return await _is_eligible_for_step(db, exercise_id, user, entries, step)
 
 
 async def _resolve_on_behalf_of(
@@ -390,8 +426,29 @@ async def list_reports(
             )
         ).all()
     }
+    # can_approve is only ever true for pending_approval reports; batch their
+    # approved-step sets in one query to avoid an N+1 over the page.
+    pending_ids = [r.id for r in rows if r.status == "pending_approval"]
+    approved_by_report: dict[uuid.UUID, set[int]] = {}
+    if pending_ids:
+        for report_id, step in (
+            await db.execute(
+                select(ApprovalRecord.report_id, ApprovalRecord.step).where(
+                    ApprovalRecord.report_id.in_(pending_ids), ApprovalRecord.action == "approved"
+                )
+            )
+        ).all():
+            approved_by_report.setdefault(report_id, set()).add(step)
+    data = [
+        ReportOut.from_model(
+            r,
+            counts.get(r.id, 0),
+            can_approve=await _can_approve(db, exercise_id, r, user, approved_by_report.get(r.id, set())),
+        )
+        for r in rows
+    ]
     return DataEnvelope(
-        data=[ReportOut.from_model(r, counts.get(r.id, 0)) for r in rows],
+        data=data,
         meta=Page(page=pp.page, per_page=pp.per_page, total=total),
     )
 
@@ -406,8 +463,12 @@ async def get_report(
 ) -> DataEnvelope[ReportDetailOut]:
     report = await _get_report(db, exercise_id, rid)
     await _assert_report_access(db, exercise_id, report, user, write=False)
+    approved = await _approved_steps(db, report.id)
+    can_approve = await _can_approve(db, exercise_id, report, user, approved)
     return DataEnvelope(
-        data=ReportDetailOut.from_models(report, await _section_pairs(db, rid), await _approval_records(db, rid))
+        data=ReportDetailOut.from_models(
+            report, await _section_pairs(db, rid), await _approval_records(db, rid), can_approve=can_approve
+        )
     )
 
 

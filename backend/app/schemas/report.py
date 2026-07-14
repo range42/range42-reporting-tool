@@ -187,11 +187,12 @@ class ReportOut(BaseModel):
     assigned_writer_id: str | None
     approval_chain: list[dict[str, Any]] | None
     section_count: int
+    can_approve: bool
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, r: Report, section_count: int) -> ReportOut:
+    def from_model(cls, r: Report, section_count: int, *, can_approve: bool = False) -> ReportOut:
         return cls(
             id=str(r.id),
             exercise_id=str(r.exercise_id),
@@ -207,6 +208,7 @@ class ReportOut(BaseModel):
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
             approval_chain=r.approval_chain,
             section_count=section_count,
+            can_approve=can_approve,
             created_at=r.created_at,
             updated_at=r.updated_at,
         )
@@ -230,6 +232,7 @@ class ReportDetailOut(BaseModel):
     approval_records: list[ApprovalRecordOut]
     metadata: dict[str, Any] | None
     sections: list[ReportSectionOut]
+    can_approve: bool
     created_at: datetime
     updated_at: datetime
 
@@ -239,6 +242,8 @@ class ReportDetailOut(BaseModel):
         r: Report,
         pairs: list[tuple[ReportSection, TemplateSectionDef]],
         approval_records: list[ApprovalRecord] | None = None,
+        *,
+        can_approve: bool = False,
     ) -> ReportDetailOut:
         return cls(
             id=str(r.id),
@@ -258,6 +263,7 @@ class ReportDetailOut(BaseModel):
             approval_records=[ApprovalRecordOut.from_model(a) for a in (approval_records or [])],
             metadata=r.metadata_,
             sections=[ReportSectionOut.from_models(s, d) for s, d in pairs],
+            can_approve=can_approve,
             created_at=r.created_at,
             updated_at=r.updated_at,
         )
