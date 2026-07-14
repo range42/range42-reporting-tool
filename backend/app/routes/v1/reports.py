@@ -233,6 +233,32 @@ async def _assert_step_eligibility(
     raise HTTPException(status_code=403, detail={"error": "not_eligible_for_step", "step": step})
 
 
+async def _resolve_on_behalf_of(
+    db: AsyncSession,
+    on_behalf_of: str | None,
+    actor: User,
+) -> tuple[uuid.UUID, bool]:
+    """Resolve the approver identity for an approve action.
+
+    Without ``on_behalf_of`` the actor approves as themselves. With it, only a
+    global admin may record the approval on behalf of another (existing) user —
+    an audited admin override for a stalled chain (W4-8). Returns
+    ``(approver_id, is_admin_override)``.
+    """
+    if on_behalf_of is None:
+        return actor.id, False
+    if not actor.is_global_admin:
+        raise HTTPException(status_code=403, detail={"error": "not_global_admin"})
+    try:
+        target_id = uuid.UUID(on_behalf_of)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"error": "invalid_on_behalf_of"}) from None
+    exists = (await db.execute(select(User.id).where(User.id == target_id))).scalar_one_or_none()
+    if exists is None:
+        raise HTTPException(status_code=404, detail={"error": "user_not_found", "user_id": on_behalf_of})
+    return target_id, True
+
+
 async def _get_report_section(db: AsyncSession, report_id: uuid.UUID, sid: uuid.UUID) -> ReportSection:
     s = (
         await db.execute(select(ReportSection).where(ReportSection.id == sid, ReportSection.report_id == report_id))
@@ -600,15 +626,17 @@ async def approve_report(
     if step in approved:
         raise HTTPException(status_code=409, detail={"error": "step_already_approved", "step": step})
 
-    await _assert_step_eligibility(db, exercise_id, user, entries, step)
+    approver_id, is_admin_override = await _resolve_on_behalf_of(db, body.on_behalf_of, user)
+    if not is_admin_override:
+        await _assert_step_eligibility(db, exercise_id, user, entries, step)
 
     db.add(
         ApprovalRecord(
             report_id=report.id,
-            approver_id=user.id,
+            approver_id=approver_id,
             step=step,
             action="approved",
-            is_admin_override=False,
+            is_admin_override=is_admin_override,
             comment=body.comment,
         )
     )
@@ -622,7 +650,7 @@ async def approve_report(
             target_status="submitted",
             actor_id=user.id,
             action="report.approve",
-            details={"step": step},
+            details={"step": step, "is_admin_override": is_admin_override},
             ip=client_ip(request),
         )
     else:
@@ -633,7 +661,7 @@ async def approve_report(
             action="report.approve",
             resource_type="report",
             resource_id=report.id,
-            details={"step": step, "remaining": sorted(required - approved)},
+            details={"step": step, "remaining": sorted(required - approved), "is_admin_override": is_admin_override},
             ip=client_ip(request),
         )
     await db.refresh(report)
