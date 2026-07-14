@@ -2,8 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, TriangleAlert, Clock } from '@lucide/vue'
+import { Plus, TriangleAlert, Clock, ShieldCheck } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
 import { listReports, type Report, type ReportStatus } from '@/services/reports'
@@ -16,6 +17,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const caps = useCapabilitiesStore()
 
 const exerciseId = route.params.exerciseId as string
 const reports = ref<Report[]>([])
@@ -23,6 +25,7 @@ const loading = ref(true)
 const error = ref('')
 
 const token = computed(() => auth.token ?? '')
+const canApprove = computed(() => auth.isAdmin || caps.canApproveReports(exerciseId))
 
 onMounted(async () => {
   if (!auth.token) {
@@ -30,6 +33,8 @@ onMounted(async () => {
     return
   }
   try {
+    // Populate capabilities so the approvals affordance + guard resolve for this exercise.
+    await caps.load(token.value, exerciseId).catch(() => undefined)
     reports.value = await listReports(token.value, exerciseId)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('reports.loadError')
@@ -38,8 +43,13 @@ onMounted(async () => {
   }
 })
 
+function openApprovals(): void {
+  void router.push(`/exercises/${exerciseId}/reports/approvals`)
+}
+
 const statusBadge: Record<ReportStatus, string> = {
   draft: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+  pending_approval: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
   submitted: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
@@ -73,6 +83,16 @@ function createReport(): void {
 <template>
   <AppShell :title="t('reports.title')">
     <template #actions>
+      <button
+        v-if="canApprove"
+        type="button"
+        data-test="approvals-link"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="openApprovals"
+      >
+        <ShieldCheck class="h-4 w-4" />
+        {{ t('reports.approvals.nav') }}
+      </button>
       <button
         v-if="auth.isAdmin"
         type="button"

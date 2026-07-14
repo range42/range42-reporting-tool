@@ -112,7 +112,33 @@
     "discard": "Discard",
     "statusLabel": {
       "draft": "Draft",
+      "pending_approval": "Pending approval",
       "submitted": "Submitted"
+    },
+    "approvals": {
+      "nav": "Approvals",
+      "title": "Approvals",
+      "subtitle": "Review and decide on reports awaiting your approval.",
+      "queue": "Awaiting approval",
+      "empty": "Nothing awaiting approval.",
+      "loadError": "Could not load the approval queue.",
+      "selectPrompt": "Select a report from the queue to review it.",
+      "chain": "Approval chain",
+      "stepLabel": "Step {n}",
+      "state": {
+        "done": "Approved",
+        "current": "Awaiting",
+        "pending": "Pending"
+      },
+      "decision": "Your decision",
+      "note": "Note",
+      "notePlaceholder": "Add a note (required when rejecting)…",
+      "approve": "Approve",
+      "reject": "Reject",
+      "notApprover": "You are not the current approver for this report.",
+      "decisionError": "Could not record your decision. Please try again.",
+      "records": "Decisions so far",
+      "overrideBadge": "admin override"
     }
   }
 }

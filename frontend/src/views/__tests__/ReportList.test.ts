@@ -51,6 +51,7 @@ describe('ReportList.vue', () => {
         submitted_at: null,
         assigned_writer_id: null,
         section_count: 2,
+        can_approve: false,
       },
     ])
     const w = mountList()
