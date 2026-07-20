@@ -15,6 +15,7 @@ import {
   type SectionAnswerBody,
 } from '@/services/reports'
 import { useDraftCache } from '@/composables/useDraftCache'
+import { useCharBudget } from '@/composables/useCharBudget'
 import RichTextField from '@/views/reports/RichTextField.vue'
 import SectionConflictMerge from '@/views/reports/SectionConflictMerge.vue'
 
@@ -113,18 +114,14 @@ onBeforeUnmount(() => {
   for (const id of Object.keys(autosaveTimers)) clearTimeout(autosaveTimers[id])
 })
 
-function plainLength(html: string): number {
-  if (typeof DOMParser === 'undefined') return html.length
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  return (doc.body.textContent ?? '').replace(/\s+/g, ' ').trim().length
-}
+const budget = useCharBudget()
 
 function charCount(s: EditableSection): number {
-  return plainLength(s.content)
+  return budget.count(s.content)
 }
 
 function overLimit(s: EditableSection): boolean {
-  return s.charLimit !== null && charCount(s) > s.charLimit
+  return budget.overLimit(s.content, s.charLimit)
 }
 
 function bodyFor(s: EditableSection): SectionAnswerBody {

@@ -8,10 +8,7 @@ import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
 import { listReports, type Report, type ReportStatus } from '@/services/reports'
-
-const MS_PER_HOUR = 3_600_000
-const MS_PER_MINUTE = 60_000
-const COUNTDOWN_THRESHOLD_HOURS = 24
+import { useCountdown, type CountdownInfo } from '@/composables/useCountdown'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -53,22 +50,17 @@ const statusBadge: Record<ReportStatus, string> = {
   submitted: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
-interface DueInfo {
-  label: string
-  soon: boolean
+const countdown = useCountdown(t)
+
+function dueInfo(dueAt: string | null): CountdownInfo | null {
+  return countdown.info(dueAt)
 }
 
-function dueInfo(dueAt: string | null): DueInfo | null {
-  if (!dueAt) return null
-  const ms = new Date(dueAt).getTime() - Date.now()
-  if (ms <= 0) return { label: t('reports.overdue'), soon: true }
-  const hours = ms / MS_PER_HOUR
-  if (hours > COUNTDOWN_THRESHOLD_HOURS) {
-    return { label: new Date(dueAt).toLocaleDateString(), soon: false }
-  }
-  const h = Math.floor(hours)
-  const m = Math.floor((ms % MS_PER_HOUR) / MS_PER_MINUTE)
-  return { label: t('reports.dueIn', { time: h > 0 ? `${h}h ${m}m` : `${m}m` }), soon: true }
+// Today's list styling only distinguishes "needs attention" (amber) from a
+// plain date; soon and critical both map to the former.
+function dueSoon(dueAt: string | null): boolean {
+  const due = dueInfo(dueAt)
+  return due !== null && due.urgency !== 'none'
 }
 
 function openReport(id: string): void {
@@ -168,12 +160,12 @@ function createReport(): void {
                 v-if="dueInfo(r.due_at)"
                 :class="[
                   'inline-flex items-center gap-1',
-                  dueInfo(r.due_at)!.soon
+                  dueSoon(r.due_at)
                     ? 'font-medium text-amber-600 dark:text-amber-400'
                     : 'text-zinc-500',
                 ]"
               >
-                <Clock v-if="dueInfo(r.due_at)!.soon" class="h-3.5 w-3.5" />
+                <Clock v-if="dueSoon(r.due_at)" class="h-3.5 w-3.5" />
                 {{ dueInfo(r.due_at)!.label }}
               </span>
               <span v-else class="text-zinc-400">{{ t('reports.noDue') }}</span>
