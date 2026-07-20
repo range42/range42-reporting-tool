@@ -53,8 +53,32 @@ function mountEditor() {
   return mount(ReportEditor, { global: { plugins: [i18n] } })
 }
 
+const serverSection = {
+  ...richDetail.sections[0],
+  content: '<p>server text</p>',
+  version: 5,
+  updated_at: '2026-06-26T11:00:00Z',
+}
+
+const staleError = {
+  status: 409,
+  details: [{ error: 'stale_version', section: serverSection }],
+}
+
+async function mountWithConflict() {
+  vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+  vi.mocked(reports.saveSection).mockRejectedValueOnce(staleError as never)
+  const w = mountEditor()
+  await flushPromises()
+  await w.find('[data-test="content-s1"]').setValue('mine')
+  await w.find('[data-test="save-s1"]').trigger('click')
+  await flushPromises()
+  return w
+}
+
 describe('ReportEditor.vue', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
     localStorage.clear()
     useAuthStore().setSession({
@@ -74,14 +98,8 @@ describe('ReportEditor.vue', () => {
     expect(w.find('[data-test="save-s1"]').attributes('disabled')).toBeDefined()
   })
 
-  it('saveSection sends the current version; a 409 shows the conflict banner', async () => {
-    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
-    vi.mocked(reports.saveSection).mockRejectedValue({ status: 409 } as never)
-    const w = mountEditor()
-    await flushPromises()
-    await w.find('[data-test="content-s1"]').setValue('ok')
-    await w.find('[data-test="save-s1"]').trigger('click')
-    await flushPromises()
+  it('saveSection sends the current version; a stale 409 opens the merge panel', async () => {
+    const w = await mountWithConflict()
     expect(reports.saveSection).toHaveBeenCalledWith(
       'tok',
       'ex1',
@@ -89,6 +107,73 @@ describe('ReportEditor.vue', () => {
       's1',
       expect.objectContaining({ version: 1 }),
     )
-    expect(w.find('[data-test="conflict-s1"]').exists()).toBe(true)
+    const panel = w.find('[data-test="merge-s1"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('mine')
+    expect(panel.text()).toContain('server text')
+  })
+
+  it('keep mine re-saves the local content against the server version', async () => {
+    const w = await mountWithConflict()
+    vi.mocked(reports.saveSection).mockResolvedValueOnce({
+      ...serverSection,
+      content: 'mine',
+      version: 6,
+    } as never)
+    await w.find('[data-test="merge-keep-mine-s1"]').trigger('click')
+    await flushPromises()
+    expect(reports.saveSection).toHaveBeenLastCalledWith(
+      'tok',
+      'ex1',
+      'r1',
+      's1',
+      expect.objectContaining({ version: 5, body: { kind: 'rich_text', content: 'mine' } }),
+    )
+    expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
+  })
+
+  it('use server replaces the section, clears the panel and the draft cache', async () => {
+    const w = await mountWithConflict()
+    expect(localStorage.getItem('r42:draft:r1:d1')).not.toBeNull()
+    await w.find('[data-test="merge-use-server-s1"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
+    expect((w.find('[data-test="content-s1"]').element as HTMLTextAreaElement).value).toBe(
+      '<p>server text</p>',
+    )
+    expect(localStorage.getItem('r42:draft:r1:d1')).toBeNull()
+  })
+
+  it('manual merge saves the edited content against the server version', async () => {
+    const w = await mountWithConflict()
+    await w.find('[data-test="merge-manual-s1"]').trigger('click')
+    await w.find('[data-test="merge-editor-s1"]').setValue('mrgd')
+    vi.mocked(reports.saveSection).mockResolvedValueOnce({
+      ...serverSection,
+      content: 'mrgd',
+      version: 6,
+    } as never)
+    await w.find('[data-test="merge-apply-s1"]').trigger('click')
+    await flushPromises()
+    expect(reports.saveSection).toHaveBeenLastCalledWith(
+      'tok',
+      'ex1',
+      'r1',
+      's1',
+      expect.objectContaining({ version: 5, body: { kind: 'rich_text', content: 'mrgd' } }),
+    )
+    expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
+  })
+
+  it('a 409 without a usable section payload falls back to a refetch', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+    vi.mocked(reports.saveSection).mockRejectedValue({ status: 409, details: [] } as never)
+    const w = mountEditor()
+    await flushPromises()
+    await w.find('[data-test="content-s1"]').setValue('ok')
+    await w.find('[data-test="save-s1"]').trigger('click')
+    await flushPromises()
+    expect(reports.getReport).toHaveBeenCalledTimes(2)
+    expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
   })
 })

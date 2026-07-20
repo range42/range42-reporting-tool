@@ -11,10 +11,12 @@ import {
   saveSection,
   submitReport,
   type ReportDetail,
+  type ReportSection,
   type SectionAnswerBody,
 } from '@/services/reports'
 import { useDraftCache } from '@/composables/useDraftCache'
 import RichTextField from '@/views/reports/RichTextField.vue'
+import SectionConflictMerge from '@/views/reports/SectionConflictMerge.vue'
 
 const AUTOSAVE_MS = 30_000
 
@@ -37,7 +39,12 @@ interface EditableSection {
   choice: string[]
   version: number
   serverUpdatedAt: string
-  conflict: boolean
+  // Last state known to be in sync with the server — the "base" of a 3-way merge.
+  baseContent: string
+  baseChoice: string[]
+  baseVersion: number
+  // Server section carried by a stale-version 409; non-null renders the merge panel.
+  conflictServer: ReportSection | null
   restore: boolean
   savedLabel: string
 }
@@ -79,7 +86,10 @@ function toEditable(s: ReportDetail['sections'][number]): EditableSection {
     choice: s.choice_values ?? [],
     version: s.version,
     serverUpdatedAt: s.updated_at,
-    conflict: false,
+    baseContent: s.content ?? '',
+    baseChoice: s.choice_values ?? [],
+    baseVersion: s.version,
+    conflictServer: null,
     restore: false,
     savedLabel: '',
   }
@@ -132,6 +142,27 @@ function statusOf(e: unknown): number | undefined {
   return undefined
 }
 
+/** Extract the current server section from a stale-version 409's `details[]`, if usable. */
+function staleSectionOf(e: unknown): ReportSection | null {
+  if (!e || typeof e !== 'object' || !('details' in e)) return null
+  const details = (e as { details?: unknown }).details
+  if (!Array.isArray(details)) return null
+  for (const d of details) {
+    if (!d || typeof d !== 'object') continue
+    const entry = d as { error?: unknown; section?: unknown }
+    if (entry.error !== 'stale_version') continue
+    const section = entry.section
+    if (
+      section &&
+      typeof section === 'object' &&
+      typeof (section as ReportSection).version === 'number'
+    ) {
+      return section as ReportSection
+    }
+  }
+  return null
+}
+
 function onEdited(s: EditableSection): void {
   draft.write(
     s.sectionDefId,
@@ -153,16 +184,50 @@ async function save(s: EditableSection): Promise<void> {
     s.version = saved.version
     s.content = saved.content ?? ''
     s.choice = saved.choice_values ?? []
-    s.conflict = false
+    s.baseContent = s.content
+    s.baseChoice = [...s.choice]
+    s.baseVersion = saved.version
+    s.conflictServer = null
     s.savedLabel = t('reports.savedNow')
     draft.clear(s.sectionDefId)
   } catch (e) {
     if (statusOf(e) === 409) {
-      s.conflict = true
+      const server = staleSectionOf(e)
+      if (server) s.conflictServer = server
+      else await reloadSection(s)
     } else {
       error.value = e instanceof ApiError ? e.message : t('reports.saveError')
     }
   }
+}
+
+function keepMine(s: EditableSection): void {
+  if (!s.conflictServer) return
+  s.version = s.conflictServer.version
+  s.conflictServer = null
+  void save(s)
+}
+
+function useServer(s: EditableSection): void {
+  const server = s.conflictServer
+  if (!server) return
+  s.content = server.content ?? ''
+  s.choice = server.choice_values ?? []
+  s.version = server.version
+  s.serverUpdatedAt = server.updated_at
+  s.baseContent = s.content
+  s.baseChoice = [...s.choice]
+  s.baseVersion = server.version
+  s.conflictServer = null
+  draft.clear(s.sectionDefId)
+}
+
+function resolveManual(s: EditableSection, content: string): void {
+  if (!s.conflictServer) return
+  s.content = content
+  s.version = s.conflictServer.version
+  s.conflictServer = null
+  void save(s)
 }
 
 async function reloadSection(s: EditableSection): Promise<void> {
@@ -296,23 +361,22 @@ async function submit(): Promise<void> {
             </span>
           </div>
 
-          <div
-            v-if="s.conflict"
-            :data-test="`conflict-${s.id}`"
-            class="mb-3 flex items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300"
-          >
-            <span class="flex items-center gap-1.5">
-              <TriangleAlert class="h-4 w-4" />
-              {{ t('reports.conflict') }}
-            </span>
-            <button
-              type="button"
-              class="rounded border border-amber-400 px-2 py-0.5 text-xs font-medium"
-              @click="reloadSection(s)"
-            >
-              {{ t('reports.reload') }}
-            </button>
-          </div>
+          <SectionConflictMerge
+            v-if="s.conflictServer"
+            :test-id="s.id"
+            :base="s.fieldType === 'rich_text' ? s.baseContent : s.baseChoice.join(', ')"
+            :local="s.fieldType === 'rich_text' ? s.content : s.choice.join(', ')"
+            :server="
+              s.fieldType === 'rich_text'
+                ? (s.conflictServer.content ?? '')
+                : (s.conflictServer.choice_values ?? []).join(', ')
+            "
+            :server-version="s.conflictServer.version"
+            :field-type="s.fieldType"
+            @keep-mine="keepMine(s)"
+            @use-server="useServer(s)"
+            @resolved-manual="(content) => resolveManual(s, content)"
+          />
 
           <template v-if="s.fieldType === 'rich_text'">
             <RichTextField
