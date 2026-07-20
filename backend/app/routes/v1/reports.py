@@ -129,6 +129,23 @@ async def _assert_report_access(
     raise HTTPException(status_code=403, detail="insufficient permissions")
 
 
+async def _assert_section_write_access(db: AsyncSession, exercise_id: uuid.UUID, report: Report, user: User) -> None:
+    """L7 write-lock: an assigned report's sections are editable only by the assigned
+    writer, a team admin (holder of ``reports:recall``), or a global admin.
+
+    Layered on top of ``_assert_report_access`` (team scoping); unassigned reports
+    keep the team-scoped policy. Applied only to section saves — report metadata
+    keeps its existing policy.
+    """
+    if user.is_global_admin:
+        return
+    if report.assigned_writer_id is None or report.assigned_writer_id == user.id:
+        return
+    if await _has_permission(db, exercise_id, user, REPORTS_RECALL):
+        return
+    raise HTTPException(status_code=403, detail="report is assigned to another writer")
+
+
 def _require_draft(r: Report) -> None:
     if r.status != "draft":
         raise HTTPException(status_code=409, detail="report is not a draft")
@@ -555,6 +572,7 @@ async def save_section(
     report = await _get_report(db, exercise_id, rid)
     _require_draft(report)
     await _assert_report_access(db, exercise_id, report, user, write=True)
+    await _assert_section_write_access(db, exercise_id, report, user)
     section = await _get_report_section(db, rid, sid)
     section_def = (
         await db.execute(select(TemplateSectionDef).where(TemplateSectionDef.id == section.section_def_id))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TriangleAlert } from '@lucide/vue'
@@ -8,7 +8,7 @@ import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
 import { createReport } from '@/services/reports'
 import { listTemplates, type TemplateSummary } from '@/services/templates'
-import { listTeams, type Team } from '@/services/teams'
+import { listTeamMembers, listTeams, type Team, type TeamMemberSummary } from '@/services/teams'
 
 const inputClass =
   'h-10 w-full rounded-md border border-zinc-200 bg-white px-3 outline-none transition focus:border-indigo-400 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900'
@@ -31,6 +31,21 @@ const teamId = ref('')
 const name = ref('')
 const dueAtLocal = ref('')
 const approvalRequired = ref(false)
+
+// L7 writer assignment: members of the selected team; '' = anyone on the team.
+const members = ref<TeamMemberSummary[]>([])
+const assignedWriterId = ref('')
+
+watch(teamId, async (team) => {
+  members.value = []
+  assignedWriterId.value = ''
+  if (!team) return
+  try {
+    members.value = await listTeamMembers(token.value, exerciseId, team)
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : t('reports.loadError')
+  }
+})
 
 const canSubmit = computed(
   () => templateId.value !== '' && teamId.value !== '' && name.value.trim() !== '' && !saving.value,
@@ -59,6 +74,7 @@ async function submit(): Promise<void> {
       name: name.value.trim(),
       due_at: dueAtLocal.value ? new Date(dueAtLocal.value).toISOString() : null,
       approval_required: approvalRequired.value,
+      assigned_writer_id: assignedWriterId.value || null,
     })
     await router.push(`/exercises/${exerciseId}/reports/${created.id}`)
   } catch (e) {
@@ -122,6 +138,18 @@ async function submit(): Promise<void> {
           <select v-model="teamId" data-test="report-team" :class="inputClass">
             <option value="" disabled>{{ t('reports.selectTeam') }}</option>
             <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
+          </select>
+        </div>
+
+        <div v-if="teamId">
+          <label class="mb-1 block text-xs font-medium text-zinc-500">{{
+            t('reports.assignedWriter.label')
+          }}</label>
+          <select v-model="assignedWriterId" data-test="report-writer" :class="inputClass">
+            <option value="">{{ t('reports.assignedWriter.anyone') }}</option>
+            <option v-for="m in members" :key="m.user_id" :value="m.user_id">
+              {{ m.display_name }}
+            </option>
           </select>
         </div>
 

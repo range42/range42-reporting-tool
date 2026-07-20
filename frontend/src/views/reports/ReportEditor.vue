@@ -4,10 +4,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TriangleAlert, Check, RotateCcw } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
 import {
   getReport,
+  recallReport,
   saveSection,
   submitReport,
   type ReportDetail,
@@ -63,12 +65,30 @@ const rid = route.params.rid as string
 const token = computed(() => auth.token ?? '')
 const draft = useDraftCache(rid)
 
+const caps = useCapabilitiesStore()
+const REPORTS_RECALL = 'reports:recall'
+
 const report = ref<ReportDetail | null>(null)
 const sections = reactive<EditableSection[]>([])
 const error = ref('')
 const submitError = ref('')
 
-const readOnly = computed(() => report.value !== null && report.value.status !== 'draft')
+const isTeamAdmin = computed(() => caps.has(exerciseId, REPORTS_RECALL))
+
+// L7 write-lock mirror of the backend policy: an assigned draft is editable
+// only by its writer, a team admin, or a global admin.
+const lockedByAssignment = computed(() => {
+  const assigned = report.value?.assigned_writer_id ?? null
+  return assigned !== null && assigned !== auth.user?.id && !auth.isAdmin && !isTeamAdmin.value
+})
+
+const readOnly = computed(
+  () => report.value !== null && (report.value.status !== 'draft' || lockedByAssignment.value),
+)
+
+const canRecall = computed(
+  () => report.value?.status === 'submitted' && (auth.isAdmin || isTeamAdmin.value),
+)
 
 const autosaveTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 
@@ -98,6 +118,8 @@ function toEditable(s: ReportDetail['sections'][number]): EditableSection {
 
 onMounted(async () => {
   if (!auth.token) return
+  // Capabilities drive the team-admin lock exemption + the recall affordance.
+  void caps.load(token.value, exerciseId).catch(() => undefined)
   try {
     const detail = await getReport(token.value, exerciseId, rid)
     report.value = detail
@@ -260,6 +282,17 @@ function toggleChoice(s: EditableSection, code: string): void {
   onEdited(s)
 }
 
+async function recall(): Promise<void> {
+  submitError.value = ''
+  try {
+    const updated = await recallReport(token.value, exerciseId, rid)
+    report.value = updated
+    sections.splice(0, sections.length, ...updated.sections.map(toEditable))
+  } catch (e) {
+    submitError.value = e instanceof ApiError ? e.message : t('reports.recallError')
+  }
+}
+
 async function submit(): Promise<void> {
   submitError.value = ''
   try {
@@ -275,6 +308,16 @@ async function submit(): Promise<void> {
 <template>
   <AppShell :title="report?.name ?? t('reports.title')">
     <template #actions>
+      <button
+        v-if="canRecall"
+        type="button"
+        data-test="recall-report"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="recall"
+      >
+        <RotateCcw class="h-4 w-4" />
+        {{ t('reports.recallAction') }}
+      </button>
       <button
         v-if="report && !readOnly"
         type="button"
@@ -309,6 +352,14 @@ async function submit(): Promise<void> {
       >
         <TriangleAlert class="h-4 w-4 shrink-0" />
         <span>{{ error }}</span>
+      </div>
+      <div
+        v-if="lockedByAssignment"
+        data-test="assignment-lock"
+        class="mb-4 flex items-center gap-2 rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300"
+      >
+        <TriangleAlert class="h-4 w-4 shrink-0" />
+        <span>{{ t('reports.lockedByAssignment') }}</span>
       </div>
       <div
         v-if="submitError"

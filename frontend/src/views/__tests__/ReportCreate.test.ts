@@ -61,4 +61,77 @@ describe('ReportCreate.vue', () => {
     )
     expect(push).toHaveBeenCalledWith('/exercises/ex1/reports/r9')
   })
+
+  it('choosing a team fetches its members into the writer selector', async () => {
+    vi.spyOn(templatesSvc, 'listTemplates').mockResolvedValue([
+      { id: 't1', name: 'Spot', status: 'published', report_type: 'spot', version: 1 },
+    ] as never)
+    vi.spyOn(teamsSvc, 'listTeams').mockResolvedValue([
+      { id: 'tm1', exercise_id: 'ex1', name: 'Blue', team_type: 'blue', color: null },
+    ] as never)
+    const membersSpy = vi.spyOn(teamsSvc, 'listTeamMembers').mockResolvedValue([
+      {
+        id: 'm1',
+        user_id: 'u1',
+        display_name: 'Wri Ter',
+        email: 'w@x',
+        created_at: '2026-06-26T10:00:00Z',
+      },
+    ])
+    vi.spyOn(reportsSvc, 'createReport').mockResolvedValue({ id: 'r9' } as never)
+
+    const w = mountCreate()
+    await flushPromises()
+    await w.find('[data-test="report-team"]').setValue('tm1')
+    await flushPromises()
+    expect(membersSpy).toHaveBeenCalledWith('tok', 'ex1', 'tm1')
+    const writerSelect = w.find('[data-test="report-writer"]')
+    expect(writerSelect.exists()).toBe(true)
+    expect(writerSelect.text()).toContain('Wri Ter')
+  })
+
+  it('submits the selected writer, or null when left on anyone', async () => {
+    vi.spyOn(templatesSvc, 'listTemplates').mockResolvedValue([
+      { id: 't1', name: 'Spot', status: 'published', report_type: 'spot', version: 1 },
+    ] as never)
+    vi.spyOn(teamsSvc, 'listTeams').mockResolvedValue([
+      { id: 'tm1', exercise_id: 'ex1', name: 'Blue', team_type: 'blue', color: null },
+    ] as never)
+    vi.spyOn(teamsSvc, 'listTeamMembers').mockResolvedValue([
+      {
+        id: 'm1',
+        user_id: 'u1',
+        display_name: 'Wri Ter',
+        email: 'w@x',
+        created_at: '2026-06-26T10:00:00Z',
+      },
+    ])
+    const createSpy = vi.spyOn(reportsSvc, 'createReport').mockResolvedValue({ id: 'r9' } as never)
+
+    const w = mountCreate()
+    await flushPromises()
+    await w.find('[data-test="report-name"]').setValue('New R')
+    await w.find('[data-test="report-template"]').setValue('t1')
+    await w.find('[data-test="report-team"]').setValue('tm1')
+    await flushPromises()
+    await w.find('[data-test="report-writer"]').setValue('u1')
+    await w.find('[data-test="report-create-submit"]').trigger('submit')
+    await flushPromises()
+    expect(createSpy).toHaveBeenCalledWith(
+      'tok',
+      'ex1',
+      expect.objectContaining({ assigned_writer_id: 'u1' }),
+    )
+
+    // Leaving the selector on the default sends null.
+    createSpy.mockClear()
+    await w.find('[data-test="report-writer"]').setValue('')
+    await w.find('[data-test="report-create-submit"]').trigger('submit')
+    await flushPromises()
+    expect(createSpy).toHaveBeenCalledWith(
+      'tok',
+      'ex1',
+      expect.objectContaining({ assigned_writer_id: null }),
+    )
+  })
 })

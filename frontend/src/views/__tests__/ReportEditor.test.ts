@@ -6,6 +6,7 @@ import en from '@/locales/en/common.json'
 import ReportEditor from '@/views/reports/ReportEditor.vue'
 import * as reports from '@/services/reports'
 import { useAuthStore } from '@/stores/auth'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
@@ -175,5 +176,75 @@ describe('ReportEditor.vue', () => {
     await flushPromises()
     expect(reports.getReport).toHaveBeenCalledTimes(2)
     expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
+  })
+
+  it('a draft assigned to another user is read-only with the assignment-lock banner', async () => {
+    useAuthStore().setSession({
+      access_token: 'tok',
+      token_type: 'bearer',
+      user: { id: 'a', email: 'a', display_name: 'a', avatar_url: null, is_global_admin: false },
+    })
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      assigned_writer_id: 'someone-else',
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="assignment-lock"]').exists()).toBe(true)
+    expect(w.find('[data-test="save-s1"]').exists()).toBe(false)
+    expect(w.find('[data-test="content-s1"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('the assigned writer is not locked out of their own draft', async () => {
+    useAuthStore().setSession({
+      access_token: 'tok',
+      token_type: 'bearer',
+      user: { id: 'a', email: 'a', display_name: 'a', avatar_url: null, is_global_admin: false },
+    })
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      assigned_writer_id: 'a',
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="assignment-lock"]').exists()).toBe(false)
+    expect(w.find('[data-test="save-s1"]').exists()).toBe(true)
+  })
+
+  it('a submitted report shows recall for a recall-capable caller and recalls it', async () => {
+    useAuthStore().setSession({
+      access_token: 'tok',
+      token_type: 'bearer',
+      user: { id: 'a', email: 'a', display_name: 'a', avatar_url: null, is_global_admin: false },
+    })
+    useCapabilitiesStore().set('ex1', ['reports:recall'])
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      status: 'submitted',
+    } as never)
+    vi.mocked(reports.recallReport).mockResolvedValue({ ...richDetail, status: 'draft' } as never)
+    const w = mountEditor()
+    await flushPromises()
+    const btn = w.find('[data-test="recall-report"]')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    await flushPromises()
+    expect(reports.recallReport).toHaveBeenCalledWith('tok', 'ex1', 'r1')
+    expect(w.find('[data-test="recall-report"]').exists()).toBe(false)
+  })
+
+  it('no recall button without the capability', async () => {
+    useAuthStore().setSession({
+      access_token: 'tok',
+      token_type: 'bearer',
+      user: { id: 'a', email: 'a', display_name: 'a', avatar_url: null, is_global_admin: false },
+    })
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      status: 'submitted',
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="recall-report"]').exists()).toBe(false)
   })
 })
