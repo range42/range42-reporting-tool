@@ -1,5 +1,6 @@
 import copy
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,7 +11,7 @@ from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
 from app.core.rbac import require_global_admin
-from app.models import ReportTemplate, TemplateSectionDef, User
+from app.models import ReportSection, ReportTemplate, TemplateSectionDef, User
 from app.schemas.common import DataEnvelope, Page
 from app.schemas.template import (
     ReorderBody,
@@ -516,6 +517,108 @@ async def reorder_sections(
         ip=client_ip(request),
     )
     return DataEnvelope(data=[SectionOut.from_model(s) for s in await _sections(db, template_id)])
+
+
+# ---------------------------------------------------------------------------
+# Choice-value sub-resource (WP3 S4, #79) — the sanctioned mutations on a
+# published template's choice_config. Deprecation hides a code from new saves
+# without touching existing answers; deletion is allowed only while no
+# report_section references the code (409 otherwise). A DB trigger (0008)
+# backstops the invariant against non-route writes.
+# ---------------------------------------------------------------------------
+
+
+def _choice_values(s: TemplateSectionDef) -> list[dict[str, Any]]:
+    if s.field_type != "choice":
+        raise HTTPException(status_code=422, detail="section is not a choice section")
+    return list((s.choice_config or {}).get("values", []))
+
+
+def _find_choice_value(values: list[dict[str, Any]], code: str) -> dict[str, Any]:
+    for v in values:
+        if v.get("code") == code:
+            return v
+    raise HTTPException(status_code=404, detail="choice value not found")
+
+
+async def _choice_code_referenced(db: AsyncSession, section_def_id: uuid.UUID, code: str) -> bool:
+    row = (
+        await db.execute(
+            select(ReportSection.id)
+            .where(ReportSection.section_def_id == section_def_id, ReportSection.choice_values.contains([code]))
+            .limit(1)
+        )
+    ).first()
+    return row is not None
+
+
+@router.post("/templates/{template_id}/sections/{section_id}/choice-values/{code}/deprecate")
+async def deprecate_choice_value(
+    request: Request,
+    template_id: uuid.UUID,
+    section_id: uuid.UUID,
+    code: str,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[SectionOut]:
+    await _get_template(db, template_id)
+    s = await _get_section(db, template_id, section_id)
+    values = _choice_values(s)
+    value = _find_choice_value(values, code)
+    if value.get("deprecated_at"):
+        raise HTTPException(status_code=409, detail="choice value is already deprecated")
+    s.choice_config = {
+        **(s.choice_config or {}),
+        "values": [
+            {**v, "deprecated_at": datetime.now(UTC).isoformat()} if v.get("code") == code else v for v in values
+        ],
+    }
+    await db.flush()
+    await db.refresh(s)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="template_section.choice_value.deprecate",
+        resource_type="template_section",
+        resource_id=s.id,
+        details={"code": code},
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=SectionOut.from_model(s))
+
+
+@router.delete("/templates/{template_id}/sections/{section_id}/choice-values/{code}")
+async def delete_choice_value(
+    request: Request,
+    template_id: uuid.UUID,
+    section_id: uuid.UUID,
+    code: str,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[SectionOut]:
+    await _get_template(db, template_id)
+    s = await _get_section(db, template_id, section_id)
+    values = _choice_values(s)
+    _find_choice_value(values, code)
+    if len(values) == 1:
+        raise HTTPException(status_code=422, detail="choice_config.values must be non-empty")
+    if await _choice_code_referenced(db, s.id, code):
+        raise HTTPException(status_code=409, detail={"error": "choice_code_referenced", "code": code})
+    s.choice_config = _renormalize_choice_positions(
+        {**(s.choice_config or {}), "values": [v for v in values if v.get("code") != code]}
+    )
+    await db.flush()
+    await db.refresh(s)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="template_section.choice_value.delete",
+        resource_type="template_section",
+        resource_id=s.id,
+        details={"code": code},
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=SectionOut.from_model(s))
 
 
 # ---------------------------------------------------------------------------
