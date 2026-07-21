@@ -1,5 +1,7 @@
 from app.models.approval_record import ApprovalRecord
 from app.models.audit import AuditLog
+from app.models.campaign import Campaign
+from app.models.campaign_report import CampaignReport
 from app.models.exercise import Exercise
 from app.models.exercise_role import ExerciseRole
 from app.models.report import Report
@@ -17,6 +19,8 @@ from app.models.user_session import UserSession
 __all__ = [
     "ApprovalRecord",
     "AuditLog",
+    "Campaign",
+    "CampaignReport",
     "Exercise",
     "ExerciseRole",
     "Report",

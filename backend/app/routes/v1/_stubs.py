@@ -7,7 +7,6 @@ GROUPS = [
     "reports",
     "attachments",
     "evaluations",
-    "campaigns",
     "scoring",
     "search",
     "api_keys",
