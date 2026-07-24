@@ -63,6 +63,8 @@
     "weight": "Weight",
     "choiceValues": "Choice values",
     "addValue": "Add value",
+    "importCsv": "Import CSV",
+    "csvImportError": "Could not import the CSV. Check it has code,label columns.",
     "rubric": "Rubric criteria",
     "addCriterion": "Add criterion",
     "preview": "Live preview",

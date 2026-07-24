@@ -95,6 +95,57 @@ describe('TemplateBuilder.vue', () => {
     expect(wrapper.find('[data-test="section-row-s1"]').exists()).toBe(true)
   })
 
+  it('imports choice values from a CSV and replaces the section', async () => {
+    const choiceSection: svc.Section = {
+      id: 's1',
+      template_id: 't1',
+      position: 0,
+      name: 'Services',
+      description: null,
+      field_type: 'choice',
+      char_limit: null,
+      is_required: true,
+      grade_mode: 'not_graded',
+      grade_min: null,
+      grade_max: null,
+      grade_weight: 1,
+      rubric_criteria: null,
+      evaluation_criteria: null,
+      choice_config: {
+        selection: 'single',
+        values: [{ code: 'a', label: 'A', position: 0, deprecated_at: null }],
+      },
+      mitre_attack_tags: [],
+      capec_tags: [],
+      cwe_tags: [],
+    }
+    vi.spyOn(svc, 'getTemplate').mockResolvedValue({ ...DRAFT, sections: [choiceSection] })
+    const imported = vi.spyOn(svc, 'importChoiceValues').mockResolvedValue({
+      ...choiceSection,
+      choice_config: {
+        selection: 'single',
+        values: [
+          { code: 'a', label: 'A', position: 0, deprecated_at: null },
+          { code: 'b', label: 'Bravo', position: 1, deprecated_at: null },
+        ],
+      },
+    })
+    const wrapper = mountBuilder()
+    await flushPromises()
+    await wrapper.get('[data-test="csv-import-btn-s1"]').trigger('click')
+    const input = wrapper.get('[data-test="csv-import-input"]')
+    const file = new File([new TextEncoder().encode('code,label\nb,Bravo\n')], 'v.csv')
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    expect(imported).toHaveBeenCalledWith('tok', 't1', 's1', file)
+    const codes = wrapper
+      .findAll('input')
+      .map((i) => (i.element as HTMLInputElement).value)
+      .filter((v) => v === 'b' || v === 'Bravo')
+    expect(codes).toContain('b')
+  })
+
   it('disables editing for a published template', async () => {
     vi.spyOn(svc, 'getTemplate').mockResolvedValue({ ...DRAFT, status: 'published' })
     const wrapper = mountBuilder()

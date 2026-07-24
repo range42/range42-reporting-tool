@@ -3,11 +3,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import client_ip, record_audit
+from app.core.csv_choices import CSV_MAX_BYTES, CsvChoiceError, parse_choice_csv
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
 from app.core.rbac import require_global_admin
@@ -616,6 +617,52 @@ async def delete_choice_value(
         resource_type="template_section",
         resource_id=s.id,
         details={"code": code},
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=SectionOut.from_model(s))
+
+
+@router.post("/templates/{template_id}/sections/{section_id}/choice-values/import")
+async def import_choice_values(
+    request: Request,
+    template_id: uuid.UUID,
+    section_id: uuid.UUID,
+    file: UploadFile,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[SectionOut]:
+    """Populate a choice section's values from a ``code,label`` CSV (WP3 S12, G-4).
+
+    Merge is strictly additive: new codes are appended in file order; an
+    existing code keeps its position and ``deprecated_at`` and only refreshes
+    its label. Nothing is removed or un-deprecated, so the S4 immutability
+    rules hold even on published templates whose codes are already referenced.
+    ``choice_config.catalog_binding`` passes through untouched (opaque in v1).
+    """
+    await _get_template(db, template_id)
+    s = await _get_section(db, template_id, section_id)
+    values = _choice_values(s)
+
+    data = await file.read(CSV_MAX_BYTES + 1)
+    try:
+        rows = parse_choice_csv(data)
+    except CsvChoiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    existing = {v.get("code") for v in values}
+    labels = dict(rows)
+    updated = [{**v, "label": labels[v["code"]]} if v.get("code") in labels else v for v in values]
+    added = [{"code": code, "label": label, "deprecated_at": None} for code, label in rows if code not in existing]
+    s.choice_config = _renormalize_choice_positions({**(s.choice_config or {}), "values": updated + added})
+    await db.flush()
+    await db.refresh(s)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="template_section.choice_value.import",
+        resource_type="template_section",
+        resource_id=s.id,
+        details={"added": len(added), "updated": len(labels) - len(added), "filename": file.filename},
         ip=client_ip(request),
     )
     return DataEnvelope(data=SectionOut.from_model(s))
