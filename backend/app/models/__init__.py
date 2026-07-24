@@ -1,4 +1,5 @@
 from app.models.approval_record import ApprovalRecord
+from app.models.attachment import Attachment
 from app.models.audit import AuditLog
 from app.models.campaign import Campaign
 from app.models.campaign_report import CampaignReport
@@ -18,6 +19,7 @@ from app.models.user_session import UserSession
 
 __all__ = [
     "ApprovalRecord",
+    "Attachment",
     "AuditLog",
     "Campaign",
     "CampaignReport",

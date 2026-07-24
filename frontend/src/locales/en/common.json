@@ -123,6 +123,16 @@
       "apply": "Save merged",
       "cancel": "Cancel"
     },
+    "attachments": {
+      "title": "Attachments",
+      "upload": "Attach file",
+      "insertImage": "Insert image",
+      "uploadFailed": "Could not upload the image. Please try again.",
+      "uploadError": "Could not upload the file. Please try again.",
+      "delete": "Remove",
+      "download": "Download",
+      "empty": "No attachments yet."
+    },
     "restorePrompt": "You have a newer unsaved draft for this section.",
     "restore": "Restore draft",
     "discard": "Discard",

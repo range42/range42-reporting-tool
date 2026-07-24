@@ -15,6 +15,7 @@ from app.core.db import build_engine, get_sessionmaker
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware_trace import TraceIdMiddleware
+from app.routes.v1 import attachments as attachments_route
 from app.routes.v1 import auth as auth_route
 from app.routes.v1 import campaigns as campaigns_route
 from app.routes.v1 import config as config_route
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
         templates_route.router,
         reports_route.router,
         campaigns_route.router,
+        attachments_route.router,
     ):
         app.include_router(r, prefix="/api/v1")
     for r in stub_routers.values():

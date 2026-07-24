@@ -22,12 +22,23 @@ TIPTAP_ALLOWED: set[str] = set(ALLOWED_TAGS)
 _NH3_ATTRS: dict[str, set[str]] = {("*" if tag == "" else tag): set(attrs) for tag, attrs in ALLOWED_ATTRS.items()}
 _WS = re.compile(r"\s+")
 
+# Inline images may only reference this app's own attachment-download endpoint
+# (root-relative, fixed shape, dot-free segments — so no external/data:/traversal
+# URLs survive sanitization). Mirrored in ``frontend/src/services/sanitize.ts``.
+_IMG_SRC = re.compile(r"^/api/v1/exercises/[\w-]+/reports/[\w-]+/attachments/[\w-]+/download$")
+
+
+def _attr_filter(tag: str, attr: str, value: str) -> str | None:
+    if tag == "img" and attr == "src" and not _IMG_SRC.fullmatch(value):
+        return None  # drop the attribute
+    return value
+
 
 def sanitize_html(html: str) -> str:
     """Return ``html`` reduced to the policy's allowed tag/attr set; scripts and JS URLs removed."""
     # link_rel=None: the policy owns the `rel` attribute (it is in the `a`
     # allowlist), so nh3 must not also guard/auto-inject it.
-    return nh3.clean(html, tags=TIPTAP_ALLOWED, attributes=_NH3_ATTRS, link_rel=None)
+    return nh3.clean(html, tags=TIPTAP_ALLOWED, attributes=_NH3_ATTRS, link_rel=None, attribute_filter=_attr_filter)
 
 
 def html_to_plain(html: str) -> str:
