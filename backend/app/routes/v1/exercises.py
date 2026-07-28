@@ -20,6 +20,7 @@ from app.schemas.domain import (
     ExerciseRoleCreate,
     ExerciseRoleOut,
     ExerciseUpdate,
+    MeCapabilitiesOut,
     TeamTypeConfigCreate,
     TeamTypeConfigOut,
     TeamTypeConfigUpdate,
@@ -105,6 +106,42 @@ async def get_exercise(
     _: None = Depends(require_permission(EXERCISES_READ)),
 ) -> DataEnvelope[ExerciseOut]:
     return DataEnvelope(data=ExerciseOut.from_model(await _get_exercise(db, exercise_id)))
+
+
+async def _exercise_capabilities(db: AsyncSession, exercise_id: uuid.UUID, user: User) -> list[str]:
+    """Union of permissions granted to ``user`` by their role(s) in ``exercise_id`` (sorted)."""
+    keys = (
+        (
+            await db.execute(
+                select(ExerciseRole.role_key).where(
+                    ExerciseRole.exercise_id == exercise_id, ExerciseRole.user_id == user.id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not keys:
+        return []
+    perms: set[str] = set()
+    for granted in (
+        (await db.execute(select(RoleDefinition.permissions).where(RoleDefinition.role_key.in_(keys)))).scalars().all()
+    ):
+        perms.update(granted)
+    return sorted(perms)
+
+
+@router.get("/exercises/{exercise_id}/me")
+async def get_my_capabilities(
+    exercise_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission(EXERCISES_READ)),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[MeCapabilitiesOut]:
+    """The caller's own capabilities in this exercise — powers the FE requiresApprover guard."""
+    await _get_exercise(db, exercise_id)
+    caps = [] if user.is_global_admin else await _exercise_capabilities(db, exercise_id, user)
+    return DataEnvelope(data=MeCapabilitiesOut(is_global_admin=user.is_global_admin, capabilities=caps))
 
 
 @router.patch("/exercises/{exercise_id}")

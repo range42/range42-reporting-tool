@@ -97,6 +97,13 @@
     "selectTeam": "Select a team…",
     "namePlaceholder": "e.g. Day 1 situation report",
     "approvalRequired": "Requires approval before submission",
+    "assignedWriter": {
+      "label": "Assigned writer",
+      "anyone": "Anyone on team"
+    },
+    "lockedByAssignment": "This report is assigned to another writer, so it is read-only for you.",
+    "recallAction": "Recall",
+    "recallError": "Could not recall the report. Please try again.",
     "create": "Create report",
     "cancel": "Cancel",
     "save": "Save",
@@ -105,14 +112,49 @@
     "submit": "Submit report",
     "submitBlocked": "Fill in every required section before submitting.",
     "submitError": "Could not submit the report. Please try again.",
-    "conflict": "This section changed elsewhere since you loaded it.",
-    "reload": "Reload",
+    "merge": {
+      "title": "This section changed on the server while you were editing. Choose how to resolve it.",
+      "base": "Base",
+      "yours": "Your changes",
+      "server": "Server",
+      "keepMine": "Keep mine",
+      "useServer": "Use server",
+      "mergeManual": "Merge manually",
+      "apply": "Save merged",
+      "cancel": "Cancel"
+    },
     "restorePrompt": "You have a newer unsaved draft for this section.",
     "restore": "Restore draft",
     "discard": "Discard",
     "statusLabel": {
       "draft": "Draft",
+      "pending_approval": "Pending approval",
       "submitted": "Submitted"
+    },
+    "approvals": {
+      "nav": "Approvals",
+      "title": "Approvals",
+      "subtitle": "Review and decide on reports awaiting your approval.",
+      "queue": "Awaiting approval",
+      "empty": "Nothing awaiting approval.",
+      "loadError": "Could not load the approval queue.",
+      "selectPrompt": "Select a report from the queue to review it.",
+      "chain": "Approval chain",
+      "stepLabel": "Step {n}",
+      "state": {
+        "done": "Approved",
+        "current": "Awaiting",
+        "pending": "Pending"
+      },
+      "decision": "Your decision",
+      "note": "Note",
+      "notePlaceholder": "Add a note (required when rejecting)…",
+      "approve": "Approve",
+      "reject": "Reject",
+      "notApprover": "You are not the current approver for this report.",
+      "decisionError": "Could not record your decision. Please try again.",
+      "records": "Decisions so far",
+      "overrideBadge": "admin override"
     }
   }
 }

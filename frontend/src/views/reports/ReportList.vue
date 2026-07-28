@@ -2,20 +2,19 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, TriangleAlert, Clock } from '@lucide/vue'
+import { Plus, TriangleAlert, Clock, ShieldCheck } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
 import { listReports, type Report, type ReportStatus } from '@/services/reports'
-
-const MS_PER_HOUR = 3_600_000
-const MS_PER_MINUTE = 60_000
-const COUNTDOWN_THRESHOLD_HOURS = 24
+import { useCountdown, type CountdownInfo } from '@/composables/useCountdown'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const caps = useCapabilitiesStore()
 
 const exerciseId = route.params.exerciseId as string
 const reports = ref<Report[]>([])
@@ -23,6 +22,7 @@ const loading = ref(true)
 const error = ref('')
 
 const token = computed(() => auth.token ?? '')
+const canApprove = computed(() => auth.isAdmin || caps.canApproveReports(exerciseId))
 
 onMounted(async () => {
   if (!auth.token) {
@@ -30,6 +30,8 @@ onMounted(async () => {
     return
   }
   try {
+    // Populate capabilities so the approvals affordance + guard resolve for this exercise.
+    await caps.load(token.value, exerciseId).catch(() => undefined)
     reports.value = await listReports(token.value, exerciseId)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('reports.loadError')
@@ -38,27 +40,27 @@ onMounted(async () => {
   }
 })
 
+function openApprovals(): void {
+  void router.push(`/exercises/${exerciseId}/reports/approvals`)
+}
+
 const statusBadge: Record<ReportStatus, string> = {
   draft: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
+  pending_approval: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
   submitted: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
-interface DueInfo {
-  label: string
-  soon: boolean
+const countdown = useCountdown(t)
+
+function dueInfo(dueAt: string | null): CountdownInfo | null {
+  return countdown.info(dueAt)
 }
 
-function dueInfo(dueAt: string | null): DueInfo | null {
-  if (!dueAt) return null
-  const ms = new Date(dueAt).getTime() - Date.now()
-  if (ms <= 0) return { label: t('reports.overdue'), soon: true }
-  const hours = ms / MS_PER_HOUR
-  if (hours > COUNTDOWN_THRESHOLD_HOURS) {
-    return { label: new Date(dueAt).toLocaleDateString(), soon: false }
-  }
-  const h = Math.floor(hours)
-  const m = Math.floor((ms % MS_PER_HOUR) / MS_PER_MINUTE)
-  return { label: t('reports.dueIn', { time: h > 0 ? `${h}h ${m}m` : `${m}m` }), soon: true }
+// Today's list styling only distinguishes "needs attention" (amber) from a
+// plain date; soon and critical both map to the former.
+function dueSoon(dueAt: string | null): boolean {
+  const due = dueInfo(dueAt)
+  return due !== null && due.urgency !== 'none'
 }
 
 function openReport(id: string): void {
@@ -73,6 +75,16 @@ function createReport(): void {
 <template>
   <AppShell :title="t('reports.title')">
     <template #actions>
+      <button
+        v-if="canApprove"
+        type="button"
+        data-test="approvals-link"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="openApprovals"
+      >
+        <ShieldCheck class="h-4 w-4" />
+        {{ t('reports.approvals.nav') }}
+      </button>
       <button
         v-if="auth.isAdmin"
         type="button"
@@ -148,12 +160,12 @@ function createReport(): void {
                 v-if="dueInfo(r.due_at)"
                 :class="[
                   'inline-flex items-center gap-1',
-                  dueInfo(r.due_at)!.soon
+                  dueSoon(r.due_at)
                     ? 'font-medium text-amber-600 dark:text-amber-400'
                     : 'text-zinc-500',
                 ]"
               >
-                <Clock v-if="dueInfo(r.due_at)!.soon" class="h-3.5 w-3.5" />
+                <Clock v-if="dueSoon(r.due_at)" class="h-3.5 w-3.5" />
                 {{ dueInfo(r.due_at)!.label }}
               </span>
               <span v-else class="text-zinc-400">{{ t('reports.noDue') }}</span>

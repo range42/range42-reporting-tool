@@ -1,16 +1,78 @@
-"""Report workflow state machine (shape reservation — no impl yet).
+"""Report workflow state machine (WP4).
 
 SOLE-WRITER CONTRACT: this module is the *only* writer of ``report.status`` and
-the *only* writer of the ``audit_log``. Every status transition (e.g. draft ->
-submitted -> under_review -> graded) flows through here so that each transition
-is validated and an audit_log entry is emitted atomically. No other code path may
-mutate ``report.status`` directly. Implementation lands in WP4.
+the *only* place that emits an ``audit_log`` row per status transition. Every
+transition (draft -> pending_approval -> submitted, plus reject/recall -> draft)
+flows through ``transition`` so it is validated and audited atomically. No other
+code path may mutate ``report.status`` directly.
+
+G-5: the ``approved`` enum value is intentionally NOT a ``report.status`` — it
+lives only in ``approval_record.action``. A multi-step chain stays in
+``pending_approval`` until all required steps are approved, then goes straight to
+``submitted``.
 """
 
+import uuid
+from datetime import UTC, datetime
+from typing import Any
 
-def transition(report_id: str, target_status: str, actor_id: str) -> None:
-    """Validate and apply a status transition, writing the audit_log entry.
+from sqlalchemy.ext.asyncio import AsyncSession
 
-    Sole writer of ``report.status`` + ``audit_log``. Unimplemented until WP4.
+from app.core.audit import record_audit
+from app.models.report import Report
+
+ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
+    "draft": frozenset({"pending_approval", "submitted"}),
+    "pending_approval": frozenset({"submitted", "draft"}),
+    "submitted": frozenset({"draft"}),
+}
+
+
+class InvalidTransition(Exception):
+    """Raised when ``current -> target`` is not an allowed status transition."""
+
+    def __init__(self, current: str, target: str) -> None:
+        self.current = current
+        self.target = target
+        super().__init__(f"invalid transition {current!r} -> {target!r}")
+
+
+def is_allowed(current: str, target: str) -> bool:
+    """Whether ``current -> target`` is a legal report-status transition (pure)."""
+    return target in ALLOWED_TRANSITIONS.get(current, frozenset())
+
+
+async def transition(
+    db: AsyncSession,
+    report: Report,
+    *,
+    target_status: str,
+    actor_id: uuid.UUID,
+    action: str,
+    details: dict[str, Any] | None = None,
+    ip: str | None = None,
+) -> None:
+    """Apply a validated status transition and emit exactly one audit row.
+
+    Raises :class:`InvalidTransition` *before* any mutation, so a rejected
+    transition leaves ``report`` untouched and writes no audit row. Sets
+    ``submitted_at`` to now on ``->submitted`` and clears it on ``->draft``
+    (reject/recall return the report to a clean draft).
     """
-    raise NotImplementedError("workflow state machine lands in WP4")
+    if not is_allowed(report.status, target_status):
+        raise InvalidTransition(report.status, target_status)
+    report.status = target_status
+    if target_status == "submitted":
+        report.submitted_at = datetime.now(UTC)
+    elif target_status == "draft":
+        report.submitted_at = None
+    await db.flush()
+    await record_audit(
+        db,
+        user_id=actor_id,
+        action=action,
+        resource_type="report",
+        resource_id=report.id,
+        details=details,
+        ip=ip,
+    )

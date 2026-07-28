@@ -4,6 +4,10 @@ on:
   pull_request: {}
   workflow_dispatch: {}   # allow manual full-suite runs (ignores path filters)
 
+permissions:
+  contents: read        # actions/checkout needs this; an explicit block defaults all other scopes to none
+  pull-requests: read   # dorny/paths-filter reads the PR file list via the API
+
 jobs:
   changes:
     runs-on: ubuntu-latest

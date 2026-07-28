@@ -44,4 +44,43 @@ describe('reports service', () => {
     expect(url).toContain('/api/v1/exercises/ex1/reports/r1/submit')
     expect(init.method).toBe('POST')
   })
+
+  it('approveReport POSTs the approve path with the decision body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(env(200, { status: 'submitted' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await svc.approveReport('tok', 'ex1', 'r1', { step: 2, comment: 'ok' })
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toContain('/api/v1/exercises/ex1/reports/r1/approve')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({ step: 2, comment: 'ok' })
+  })
+
+  it('rejectReport POSTs the reject path with the required comment', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(env(200, { status: 'draft' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await svc.rejectReport('tok', 'ex1', 'r1', { comment: 'needs work' })
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toContain('/api/v1/exercises/ex1/reports/r1/reject')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({ comment: 'needs work' })
+  })
+
+  it('recallReport POSTs the recall path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(env(200, { status: 'draft' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await svc.recallReport('tok', 'ex1', 'r1')
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toContain('/api/v1/exercises/ex1/reports/r1/recall')
+    expect(init.method).toBe('POST')
+  })
+
+  it('listPendingApproval filters the list by pending_approval status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(env(200, []))
+    vi.stubGlobal('fetch', fetchMock)
+    await svc.listPendingApproval('tok', 'ex1', 'team1')
+    const url = fetchMock.mock.calls[0]![0] as string
+    expect(url).toContain('/api/v1/exercises/ex1/reports')
+    expect(url).toContain('status=pending_approval')
+    expect(url).toContain('team_id=team1')
+  })
 })

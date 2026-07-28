@@ -11,3 +11,12 @@ export interface Exercise {
 
 export const listExercises = (token: string, page = 1, perPage = 25): Promise<Exercise[]> =>
   apiGet<Exercise[]>(`/api/v1/exercises?page=${page}&per_page=${perPage}`, token)
+
+/** The caller's own capabilities within an exercise (drives coarse approver gating). */
+export interface MeCapabilities {
+  is_global_admin: boolean
+  capabilities: string[]
+}
+
+export const getMyCapabilities = (token: string, exerciseId: string): Promise<MeCapabilities> =>
+  apiGet<MeCapabilities>(`/api/v1/exercises/${exerciseId}/me`, token)

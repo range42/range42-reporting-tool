@@ -1,3 +1,4 @@
+from app.models.approval_record import ApprovalRecord
 from app.models.audit import AuditLog
 from app.models.exercise import Exercise
 from app.models.exercise_role import ExerciseRole
@@ -14,6 +15,7 @@ from app.models.user import User
 from app.models.user_session import UserSession
 
 __all__ = [
+    "ApprovalRecord",
     "AuditLog",
     "Exercise",
     "ExerciseRole",

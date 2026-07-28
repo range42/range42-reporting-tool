@@ -4,17 +4,22 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TriangleAlert, Check, RotateCcw } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
 import {
   getReport,
+  recallReport,
   saveSection,
   submitReport,
   type ReportDetail,
+  type ReportSection,
   type SectionAnswerBody,
 } from '@/services/reports'
 import { useDraftCache } from '@/composables/useDraftCache'
+import { useCharBudget } from '@/composables/useCharBudget'
 import RichTextField from '@/views/reports/RichTextField.vue'
+import SectionConflictMerge from '@/views/reports/SectionConflictMerge.vue'
 
 const AUTOSAVE_MS = 30_000
 
@@ -37,7 +42,12 @@ interface EditableSection {
   choice: string[]
   version: number
   serverUpdatedAt: string
-  conflict: boolean
+  // Last state known to be in sync with the server — the "base" of a 3-way merge.
+  baseContent: string
+  baseChoice: string[]
+  baseVersion: number
+  // Server section carried by a stale-version 409; non-null renders the merge panel.
+  conflictServer: ReportSection | null
   restore: boolean
   savedLabel: string
 }
@@ -55,12 +65,30 @@ const rid = route.params.rid as string
 const token = computed(() => auth.token ?? '')
 const draft = useDraftCache(rid)
 
+const caps = useCapabilitiesStore()
+const REPORTS_RECALL = 'reports:recall'
+
 const report = ref<ReportDetail | null>(null)
 const sections = reactive<EditableSection[]>([])
 const error = ref('')
 const submitError = ref('')
 
-const readOnly = computed(() => report.value !== null && report.value.status !== 'draft')
+const isTeamAdmin = computed(() => caps.has(exerciseId, REPORTS_RECALL))
+
+// L7 write-lock mirror of the backend policy: an assigned draft is editable
+// only by its writer, a team admin, or a global admin.
+const lockedByAssignment = computed(() => {
+  const assigned = report.value?.assigned_writer_id ?? null
+  return assigned !== null && assigned !== auth.user?.id && !auth.isAdmin && !isTeamAdmin.value
+})
+
+const readOnly = computed(
+  () => report.value !== null && (report.value.status !== 'draft' || lockedByAssignment.value),
+)
+
+const canRecall = computed(
+  () => report.value?.status === 'submitted' && (auth.isAdmin || isTeamAdmin.value),
+)
 
 const autosaveTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 
@@ -79,7 +107,10 @@ function toEditable(s: ReportDetail['sections'][number]): EditableSection {
     choice: s.choice_values ?? [],
     version: s.version,
     serverUpdatedAt: s.updated_at,
-    conflict: false,
+    baseContent: s.content ?? '',
+    baseChoice: s.choice_values ?? [],
+    baseVersion: s.version,
+    conflictServer: null,
     restore: false,
     savedLabel: '',
   }
@@ -87,6 +118,8 @@ function toEditable(s: ReportDetail['sections'][number]): EditableSection {
 
 onMounted(async () => {
   if (!auth.token) return
+  // Capabilities drive the team-admin lock exemption + the recall affordance.
+  void caps.load(token.value, exerciseId).catch(() => undefined)
   try {
     const detail = await getReport(token.value, exerciseId, rid)
     report.value = detail
@@ -103,18 +136,14 @@ onBeforeUnmount(() => {
   for (const id of Object.keys(autosaveTimers)) clearTimeout(autosaveTimers[id])
 })
 
-function plainLength(html: string): number {
-  if (typeof DOMParser === 'undefined') return html.length
-  const doc = new DOMParser().parseFromString(html, 'text/html')
-  return (doc.body.textContent ?? '').replace(/\s+/g, ' ').trim().length
-}
+const budget = useCharBudget()
 
 function charCount(s: EditableSection): number {
-  return plainLength(s.content)
+  return budget.count(s.content)
 }
 
 function overLimit(s: EditableSection): boolean {
-  return s.charLimit !== null && charCount(s) > s.charLimit
+  return budget.overLimit(s.content, s.charLimit)
 }
 
 function bodyFor(s: EditableSection): SectionAnswerBody {
@@ -130,6 +159,27 @@ function statusOf(e: unknown): number | undefined {
     return typeof s === 'number' ? s : undefined
   }
   return undefined
+}
+
+/** Extract the current server section from a stale-version 409's `details[]`, if usable. */
+function staleSectionOf(e: unknown): ReportSection | null {
+  if (!e || typeof e !== 'object' || !('details' in e)) return null
+  const details = (e as { details?: unknown }).details
+  if (!Array.isArray(details)) return null
+  for (const d of details) {
+    if (!d || typeof d !== 'object') continue
+    const entry = d as { error?: unknown; section?: unknown }
+    if (entry.error !== 'stale_version') continue
+    const section = entry.section
+    if (
+      section &&
+      typeof section === 'object' &&
+      typeof (section as ReportSection).version === 'number'
+    ) {
+      return section as ReportSection
+    }
+  }
+  return null
 }
 
 function onEdited(s: EditableSection): void {
@@ -153,16 +203,50 @@ async function save(s: EditableSection): Promise<void> {
     s.version = saved.version
     s.content = saved.content ?? ''
     s.choice = saved.choice_values ?? []
-    s.conflict = false
+    s.baseContent = s.content
+    s.baseChoice = [...s.choice]
+    s.baseVersion = saved.version
+    s.conflictServer = null
     s.savedLabel = t('reports.savedNow')
     draft.clear(s.sectionDefId)
   } catch (e) {
     if (statusOf(e) === 409) {
-      s.conflict = true
+      const server = staleSectionOf(e)
+      if (server) s.conflictServer = server
+      else await reloadSection(s)
     } else {
       error.value = e instanceof ApiError ? e.message : t('reports.saveError')
     }
   }
+}
+
+function keepMine(s: EditableSection): void {
+  if (!s.conflictServer) return
+  s.version = s.conflictServer.version
+  s.conflictServer = null
+  void save(s)
+}
+
+function useServer(s: EditableSection): void {
+  const server = s.conflictServer
+  if (!server) return
+  s.content = server.content ?? ''
+  s.choice = server.choice_values ?? []
+  s.version = server.version
+  s.serverUpdatedAt = server.updated_at
+  s.baseContent = s.content
+  s.baseChoice = [...s.choice]
+  s.baseVersion = server.version
+  s.conflictServer = null
+  draft.clear(s.sectionDefId)
+}
+
+function resolveManual(s: EditableSection, content: string): void {
+  if (!s.conflictServer) return
+  s.content = content
+  s.version = s.conflictServer.version
+  s.conflictServer = null
+  void save(s)
 }
 
 async function reloadSection(s: EditableSection): Promise<void> {
@@ -198,6 +282,17 @@ function toggleChoice(s: EditableSection, code: string): void {
   onEdited(s)
 }
 
+async function recall(): Promise<void> {
+  submitError.value = ''
+  try {
+    const updated = await recallReport(token.value, exerciseId, rid)
+    report.value = updated
+    sections.splice(0, sections.length, ...updated.sections.map(toEditable))
+  } catch (e) {
+    submitError.value = e instanceof ApiError ? e.message : t('reports.recallError')
+  }
+}
+
 async function submit(): Promise<void> {
   submitError.value = ''
   try {
@@ -213,6 +308,16 @@ async function submit(): Promise<void> {
 <template>
   <AppShell :title="report?.name ?? t('reports.title')">
     <template #actions>
+      <button
+        v-if="canRecall"
+        type="button"
+        data-test="recall-report"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="recall"
+      >
+        <RotateCcw class="h-4 w-4" />
+        {{ t('reports.recallAction') }}
+      </button>
       <button
         v-if="report && !readOnly"
         type="button"
@@ -247,6 +352,14 @@ async function submit(): Promise<void> {
       >
         <TriangleAlert class="h-4 w-4 shrink-0" />
         <span>{{ error }}</span>
+      </div>
+      <div
+        v-if="lockedByAssignment"
+        data-test="assignment-lock"
+        class="mb-4 flex items-center gap-2 rounded-md border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300"
+      >
+        <TriangleAlert class="h-4 w-4 shrink-0" />
+        <span>{{ t('reports.lockedByAssignment') }}</span>
       </div>
       <div
         v-if="submitError"
@@ -296,23 +409,22 @@ async function submit(): Promise<void> {
             </span>
           </div>
 
-          <div
-            v-if="s.conflict"
-            :data-test="`conflict-${s.id}`"
-            class="mb-3 flex items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300"
-          >
-            <span class="flex items-center gap-1.5">
-              <TriangleAlert class="h-4 w-4" />
-              {{ t('reports.conflict') }}
-            </span>
-            <button
-              type="button"
-              class="rounded border border-amber-400 px-2 py-0.5 text-xs font-medium"
-              @click="reloadSection(s)"
-            >
-              {{ t('reports.reload') }}
-            </button>
-          </div>
+          <SectionConflictMerge
+            v-if="s.conflictServer"
+            :test-id="s.id"
+            :base="s.fieldType === 'rich_text' ? s.baseContent : s.baseChoice.join(', ')"
+            :local="s.fieldType === 'rich_text' ? s.content : s.choice.join(', ')"
+            :server="
+              s.fieldType === 'rich_text'
+                ? (s.conflictServer.content ?? '')
+                : (s.conflictServer.choice_values ?? []).join(', ')
+            "
+            :server-version="s.conflictServer.version"
+            :field-type="s.fieldType"
+            @keep-mine="keepMine(s)"
+            @use-server="useServer(s)"
+            @resolved-manual="(content) => resolveManual(s, content)"
+          />
 
           <template v-if="s.fieldType === 'rich_text'">
             <RichTextField

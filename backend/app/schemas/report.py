@@ -3,15 +3,41 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.models.approval_record import ApprovalRecord
 from app.models.report import Report
 from app.models.report_section import ReportSection
 from app.models.template_section_def import TemplateSectionDef
 from app.schemas.domain import _reject_null
 from app.schemas.section_content import SectionBody
 
-KNOWN_REPORT_STATUSES = ("draft", "submitted")
+KNOWN_REPORT_STATUSES = ("draft", "pending_approval", "submitted")
+
+
+class ApprovalChainEntry(BaseModel):
+    """One ordered step of a multi-step approval chain (ARCHITECTURE §7).
+
+    Exactly one of ``role_key``/``user_id`` identifies who may approve the step.
+    ``required`` steps must all be approved before the report leaves
+    ``pending_approval``; optional steps do not gate finalization.
+    """
+
+    role_key: str | None = None
+    user_id: str | None = None
+    required: bool = True
+
+    @model_validator(mode="after")
+    def _exactly_one_subject(self) -> ApprovalChainEntry:
+        if (self.role_key is None) == (self.user_id is None):
+            raise ValueError("exactly one of role_key or user_id must be set")
+        return self
+
+
+def _reject_empty_chain(v: list[ApprovalChainEntry] | None) -> list[ApprovalChainEntry] | None:
+    if v is not None and len(v) == 0:
+        raise ValueError("approval_chain must be a non-empty list or null")
+    return v
 
 
 class ReportCreate(BaseModel):
@@ -21,7 +47,10 @@ class ReportCreate(BaseModel):
     description: str | None = None
     due_at: datetime | None = None
     approval_required: bool = False
+    approval_chain: list[ApprovalChainEntry] | None = None
     assigned_writer_id: str | None = None
+
+    _no_empty_chain = field_validator("approval_chain")(_reject_empty_chain)
 
 
 class ReportUpdate(BaseModel):
@@ -29,12 +58,56 @@ class ReportUpdate(BaseModel):
     description: str | None = None
     due_at: datetime | None = None
     approval_required: bool | None = None
+    approval_chain: list[ApprovalChainEntry] | None = None
     assigned_writer_id: str | None = None
 
     @field_validator("name", "approval_required", mode="before")
     @classmethod
     def _nn(cls, v: object) -> object:
         return _reject_null(v)
+
+    _no_empty_chain = field_validator("approval_chain")(_reject_empty_chain)
+
+
+class ApproveRequest(BaseModel):
+    # step/on_behalf_of drive multi-step chains (#38) and admin override (#39);
+    # ignored on the single-step path.
+    step: int | None = Field(default=None, ge=1)
+    on_behalf_of: str | None = None
+    comment: str | None = None
+
+
+class RejectRequest(BaseModel):
+    comment: str = Field(min_length=1)
+    step: int | None = Field(default=None, ge=1)
+
+
+class RecallRequest(BaseModel):
+    comment: str | None = None
+
+
+class ApprovalRecordOut(BaseModel):
+    id: str
+    report_id: str
+    approver_id: str
+    step: int
+    action: str
+    is_admin_override: bool
+    comment: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, r: ApprovalRecord) -> ApprovalRecordOut:
+        return cls(
+            id=str(r.id),
+            report_id=str(r.report_id),
+            approver_id=str(r.approver_id),
+            step=r.step,
+            action=r.action,
+            is_admin_override=r.is_admin_override,
+            comment=r.comment,
+            created_at=r.created_at,
+        )
 
 
 class SectionAnswerUpdate(BaseModel):
@@ -112,12 +185,14 @@ class ReportOut(BaseModel):
     due_at: datetime | None
     submitted_at: datetime | None
     assigned_writer_id: str | None
+    approval_chain: list[dict[str, Any]] | None
     section_count: int
+    can_approve: bool
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, r: Report, section_count: int) -> ReportOut:
+    def from_model(cls, r: Report, section_count: int, *, can_approve: bool = False) -> ReportOut:
         return cls(
             id=str(r.id),
             exercise_id=str(r.exercise_id),
@@ -131,7 +206,9 @@ class ReportOut(BaseModel):
             due_at=r.due_at,
             submitted_at=r.submitted_at,
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
+            approval_chain=r.approval_chain,
             section_count=section_count,
+            can_approve=can_approve,
             created_at=r.created_at,
             updated_at=r.updated_at,
         )
@@ -151,13 +228,23 @@ class ReportDetailOut(BaseModel):
     submitted_at: datetime | None
     assigned_writer_id: str | None
     writer_notes: str | None
+    approval_chain: list[dict[str, Any]] | None
+    approval_records: list[ApprovalRecordOut]
     metadata: dict[str, Any] | None
     sections: list[ReportSectionOut]
+    can_approve: bool
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_models(cls, r: Report, pairs: list[tuple[ReportSection, TemplateSectionDef]]) -> ReportDetailOut:
+    def from_models(
+        cls,
+        r: Report,
+        pairs: list[tuple[ReportSection, TemplateSectionDef]],
+        approval_records: list[ApprovalRecord] | None = None,
+        *,
+        can_approve: bool = False,
+    ) -> ReportDetailOut:
         return cls(
             id=str(r.id),
             exercise_id=str(r.exercise_id),
@@ -172,8 +259,11 @@ class ReportDetailOut(BaseModel):
             submitted_at=r.submitted_at,
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
             writer_notes=r.writer_notes,
+            approval_chain=r.approval_chain,
+            approval_records=[ApprovalRecordOut.from_model(a) for a in (approval_records or [])],
             metadata=r.metadata_,
             sections=[ReportSectionOut.from_models(s, d) for s, d in pairs],
+            can_approve=can_approve,
             created_at=r.created_at,
             updated_at=r.updated_at,
         )

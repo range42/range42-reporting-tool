@@ -153,6 +153,13 @@ class TeamMemberOut(BaseModel):
         )
 
 
+class MeCapabilitiesOut(BaseModel):
+    """The caller's own capabilities within an exercise — drives coarse FE route guards."""
+
+    is_global_admin: bool
+    capabilities: list[str]
+
+
 class TeamOut(BaseModel):
     id: str
     exercise_id: str
