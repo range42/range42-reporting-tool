@@ -5,12 +5,14 @@ import { createI18n } from 'vue-i18n'
 import en from '@/locales/en/common.json'
 import ReportEditor from '@/views/reports/ReportEditor.vue'
 import * as reports from '@/services/reports'
+import * as attachments from '@/services/attachments'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
 vi.mock('@/services/reports')
+vi.mock('@/services/attachments')
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { exerciseId: 'ex1', rid: 'r1' } }),
   useRouter: () => ({ push: vi.fn() }),
@@ -23,6 +25,7 @@ vi.mock('@tiptap/vue-3', () => ({
   EditorContent: { name: 'EditorContent', template: '<div />' },
 }))
 vi.mock('@tiptap/starter-kit', () => ({ default: {} }))
+vi.mock('@tiptap/extension-image', () => ({ default: { extend: () => ({}) } }))
 
 const richDetail = {
   id: 'r1',
@@ -87,6 +90,10 @@ describe('ReportEditor.vue', () => {
       token_type: 'bearer',
       user: { id: 'a', email: 'a', display_name: 'a', avatar_url: null, is_global_admin: true },
     })
+    vi.mocked(attachments.listAttachments).mockResolvedValue([])
+    vi.mocked(attachments.attachmentUrl).mockImplementation(
+      (ex, rid, aid) => `/api/v1/exercises/${ex}/reports/${rid}/attachments/${aid}/download`,
+    )
   })
 
   it('renders a char counter for rich_text and blocks over the limit', async () => {
@@ -246,5 +253,74 @@ describe('ReportEditor.vue', () => {
     const w = mountEditor()
     await flushPromises()
     expect(w.find('[data-test="recall-report"]').exists()).toBe(false)
+  })
+
+  const attachment = {
+    id: 'a1',
+    report_id: 'r1',
+    section_id: 's1',
+    filename: 'pic.png',
+    content_type: 'image/png',
+    size_bytes: 42,
+    classification: null,
+    uploaded_by: 'a',
+    created_at: '2026-06-26T10:00:00Z',
+  }
+
+  it('lists section attachments loaded on mount', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+    vi.mocked(attachments.listAttachments).mockResolvedValue([attachment])
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.text()).toContain('pic.png')
+    expect(w.find('[data-test="attach-remove-a1"]').exists()).toBe(true)
+  })
+
+  it('uploads a picked file through the panel and appends it to the list', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+    vi.mocked(attachments.uploadAttachment).mockResolvedValue(attachment)
+    const w = mountEditor()
+    await flushPromises()
+    const input = w.find('[data-test="attach-input-s1"]')
+    const file = new File([new Uint8Array([1])], 'pic.png', { type: 'image/png' })
+    Object.defineProperty(input.element, 'files', { value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    expect(attachments.uploadAttachment).toHaveBeenCalledWith('tok', 'ex1', 'r1', 's1', file)
+    expect(w.text()).toContain('pic.png')
+  })
+
+  it('shows the API error when an upload is rejected (e.g. spoofed type)', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+    vi.mocked(attachments.uploadAttachment).mockRejectedValue(new Error('nope'))
+    const w = mountEditor()
+    await flushPromises()
+    const input = w.find('[data-test="attach-input-s1"]')
+    Object.defineProperty(input.element, 'files', {
+      value: [new File([new Uint8Array([1])], 'x.zip')],
+    })
+    await input.trigger('change')
+    await flushPromises()
+    expect(w.find('[data-test="attach-error-s1"]').exists()).toBe(true)
+  })
+
+  it('removes an attachment via the panel', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+    vi.mocked(attachments.listAttachments).mockResolvedValue([attachment])
+    vi.mocked(attachments.deleteAttachment).mockResolvedValue()
+    const w = mountEditor()
+    await flushPromises()
+    await w.find('[data-test="attach-remove-a1"]').trigger('click')
+    await flushPromises()
+    expect(attachments.deleteAttachment).toHaveBeenCalledWith('tok', 'ex1', 'r1', 'a1')
+    expect(w.find('[data-test="attach-remove-a1"]').exists()).toBe(false)
+  })
+
+  it('no upload affordance on a read-only report', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue({ ...richDetail, status: 'submitted' } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="attach-btn-s1"]').exists()).toBe(false)
+    expect(w.find('[data-test="img-btn-s1"]').exists()).toBe(false)
   })
 })

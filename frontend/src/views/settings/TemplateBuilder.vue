@@ -15,6 +15,7 @@ import {
   GripVertical,
   CheckCircle2,
   Circle,
+  Upload,
 } from '@lucide/vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -28,6 +29,7 @@ import {
   deleteSection,
   deleteTemplate,
   publishTemplate,
+  importChoiceValues,
   listVersions,
   reorderSections,
   exportTemplate,
@@ -250,6 +252,32 @@ async function addChoiceValue(s: Section): Promise<void> {
     { code: '', label: '', position: config.values.length, deprecated_at: null },
   ]
   await patchSection(s, { choice_config: { ...config, values: newValues } })
+}
+
+// CSV import (WP3 S12): additive merge server-side; the returned section replaces ours.
+const csvInput = ref<HTMLInputElement | null>(null)
+const csvTarget = ref<Section | null>(null)
+
+function pickCsv(s: Section): void {
+  csvTarget.value = s
+  csvInput.value?.click()
+}
+
+async function onCsvPicked(ev: Event): Promise<void> {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  const target = csvTarget.value
+  csvTarget.value = null
+  if (!file || !target || !tpl.value) return
+  error.value = ''
+  try {
+    const updated = await importChoiceValues(token.value, id, target.id, file)
+    const idx = tpl.value.sections.findIndex((x) => x.id === target.id)
+    if (idx !== -1) tpl.value.sections[idx] = updated
+  } catch (e) {
+    error.value = e instanceof ApiError ? e.message : t('templates.csvImportError')
+  }
 }
 
 async function removeChoiceValue(s: Section, idx: number): Promise<void> {
@@ -743,15 +771,27 @@ const inputClass =
                         </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      :disabled="readonly"
-                      class="flex h-7 items-center gap-1.5 rounded border border-dashed border-zinc-300 px-2 text-xs text-zinc-500 transition hover:border-indigo-400 hover:text-indigo-500 disabled:opacity-40 dark:border-zinc-700"
-                      @click="addChoiceValue(section)"
-                    >
-                      <Plus class="h-3 w-3" />
-                      {{ t('templates.addValue') }}
-                    </button>
+                    <div class="flex items-center gap-2">
+                      <button
+                        type="button"
+                        :disabled="readonly"
+                        class="flex h-7 items-center gap-1.5 rounded border border-dashed border-zinc-300 px-2 text-xs text-zinc-500 transition hover:border-indigo-400 hover:text-indigo-500 disabled:opacity-40 dark:border-zinc-700"
+                        @click="addChoiceValue(section)"
+                      >
+                        <Plus class="h-3 w-3" />
+                        {{ t('templates.addValue') }}
+                      </button>
+                      <button
+                        type="button"
+                        :disabled="readonly"
+                        :data-test="`csv-import-btn-${section.id}`"
+                        class="flex h-7 items-center gap-1.5 rounded border border-dashed border-zinc-300 px-2 text-xs text-zinc-500 transition hover:border-indigo-400 hover:text-indigo-500 disabled:opacity-40 dark:border-zinc-700"
+                        @click="pickCsv(section)"
+                      >
+                        <Upload class="h-3 w-3" />
+                        {{ t('templates.importCsv') }}
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Rubric criteria editor (grade_mode === 'rubric') -->
@@ -1023,5 +1063,13 @@ const inputClass =
         </div>
       </aside>
     </div>
+    <input
+      ref="csvInput"
+      data-test="csv-import-input"
+      type="file"
+      accept=".csv,text/csv"
+      class="hidden"
+      @change="onCsvPicked"
+    />
   </AppShell>
 </template>

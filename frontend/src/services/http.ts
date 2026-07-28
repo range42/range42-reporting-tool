@@ -40,6 +40,10 @@ async function request<T>(
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
+  return unwrap<T>(res)
+}
+
+async function unwrap<T>(res: Response): Promise<T> {
   if (res.status === 401) unauthorizedHandler()
   if (res.status === 204) return undefined as T
   let parsed: unknown
@@ -53,6 +57,33 @@ async function request<T>(
     throw new ApiError(e.error.code, e.error.message, e.error.details, e.trace_id, res.status)
   }
   return (parsed as DataEnvelope<T>).data
+}
+
+/** Multipart upload — no explicit Content-Type so the browser sets the boundary. */
+export async function apiUpload<T>(path: string, file: File, token?: string): Promise<T> {
+  const form = new FormData()
+  form.append('file', file)
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(path, { method: 'POST', headers, body: form })
+  return unwrap<T>(res)
+}
+
+/** Authenticated binary GET (bearer header — plain <img>/<a> tags cannot send it). */
+export async function apiGetBlob(path: string, token?: string): Promise<Blob> {
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(path, { method: 'GET', headers })
+  if (res.status === 401) unauthorizedHandler()
+  if (!res.ok)
+    throw new ApiError(
+      'DOWNLOAD_FAILED',
+      res.statusText || `HTTP ${res.status}`,
+      [],
+      undefined,
+      res.status,
+    )
+  return res.blob()
 }
 
 export function apiGet<T>(path: string, token?: string): Promise<T> {
