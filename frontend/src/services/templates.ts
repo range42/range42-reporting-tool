@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/http'
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from '@/services/http'
 
 export type TemplateStatus = 'draft' | 'published' | 'archived'
 export type FieldType = 'rich_text' | 'choice'
@@ -13,6 +13,8 @@ export interface ChoiceValue {
 export interface ChoiceConfig {
   selection: 'single' | 'multiple'
   values: ChoiceValue[]
+  /** Opaque catalog metadata (G-4): preserved by the backend, never interpreted in v1. */
+  catalog_binding?: Record<string, unknown> | null
 }
 export interface RubricCriterion {
   name: string
@@ -115,6 +117,14 @@ export const updateSection = (
 ): Promise<Section> => apiPatch<Section>(`${base}/${tid}/sections/${sid}`, body, token)
 export const deleteSection = (token: string, tid: string, sid: string): Promise<void> =>
   apiDelete(`${base}/${tid}/sections/${sid}`, token)
+/** CSV import of choice values (WP3 S12): `code,label` header; additive merge. */
+export const importChoiceValues = (
+  token: string,
+  tid: string,
+  sid: string,
+  file: File,
+): Promise<Section> =>
+  apiUpload<Section>(`${base}/${tid}/sections/${sid}/choice-values/import`, file, token)
 export const reorderSections = (
   token: string,
   tid: string,

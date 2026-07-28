@@ -66,6 +66,19 @@ export const ALLOWED_ATTR: readonly string[] = [
   'scope',
 ]
 
+/**
+ * Inline images may only reference this app's own attachment-download endpoint.
+ * MUST stay in sync with `_IMG_SRC` in `backend/app/core/sanitize.py`.
+ */
+export const IMG_SRC_PATTERN =
+  /^\/api\/v1\/exercises\/[\w-]+\/reports\/[\w-]+\/attachments\/[\w-]+\/download$/
+
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'IMG' && !IMG_SRC_PATTERN.test(node.getAttribute('src') ?? '')) {
+    node.removeAttribute('src')
+  }
+})
+
 /** Sanitize untrusted HTML against the shared allowlist. */
 export function sanitize(dirty: string): string {
   return DOMPurify.sanitize(dirty, {

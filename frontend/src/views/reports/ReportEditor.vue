@@ -16,8 +16,17 @@ import {
   type ReportSection,
   type SectionAnswerBody,
 } from '@/services/reports'
+import {
+  attachmentUrl,
+  deleteAttachment,
+  downloadAttachment,
+  listAttachments,
+  uploadAttachment,
+  type Attachment,
+} from '@/services/attachments'
 import { useDraftCache } from '@/composables/useDraftCache'
 import { useCharBudget } from '@/composables/useCharBudget'
+import AttachmentsPanel from '@/views/reports/AttachmentsPanel.vue'
 import RichTextField from '@/views/reports/RichTextField.vue'
 import SectionConflictMerge from '@/views/reports/SectionConflictMerge.vue'
 
@@ -127,10 +136,55 @@ onMounted(async () => {
     for (const s of sections) {
       if (draft.isNewerThanServer(s.sectionDefId, s.serverUpdatedAt)) s.restore = true
     }
+    attachments.value = await listAttachments(token.value, exerciseId, rid)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('reports.loadError')
   }
 })
+
+// --- attachments (WP3 S9) — parent owns the collection; panels render slices
+
+const attachments = ref<Attachment[]>([])
+const attachmentErrors = reactive<Record<string, string>>({})
+
+function attachmentsFor(sectionId: string): Attachment[] {
+  return attachments.value.filter((a) => a.section_id === sectionId)
+}
+
+async function onAttachmentUpload(s: EditableSection, file: File): Promise<void> {
+  delete attachmentErrors[s.id]
+  try {
+    const a = await uploadAttachment(token.value, exerciseId, rid, s.id, file)
+    attachments.value = [...attachments.value, a]
+  } catch (e) {
+    attachmentErrors[s.id] =
+      e instanceof ApiError ? e.message : t('reports.attachments.uploadError')
+  }
+}
+
+async function onAttachmentRemove(s: EditableSection, aid: string): Promise<void> {
+  delete attachmentErrors[s.id]
+  try {
+    await deleteAttachment(token.value, exerciseId, rid, aid)
+    attachments.value = attachments.value.filter((a) => a.id !== aid)
+  } catch (e) {
+    attachmentErrors[s.id] =
+      e instanceof ApiError ? e.message : t('reports.attachments.uploadError')
+  }
+}
+
+function onAttachmentDownload(a: Attachment): void {
+  void downloadAttachment(token.value, exerciseId, rid, a).catch(() => undefined)
+}
+
+/** Upload an editor-inserted image; resolves to the canonical (sanitizer-allowed) URL. */
+function imageUploadFor(s: EditableSection): (file: File) => Promise<string> {
+  return async (file: File) => {
+    const a = await uploadAttachment(token.value, exerciseId, rid, s.id, file)
+    attachments.value = [...attachments.value, a]
+    return attachmentUrl(exerciseId, rid, a.id)
+  }
+}
 
 onBeforeUnmount(() => {
   for (const id of Object.keys(autosaveTimers)) clearTimeout(autosaveTimers[id])
@@ -431,6 +485,8 @@ async function submit(): Promise<void> {
               v-model="s.content"
               :test-id="s.id"
               :disabled="readOnly"
+              :image-upload="imageUploadFor(s)"
+              :token="token"
               @update:model-value="onEdited(s)"
             />
             <div class="mt-2 flex items-center justify-between text-xs">
@@ -480,6 +536,16 @@ async function submit(): Promise<void> {
               {{ t('reports.save') }}
             </button>
           </div>
+
+          <AttachmentsPanel
+            :attachments="attachmentsFor(s.id)"
+            :test-id="s.id"
+            :read-only="readOnly"
+            :error="attachmentErrors[s.id]"
+            @upload="(file) => onAttachmentUpload(s, file)"
+            @remove="(aid) => onAttachmentRemove(s, aid)"
+            @download="onAttachmentDownload"
+          />
         </section>
       </div>
     </div>

@@ -18,4 +18,19 @@ describe('sanitize allowlist', () => {
   it('strips disallowed markup', () => {
     expect(sanitize('<p>ok</p><script>alert(1)</script>')).toBe('<p>ok</p>')
   })
+
+  it('keeps img src pointing at our own attachment download endpoint', () => {
+    const src = '/api/v1/exercises/e1/reports/r1/attachments/a1/download'
+    expect(sanitize(`<img src="${src}" alt="x">`)).toContain(`src="${src}"`)
+  })
+
+  it.each([
+    'https://evil.example/x.png',
+    '//evil.example/x.png',
+    'data:image/png;base64,AAAA',
+    '/api/v1/exercises/e1/reports/r1/attachments/../../../secrets',
+    '/etc/passwd',
+  ])('drops img src outside the attachment path: %s', (src) => {
+    expect(sanitize(`<img src="${src}" alt="x">`)).not.toContain('src=')
+  })
 })
