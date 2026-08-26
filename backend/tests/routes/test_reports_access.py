@@ -61,6 +61,43 @@ async def test_writer_sees_only_own_team(migrated_db: async_sessionmaker) -> Non
         assert names == {"Mine"}
 
 
+async def test_widened_status_filter_does_not_bypass_team_scoping(migrated_db: async_sessionmaker) -> None:
+    # W5-1 Task 3 widened KNOWN_REPORT_STATUSES; the new values are AND-ed with the team
+    # filter, so a writer cannot reach another team's report by filtering on one.
+    await _seed(migrated_db)
+    ga, _ = await make_user_token(migrated_db, jti="ga2", admin=True)
+    ah = {"Authorization": f"Bearer {ga}"}
+    writer_tok, writer_id = await make_user_token(migrated_db, jti="w2", admin=False)
+    async with client(migrated_db) as c:
+        tid = await _published_template(c, ah)
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        mine = (
+            await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "Alpha", "team_type": "blue"}, headers=ah)
+        ).json()["data"]["id"]
+        theirs = (
+            await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "Beta", "team_type": "blue"}, headers=ah)
+        ).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams/{mine}/members", json={"user_id": writer_id}, headers=ah)
+        await c.post(
+            f"/api/v1/exercises/{ex}/roles", json={"user_id": writer_id, "role_key": "team_writer"}, headers=ah
+        )
+        await c.post(
+            f"/api/v1/exercises/{ex}/reports",
+            json={"template_id": tid, "team_id": theirs, "name": "Theirs"},
+            headers=ah,
+        )
+
+        wh = {"Authorization": f"Bearer {writer_tok}"}
+        for st in ("under_evaluation", "evaluated"):
+            r = await c.get(f"/api/v1/exercises/{ex}/reports", params={"status": st}, headers=wh)
+            assert r.status_code == 200, st
+            assert r.json()["data"] == [], st
+        # and the new values are accepted rather than 422'd
+        assert (
+            await c.get(f"/api/v1/exercises/{ex}/reports", params={"status": "nonsense"}, headers=wh)
+        ).status_code == 422
+
+
 async def test_detail_omits_evaluator_fields(migrated_db: async_sessionmaker) -> None:
     await _seed(migrated_db)
     ga, _ = await make_user_token(migrated_db, jti="ga", admin=True)
