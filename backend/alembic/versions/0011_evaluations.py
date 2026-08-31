@@ -105,8 +105,12 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("ALTER TABLE scoring_config DROP CONSTRAINT ck_scoring_config_finalize_policy")
     op.drop_column("scoring_config", "finalize_policy")
-    # NOTE: fails if any report row is already under_evaluation/evaluated. Alembic downgrade
-    # is dev/test-only per ARCHITECTURE §9.7; acceptable.
+    # The pre-WP5 constraint has no room for the evaluation statuses, so any row still holding
+    # one must be normalized before it is re-added. Downgrade is dev/test-only (ARCHITECTURE
+    # §9.7) and this step is lossy by design: 'submitted' is the state those rows came from.
+    # Without it the integration fixture's per-test `downgrade base` fails as soon as any test
+    # drives a report into under_evaluation/evaluated.
+    op.execute("UPDATE report SET status = 'submitted' WHERE status IN ('under_evaluation','evaluated')")
     op.execute("ALTER TABLE report DROP CONSTRAINT ck_report_status")
     op.execute(
         "ALTER TABLE report ADD CONSTRAINT ck_report_status CHECK (status IN ('draft','pending_approval','submitted'))"

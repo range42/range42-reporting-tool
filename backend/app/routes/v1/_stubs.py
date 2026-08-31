@@ -5,7 +5,6 @@ from fastapi import APIRouter
 GROUPS = [
     "templates",
     "reports",
-    "evaluations",
     "scoring",
     "search",
     "api_keys",

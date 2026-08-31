@@ -29,3 +29,8 @@ def test_campaigns_is_no_longer_a_stub() -> None:
 def test_attachments_is_no_longer_a_stub() -> None:
     # The real attachments router (routes/v1/attachments.py) replaces the reserved empty stub.
     assert "attachments" not in GROUPS
+
+
+def test_evaluations_is_no_longer_a_stub() -> None:
+    # The real evaluations router (routes/v1/evaluations.py) replaces the reserved empty stub.
+    assert "evaluations" not in GROUPS
