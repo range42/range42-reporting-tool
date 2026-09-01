@@ -45,8 +45,10 @@ jobs:
       - run: cd backend && uv sync --frozen
       - run: cd backend && uv run ruff check . && uv run ruff format --check .
       - run: cd backend && uv run mypy app
-      - run: cd backend && uv run pytest -m "not integration"
-      - run: cd backend && uv run pytest -m integration
+      # Coverage accumulates across both runs (--cov-append on the second), so the 80% gate
+      # is measured over the whole suite rather than the unit half alone.
+      - run: cd backend && uv run pytest -m "not integration" --cov=app --cov-report=
+      - run: cd backend && uv run pytest -m integration --cov=app --cov-append --cov-report=term-missing --cov-fail-under=80
 
   frontend:
     needs: changes

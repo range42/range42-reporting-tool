@@ -28,3 +28,8 @@ deploy/docker-compose.localprod.yml
 docs/superpowers/
 
 .claude/
+
+# Coverage artifacts (pytest-cov)
+.coverage
+.coverage.*
+htmlcov/
