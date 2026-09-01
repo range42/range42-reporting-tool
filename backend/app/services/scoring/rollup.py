@@ -19,6 +19,7 @@ a failing report — without standing up a database.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -26,6 +27,11 @@ from decimal import ROUND_HALF_UP, Decimal, localcontext
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.audit import record_audit
+from app.models import Evaluation, Report, ReportSection, ReportTemplate, SectionGrade, TemplateSectionDef
 
 if TYPE_CHECKING:  # timeline imports rollup, so keep this one-directional at runtime
     from app.services.scoring.timeline import TimelineEntry
@@ -295,3 +301,225 @@ def rollup(report_id: str) -> GradeTimeline:
     Sole writer of ``report.overall_grade``. Unimplemented until WP5.
     """
     raise NotImplementedError("scoring rollup lands in WP5")
+
+
+# --- persistence shell (M3) ---------------------------------------------------
+#
+# Everything above is pure. Everything below touches the database, and only through the
+# caller's session — it never commits. Keeping the boundary here is what lets the grading
+# rules be tested without a database at all.
+
+
+async def _lock_report_row(db: AsyncSession, report_id: uuid.UUID) -> None:
+    """Serialize concurrent recomputes of the same report (B9).
+
+    Two evaluators saving a grade at the same moment would otherwise read the same
+    ``grade_version``, both write version+1, and publish two different grades under one
+    version. SELECT ... FOR UPDATE makes the second wait for the first to commit, so the
+    versions stay strictly monotonic. Contention is per-report and the section is short.
+    """
+    await db.execute(select(Report.id).where(Report.id == report_id).with_for_update())
+
+
+async def _load_evaluation_inputs(db: AsyncSession, report: Report) -> list[tuple[EvaluationInput, Evaluation]]:
+    """Every evaluation of ``report`` as a pure input, paired with its ORM row.
+
+    THE ONLY ORM-TOUCHING LOAD in this module. Three queries regardless of how many
+    evaluators or sections exist — evaluations, section definitions, then all grades at once.
+    A per-evaluation or per-section query here becomes an N+1 on every grade save.
+    """
+    evaluations = (
+        (await db.execute(select(Evaluation).where(Evaluation.report_id == report.id).order_by(Evaluation.created_at)))
+        .scalars()
+        .all()
+    )
+    sections = (
+        await db.execute(
+            select(ReportSection, TemplateSectionDef)
+            .join(TemplateSectionDef, TemplateSectionDef.id == ReportSection.section_def_id)
+            .where(ReportSection.report_id == report.id)
+            .order_by(ReportSection.position)
+        )
+    ).all()
+    if not evaluations:
+        return []
+    grades = (
+        (await db.execute(select(SectionGrade).where(SectionGrade.evaluation_id.in_([e.id for e in evaluations]))))
+        .scalars()
+        .all()
+    )
+    by_evaluation: dict[uuid.UUID, dict[uuid.UUID, SectionGrade]] = {}
+    for g in grades:
+        by_evaluation.setdefault(g.evaluation_id, {})[g.report_section_id] = g
+
+    paired: list[tuple[EvaluationInput, Evaluation]] = []
+    for ev in evaluations:
+        own = by_evaluation.get(ev.id, {})
+        inputs = tuple(
+            SectionGradeInput(
+                section_def_id=str(defn.id),
+                name=defn.name,
+                grade_mode=defn.grade_mode,
+                grade=own[section.id].grade if section.id in own else None,
+                grade_min=_dec(defn.grade_min) if defn.grade_min is not None else None,
+                grade_max=_dec(defn.grade_max) if defn.grade_max is not None else None,
+                grade_weight=_dec(defn.grade_weight),
+                position=section.position,
+            )
+            for section, defn in sections
+        )
+        paired.append(
+            (
+                EvaluationInput(
+                    evaluation_id=str(ev.id),
+                    evaluator_id=str(ev.evaluator_id),
+                    aggregated_weight=ev.aggregated_weight,
+                    sections=inputs,
+                    completed_at=ev.completed_at,
+                ),
+                ev,
+            )
+        )
+    return paired
+
+
+async def _timeline_for(
+    db: AsyncSession,
+    report: Report,
+    evaluations: Sequence[tuple[EvaluationInput, Evaluation]],
+    *,
+    is_manual: bool,
+) -> GradeTimeline:
+    """Wrap the persisted state in the §6.10 shape. Imported here, not at module scope,
+    because ``timeline`` imports this module."""
+    from app.services.scoring.timeline import ReportMeta, build_timeline_entry
+
+    report_type = (
+        await db.execute(select(ReportTemplate.report_type).where(ReportTemplate.id == report.template_id))
+    ).scalar_one_or_none()
+    entry = build_timeline_entry(
+        ReportMeta(
+            report_id=str(report.id),
+            report_name=report.name,
+            report_type=report_type or "",
+            template_id=str(report.template_id),
+            due_at=report.due_at,
+            submitted_at=report.submitted_at,
+        ),
+        [i for i, _ in evaluations],
+        overall_grade=report.overall_grade,
+        grade_version=report.grade_version,
+        is_manual=is_manual,
+    )
+    return GradeTimeline(
+        report_id=str(report.id),
+        overall_grade=report.overall_grade,
+        grade_version=report.grade_version,
+        entry=entry,
+    )
+
+
+async def recompute_report_grade(
+    db: AsyncSession,
+    report: Report,
+    *,
+    actor_id: uuid.UUID | None = None,
+    trigger: str = "section_grade.saved",
+    ip: str | None = None,
+) -> GradeTimeline:
+    """Recompute and persist grades for ``report``, returning its §6.10 timeline.
+
+    A7 SOLE WRITER of ``report.overall_grade``, ``evaluation.overall_grade`` and (D3)
+    ``report.grade_version``. Runs inside the CALLER'S transaction — never commits, so a
+    failure later in the request rolls the grade back with everything else.
+
+    Per-evaluator grades are always recomputed. The report-level grade is skipped when
+    ``report.overall_grade_is_manual`` is true (M9), and ``grade_version`` is then NOT
+    incremented (D3) because nothing new was published.
+    """
+    await _lock_report_row(db, report.id)
+    evaluations = await _load_evaluation_inputs(db, report)
+    for ev_input, ev_row in evaluations:
+        ev_row.overall_grade = compute_evaluation_grade(ev_input)
+
+    if report.overall_grade_is_manual:
+        await db.flush()
+        return await _timeline_for(db, report, evaluations, is_manual=True)
+
+    new_grade = compute_report_grade([i for i, _ in evaluations])
+    # Numeric comparison, never str(): NUMERIC(5,2) round-trips as Decimal("8.00") while the
+    # fresh computation gives Decimal("8"). Those are ==; their str() forms are not, and
+    # comparing strings would bump grade_version on every single save.
+    if new_grade != report.overall_grade:
+        previous = report.overall_grade
+        report.overall_grade = new_grade
+        report.grade_version = report.grade_version + 1  # D3: monotonic, +1, never decreases
+        await db.flush()
+        await record_audit(
+            db,
+            user_id=actor_id,
+            action="report.grade_recomputed",
+            resource_type="report",
+            resource_id=report.id,
+            details={
+                "overall_grade": str(new_grade) if new_grade is not None else None,
+                "previous": str(previous) if previous is not None else None,
+                "grade_version": report.grade_version,
+                "trigger": trigger,
+            },
+            ip=ip,
+        )
+    else:
+        await db.flush()
+    return await _timeline_for(db, report, evaluations, is_manual=False)
+
+
+async def set_manual_grade(
+    db: AsyncSession,
+    report: Report,
+    value: Decimal | None,
+    *,
+    actor_id: uuid.UUID | None,
+    reason: str,
+    ip: str | None = None,
+) -> GradeTimeline:
+    """Override ``report.overall_grade`` by hand, or clear the override (M9).
+
+    Lives in this module so M2 holds literally: every write to ``overall_grade`` goes through
+    ``rollup``. ``value=None`` clears the override and hands control back to the computation,
+    recomputing immediately so the report never sits on a stale manual number.
+    """
+    if value is None:
+        report.overall_grade_is_manual = False
+        await db.flush()
+        await record_audit(
+            db,
+            user_id=actor_id,
+            action="report.grade_set_manually",
+            resource_type="report",
+            resource_id=report.id,
+            details={"overall_grade": None, "cleared": True, "reason": reason},
+            ip=ip,
+        )
+        return await recompute_report_grade(db, report, actor_id=actor_id, trigger="manual_override_cleared", ip=ip)
+
+    await _lock_report_row(db, report.id)
+    report.overall_grade = quantize_grade(value)
+    report.overall_grade_is_manual = True
+    report.grade_version = report.grade_version + 1
+    await db.flush()
+    await record_audit(
+        db,
+        user_id=actor_id,
+        action="report.grade_set_manually",
+        resource_type="report",
+        resource_id=report.id,
+        details={
+            "overall_grade": str(report.overall_grade),
+            "grade_version": report.grade_version,
+            "reason": reason,
+        },
+        ip=ip,
+    )
+    evaluations = await _load_evaluation_inputs(db, report)
+    return await _timeline_for(db, report, evaluations, is_manual=True)
