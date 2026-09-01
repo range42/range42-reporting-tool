@@ -20,6 +20,7 @@ from app.core.rbac import get_current_user, require_global_admin, require_permis
 from app.core.sanitize import html_to_plain, sanitize_html
 from app.models import (
     ApprovalRecord,
+    Evaluation,
     Report,
     ReportSection,
     ReportTemplate,
@@ -790,13 +791,19 @@ async def reject_report(
 
 
 async def _evaluation_started(db: AsyncSession, report: Report) -> bool:
-    """Whether evaluation of ``report`` has begun — recall is blocked once it has.
+    """Whether evaluation of ``report`` has begun — recall is blocked once it has (§7.2).
 
-    WP5: check the evaluation table for an in_progress/completed row for this
-    report. Until WP5 lands there is no evaluation surface, so recall is always
-    permitted. This is the single place the future gate wires in.
+    'Begun' means at least one evaluation is ``in_progress`` or ``completed``. A merely
+    ``assigned`` evaluator does NOT block recall: assignment is not the start of work.
     """
-    return False
+    n = (
+        await db.execute(
+            select(func.count())
+            .select_from(Evaluation)
+            .where(Evaluation.report_id == report.id, Evaluation.status.in_(("in_progress", "completed")))
+        )
+    ).scalar_one()
+    return n > 0
 
 
 @router.post("/exercises/{exercise_id}/reports/{rid}/recall")
