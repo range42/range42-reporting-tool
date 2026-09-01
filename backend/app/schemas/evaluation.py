@@ -154,6 +154,8 @@ class EvaluationOut(BaseModel):
     evaluator_id: str
     status: str
     overall_feedback: str | None
+    # A7 sole-writer: rollup.py computes this; no route sets it directly.
+    overall_grade: Decimal | None
     completed_at: datetime | None
     reopen_count: int
     graded_section_count: int
@@ -171,6 +173,7 @@ class EvaluationOut(BaseModel):
             evaluator_id=str(e.evaluator_id),
             status=e.status,
             overall_feedback=e.overall_feedback,
+            overall_grade=e.overall_grade,
             completed_at=e.completed_at,
             reopen_count=e.reopen_count,
             graded_section_count=graded,

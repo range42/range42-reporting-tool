@@ -143,13 +143,28 @@ async def test_put_rubric_scores_persists_the_criteria_array(migrated_db: async_
         assert [e["criterion"] for e in d["rubric_scores"]] == ["Clarity", "Depth"]
 
 
-async def test_put_rubric_leaves_grade_null_until_w5_2_rollup(migrated_db: async_sessionmaker) -> None:
+async def test_put_rubric_persists_the_pre_rolled_grade_into_section_grade(migrated_db: async_sessionmaker) -> None:
+    # M7 — flipped from W5-1's "leaves grade null"; Task 8 wired the pre-rollup in. The section
+    # declares no range, so Clarity 4/5 = 80% lands on [0, 1].
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **RUBRIC_SECTION)
         body = {"rubric_scores": [{"criterion": "Clarity", "score": "4"}]}
         d = (await c.put(_grade_url(ex, rid, evid, sid), json=body, headers=h)).json()["data"]
-        assert d["grade"] is None
+        assert d["grade"] == "0.80"
+
+
+async def test_rubric_grade_participates_in_the_report_rollup(migrated_db: async_sessionmaker) -> None:
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **RUBRIC_SECTION)
+        body = {"rubric_scores": [{"criterion": "Clarity", "score": "4"}, {"criterion": "Depth", "score": "8"}]}
+        await c.put(_grade_url(ex, rid, evid, sid), json=body, headers=h)
+    async with migrated_db() as s:
+        og = (
+            await s.execute(text("SELECT overall_grade FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid})
+        ).scalar_one()
+    assert og == Decimal("0.80")
 
 
 @pytest.mark.parametrize(
@@ -222,8 +237,9 @@ async def test_first_grade_write_moves_report_to_under_evaluation(migrated_db: a
         assert st == "under_evaluation"
 
 
-async def test_grade_write_does_not_touch_grade_version_or_overall_grade(migrated_db: async_sessionmaker) -> None:
-    # A7 / D3 sole-writer guards. NOTE: the overall_grade half FLIPS in W5-2 Task 8.
+async def test_grade_write_recomputes_report_overall_grade(migrated_db: async_sessionmaker) -> None:
+    # FLIPPED from W5-1, which asserted both stayed null/zero. Task 8 wired the A7 rollup into
+    # this handler, so a grade save now publishes the report grade in the same transaction.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **NUMERIC)
@@ -234,8 +250,46 @@ async def test_grade_write_does_not_touch_grade_version_or_overall_grade(migrate
                 text("SELECT grade_version, overall_grade FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid}
             )
         ).one()
-        assert gv == 0
-        assert og is None
+        assert og == Decimal("5.00")
+        assert gv == 1
+
+
+async def test_grade_write_recomputes_the_callers_evaluation_overall_grade(migrated_db: async_sessionmaker) -> None:
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **NUMERIC)
+        await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "5"}, headers=h)
+        d = (await c.get(f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}", headers=h)).json()["data"]
+    assert d["overall_grade"] == "5.00"
+
+
+async def test_grade_write_increments_grade_version_on_each_change(migrated_db: async_sessionmaker) -> None:
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **NUMERIC)
+        await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "5"}, headers=h)
+        await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "7"}, headers=h)
+        await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "7"}, headers=h)  # no change
+    async with migrated_db() as s:
+        gv = (
+            await s.execute(text("SELECT grade_version FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid})
+        ).scalar_one()
+    assert gv == 2
+
+
+async def test_second_evaluators_grade_changes_the_aggregate(migrated_db: async_sessionmaker) -> None:
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, h1, evid1 = await _arrange(migrated_db, c, ah, jti="ev1", **NUMERIC)
+        await c.put(_grade_url(ex, rid, evid1, sid), json={"grade": "9"}, headers=h1)
+        h2, uid2 = await evaluator(migrated_db, c, ah, ex, "ev2")
+        evid2 = await assign(c, ah, ex, rid, uid2)
+        await c.put(_grade_url(ex, rid, evid2, sid), json={"grade": "5"}, headers=h2)
+    async with migrated_db() as s:
+        og = (
+            await s.execute(text("SELECT overall_grade FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid})
+        ).scalar_one()
+    assert og == Decimal("7.00")
 
 
 async def test_grade_write_on_completed_evaluation_returns_409(migrated_db: async_sessionmaker) -> None:

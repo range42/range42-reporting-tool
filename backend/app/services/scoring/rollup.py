@@ -113,8 +113,8 @@ def compute_rubric_rollup(
     criteria: list[dict[str, Any]] | None,
     scores: list[dict[str, Any]] | None,
     *,
-    grade_min: Decimal,
-    grade_max: Decimal,
+    grade_min: Decimal | None,
+    grade_max: Decimal | None,
 ) -> Decimal | None:
     """Pre-roll rubric criteria into one section grade (§4.2).
 
@@ -154,7 +154,8 @@ def compute_rubric_rollup(
     if weight_total == 0:
         return None
     normalized = weighted_total / weight_total
-    return grade_min + normalized * (grade_max - grade_min)
+    low, high = _resolve_bounds(grade_min, grade_max)
+    return low + normalized * (high - low)
 
 
 def _scale_pass_fail(s: SectionGradeInput) -> Decimal:

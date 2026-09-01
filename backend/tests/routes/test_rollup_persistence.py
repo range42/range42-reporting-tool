@@ -102,10 +102,14 @@ async def test_recompute_persists_report_overall_grade(migrated_db: async_sessio
         h, evid = graders[0]
         await _grade(c, ex, rid, evid, sids[0], "8", h)
         await _grade(c, ex, rid, evid, sids[1], "6", h)
-    await _recompute(migrated_db, rid)
+    # Task 8 wired the rollup into the save handler, so the grade is already published by the
+    # time we get here: 8 then (8+6)/2 = 7, two changes, two versions. The explicit recompute
+    # below must therefore be a no-op.
     grade, version = await _report_row(migrated_db, rid)
     assert grade == Decimal("7.00")
-    assert version == 1
+    assert version == 2
+    await _recompute(migrated_db, rid)
+    assert await _report_row(migrated_db, rid) == (Decimal("7.00"), 2)
 
 
 async def test_recompute_persists_each_evaluation_overall_grade(migrated_db: async_sessionmaker) -> None:
@@ -232,13 +236,15 @@ async def test_recompute_does_not_commit_the_session(migrated_db: async_sessionm
     async with client(migrated_db) as c:
         ex, rid, sids, graders = await _world(migrated_db, c, ah)
         await _grade(c, ex, rid, graders[0][1], sids[0], "8", graders[0][0])
+    # The save handler already published 8.00 / version 1. Change the underlying grade inside
+    # an uncommitted session, recompute, then roll back: nothing may survive.
+    assert await _report_row(migrated_db, rid) == (Decimal("8.00"), 1)
     async with migrated_db() as s:
+        await s.execute(text("UPDATE section_grade SET grade = 2"))
         report = (await s.execute(select(Report).where(Report.id == uuid.UUID(rid)))).scalar_one()
         await recompute_report_grade(s, report)
         await s.rollback()
-    grade, version = await _report_row(migrated_db, rid)
-    assert grade is None
-    assert version == 0
+    assert await _report_row(migrated_db, rid) == (Decimal("8.00"), 1)
 
 
 async def test_recompute_never_writes_report_status(migrated_db: async_sessionmaker) -> None:

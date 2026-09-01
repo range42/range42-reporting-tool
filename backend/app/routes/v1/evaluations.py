@@ -34,7 +34,7 @@ from app.schemas.evaluation import (
     SectionGradeOut,
     SectionGradeUpsert,
 )
-from app.services.scoring import grade_validation
+from app.services.scoring import grade_validation, rollup
 from app.services.workflow import state_machine
 
 router = APIRouter(tags=["evaluations"])
@@ -398,9 +398,11 @@ async def upsert_section_grade(
         details={"evaluation_id": str(ev.id), "report_section_id": str(section.id), "grade_mode": defn.grade_mode},
         ip=client_ip(request),
     )
-    # === W5-2 WIRING POINT (A7) ===
-    # rollup.recompute_report_grade(db, report) goes HERE, inside this same transaction.
-    # Leave this comment in place; it is the single insertion point for the grade math.
+    # A7: rollup is the sole writer of report.overall_grade / evaluation.overall_grade /
+    # grade_version, and runs inside THIS transaction so a grade write and its rollup are atomic.
+    await rollup.recompute_report_grade(
+        db, report, actor_id=user.id, trigger="section_grade.saved", ip=client_ip(request)
+    )
     await db.refresh(sg)
     return DataEnvelope(data=SectionGradeOut.from_model(sg))
 
@@ -435,3 +437,55 @@ async def list_section_grades(
         .all()
     )
     return DataEnvelope(data=[SectionGradeOut.from_model(g) for g in rows])
+
+
+@router.delete(_BASE + "/{evid}/grades/{section_id}", status_code=204)
+async def delete_section_grade(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    section_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> None:
+    """Remove the caller's grade for one section and recompute (edge case 3).
+
+    NOT IN §6.8 — see ambiguity B6. It exists because a grade has to be retractable and PUT
+    cannot express it: L8's numeric branch REQUIRES ``grade``, so there is no payload meaning
+    "un-grade this". Overloading PUT with null semantics would collide with the mode table, so
+    the retraction gets its own verb.
+
+    Deleting the last grade returns the report to an ungraded state — overall_grade goes back
+    to NULL, not 0, and grade_version still advances because the published number changed.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    ev = await _get_evaluation(db, report.id, evid)
+    _assert_evaluation_access(ev, user)
+    if ev.status == "completed":
+        raise HTTPException(status_code=409, detail={"error": "evaluation_completed"})
+    section, _defn = await _gradable_section(db, report.id, section_id)
+    sg = (
+        await db.execute(
+            select(SectionGrade).where(
+                SectionGrade.evaluation_id == ev.id, SectionGrade.report_section_id == section.id
+            )
+        )
+    ).scalar_one_or_none()
+    if sg is None:
+        raise HTTPException(status_code=404, detail={"error": "grade_not_found"})
+    await db.delete(sg)
+    await db.flush()
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="section_grade.deleted",
+        resource_type="section_grade",
+        resource_id=sg.id,
+        details={"evaluation_id": str(ev.id), "report_section_id": str(section.id)},
+        ip=client_ip(request),
+    )
+    await rollup.recompute_report_grade(
+        db, report, actor_id=user.id, trigger="section_grade.deleted", ip=client_ip(request)
+    )

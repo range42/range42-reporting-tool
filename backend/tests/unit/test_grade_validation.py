@@ -95,13 +95,22 @@ def test_pass_fail_rejects_an_explicit_grade() -> None:
 # --- rubric ------------------------------------------------------------------
 
 
-def test_rubric_returns_scores_and_leaves_grade_null() -> None:
+def test_rubric_returns_scores_and_the_pre_rolled_grade() -> None:
+    # M7 (was "leaves grade null" in W5-1; W5-2 Task 8 wired the pre-rollup in). Clarity 4/5
+    # is the only scored criterion, so 80% — with no declared bounds that lands on [0, 1].
     defn = _defn(grade_mode="rubric", rubric_criteria=RUBRIC_CRITERIA)
     body = _body(rubric_scores=[{"criterion": "Clarity", "score": Decimal("4"), "note": "clear"}])
     grade, pass_fail, scores = validate_grade_payload(defn, body)
-    assert grade is None
+    assert grade == Decimal("0.8")
     assert pass_fail is None
     assert scores == [{"criterion": "Clarity", "score": "4", "note": "clear"}]
+
+
+def test_rubric_pre_rolled_grade_uses_the_sections_declared_range() -> None:
+    defn = _defn(grade_mode="rubric", rubric_criteria=RUBRIC_CRITERIA, grade_min=0, grade_max=10)
+    body = _body(rubric_scores=[{"criterion": "Clarity", "score": Decimal("4"), "note": None}])
+    grade, _, _ = validate_grade_payload(defn, body)
+    assert grade == Decimal("8")
 
 
 def test_rubric_score_equal_to_max_score_is_accepted() -> None:
