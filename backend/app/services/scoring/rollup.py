@@ -236,6 +236,35 @@ def compute_evaluation_grade(ev: EvaluationInput) -> Decimal | None:
     return None if avg is None else quantize_grade(avg)
 
 
+def _contributing_evaluations(
+    graded: Sequence[tuple[EvaluationInput, Decimal]],
+) -> list[tuple[EvaluationInput, Decimal]]:
+    """Which evaluations feed report.overall_grade.
+
+    W5-2 (provisional): every evaluation with at least one graded section, so a grade is
+    visible before anyone finalizes. W5-3 REPLACES THIS BODY with the
+    scoring_config.finalize_policy branch (G-6: all_must_finalize -> only status='completed'
+    contribute; any_can_finalize -> this rule stands). SINGLE SEAM — do not scatter the policy.
+
+    Takes already-computed (evaluation, grade) pairs so ``compute_evaluation_grade`` runs once
+    per evaluation; filtering raw inputs here would double every section's arithmetic.
+    """
+    return list(graded)
+
+
+def compute_report_grade(evaluations: Sequence[EvaluationInput]) -> Decimal | None:
+    """Σ(evaluation grade × aggregated_weight) / Σ aggregated_weight (§4.2).
+
+    An evaluation with nothing graded yet contributes neither a value nor its weight, so an
+    assigned-but-unstarted evaluator cannot drag the report down. None when nothing
+    contributes — the caller persists that as SQL NULL, never 0.
+    """
+    graded = [(e, g) for e in evaluations if (g := compute_evaluation_grade(e)) is not None]
+    pairs = [(g, e.aggregated_weight) for e, g in _contributing_evaluations(graded)]
+    avg = compute_weighted_average(pairs)
+    return None if avg is None else quantize_grade(avg)
+
+
 @dataclass(frozen=True)
 class GradeTimeline:
     """The §6.10 timeline shape returned by a rollup.
