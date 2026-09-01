@@ -158,7 +158,7 @@ def test_timeline_multi_evaluator_section_grade_is_the_aggregated_value() -> Non
 
 
 def test_grade_timeline_name_is_still_importable_from_rollup() -> None:
-    # Keeps tests/unit/test_services_stubs.py::test_scoring_rollup_imports honest.
+    # Keeps tests/unit/test_services_stubs.py::test_scoring_rollup_is_implemented honest.
     timeline = GradeTimeline(report_id="r1", overall_grade=Decimal("8.00"), grade_version=2)
     assert timeline.report_id == "r1"
     assert timeline.entry is None

@@ -296,12 +296,9 @@ class GradeTimeline:
     entry: TimelineEntry | None = None
 
 
-def rollup(report_id: str) -> GradeTimeline:
-    """Recompute and persist ``report.overall_grade``, returning its timeline.
-
-    Sole writer of ``report.overall_grade``. Unimplemented until WP5.
-    """
-    raise NotImplementedError("scoring rollup lands in WP5")
+# The WP1 shape reservation ``rollup(report_id)`` is gone: ``recompute_report_grade`` below is
+# the real entry point, and it needs the caller's session to honour the transaction contract
+# that a module-level function could not.
 
 
 # --- persistence shell (M3) ---------------------------------------------------
