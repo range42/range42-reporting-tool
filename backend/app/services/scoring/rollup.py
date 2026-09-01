@@ -311,6 +311,17 @@ def rollup(report_id: str) -> GradeTimeline:
 # rules be tested without a database at all.
 
 
+def _bump_grade_version(report: Report) -> None:
+    """D3 — THE ONLY PLACE ``grade_version`` IS INCREMENTED.
+
+    Monotonic by construction: +1, never a recomputed or reset value, so a version can never
+    be reused for a different grade. Every caller must funnel through here — a second
+    increment site is how the counter starts lying to consumers who use it to detect stale
+    published grades. Task 10's sole-writer guard asserts this function is unique.
+    """
+    report.grade_version = report.grade_version + 1
+
+
 async def _lock_report_row(db: AsyncSession, report_id: uuid.UUID) -> None:
     """Serialize concurrent recomputes of the same report (B9).
 
@@ -454,7 +465,7 @@ async def recompute_report_grade(
     if new_grade != report.overall_grade:
         previous = report.overall_grade
         report.overall_grade = new_grade
-        report.grade_version = report.grade_version + 1  # D3: monotonic, +1, never decreases
+        _bump_grade_version(report)
         await db.flush()
         await record_audit(
             db,
@@ -507,7 +518,7 @@ async def set_manual_grade(
     await _lock_report_row(db, report.id)
     report.overall_grade = quantize_grade(value)
     report.overall_grade_is_manual = True
-    report.grade_version = report.grade_version + 1
+    _bump_grade_version(report)
     await db.flush()
     await record_audit(
         db,
