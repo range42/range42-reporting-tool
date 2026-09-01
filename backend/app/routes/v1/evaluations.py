@@ -19,11 +19,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.permissions import EVALUATIONS_WRITE
-from app.core.rbac import require_global_admin
+from app.core.rbac import get_current_user, require_global_admin, require_permission
 from app.models import Evaluation, Report, ReportSection, SectionGrade, TemplateSectionDef, User
 from app.routes.v1.reports import _get_report, _has_permission
 from app.schemas.common import DataEnvelope
-from app.schemas.evaluation import EvaluationCreate, EvaluationOut
+from app.schemas.evaluation import (
+    EvaluationCreate,
+    EvaluationDetailOut,
+    EvaluationOut,
+    GradableSectionOut,
+)
 
 router = APIRouter(tags=["evaluations"])
 
@@ -85,6 +90,51 @@ async def _evaluation_out(db: AsyncSession, ev: Evaluation) -> EvaluationOut:
     return EvaluationOut.from_model(ev, graded=graded, gradable=gradable)
 
 
+async def _get_evaluation(db: AsyncSession, report_id: uuid.UUID, evid: uuid.UUID) -> Evaluation:
+    """Fetch one evaluation *of this report*. Wrong parent report is a 404, not a 403 — the
+    caller must not learn that the id exists elsewhere."""
+    ev = (
+        await db.execute(select(Evaluation).where(Evaluation.id == evid, Evaluation.report_id == report_id))
+    ).scalar_one_or_none()
+    if ev is None:
+        raise HTTPException(status_code=404, detail={"error": "evaluation_not_found"})
+    return ev
+
+
+def _assert_evaluation_access(ev: Evaluation, user: User) -> None:
+    """D1 (final): evaluators are isolated. Global Admin bypasses; every other caller must
+    BE the assigned evaluator. No peer visibility at any evaluation.status or report.status.
+    Relaxing this is a D1 violation — reject in review."""
+    if user.is_global_admin:
+        return
+    if ev.evaluator_id != user.id:
+        raise HTTPException(status_code=403, detail={"error": "not_your_evaluation"})
+
+
+async def _gradable_sections(
+    db: AsyncSession, report_id: uuid.UUID, evaluation_id: uuid.UUID
+) -> list[GradableSectionOut]:
+    """Every section of the report with its template definition and *this* evaluation's grade.
+
+    One query, LEFT OUTER on ``section_grade`` keyed on ``evaluation_id`` so an evaluator can
+    never see a peer's grade. Ordered by ``report_section.position``. Task 8 reuses this — a
+    per-section query here would multiply into an N+1 there.
+    """
+    rows = (
+        await db.execute(
+            select(ReportSection, TemplateSectionDef, SectionGrade)
+            .join(TemplateSectionDef, TemplateSectionDef.id == ReportSection.section_def_id)
+            .outerjoin(
+                SectionGrade,
+                (SectionGrade.report_section_id == ReportSection.id) & (SectionGrade.evaluation_id == evaluation_id),
+            )
+            .where(ReportSection.report_id == report_id)
+            .order_by(ReportSection.position)
+        )
+    ).all()
+    return [GradableSectionOut.from_models(s, d, g) for s, d, g in rows]
+
+
 @router.post(_BASE, status_code=201)
 async def assign_evaluator(
     request: Request,
@@ -131,3 +181,55 @@ async def assign_evaluator(
         ip=client_ip(request),
     )
     return DataEnvelope(data=await _evaluation_out(db, ev))
+
+
+@router.get(_BASE)
+async def list_evaluations(
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[list[EvaluationOut]]:
+    """List the report's evaluations, D1-scoped.
+
+    Scoping here is a *filter*, not a gate: an evaluator holding EVALUATIONS_WRITE in the
+    exercise but assigned to no evaluation on this report gets ``200 []``, not a 403. The
+    detail route below is the gate. The asymmetry is deliberate — see #95's error contract.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    q = select(Evaluation).where(Evaluation.report_id == report.id)
+    if not user.is_global_admin:
+        q = q.where(Evaluation.evaluator_id == user.id)
+    rows = (await db.execute(q.order_by(Evaluation.created_at))).scalars().all()
+    return DataEnvelope(data=[await _evaluation_out(db, ev) for ev in rows])
+
+
+@router.get(_BASE + "/{evid}")
+async def get_evaluation(
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[EvaluationDetailOut]:
+    """One evaluation with the sections to grade (D1-gated).
+
+    L12: ``GradableSectionOut`` is the only place the evaluator-only template fields
+    (grade_mode/min/max, weight, rubric and evaluation criteria) are exposed. They must never
+    migrate onto ``ReportSectionOut``.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    ev = await _get_evaluation(db, report.id, evid)
+    _assert_evaluation_access(ev, user)
+    base = await _evaluation_out(db, ev)
+    return DataEnvelope(
+        data=EvaluationDetailOut(
+            **base.model_dump(),
+            report_name=report.name,
+            report_status=report.status,
+            grade_version=report.grade_version,
+            sections=await _gradable_sections(db, report.id, ev.id),
+        )
+    )

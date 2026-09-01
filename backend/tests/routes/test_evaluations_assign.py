@@ -2,62 +2,10 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.seed import seed_system_roles
+from tests.routes._evaluations import evaluator, ga_headers, submitted_report
 from tests.routes._helpers import client, make_user_token
 
 pytestmark = pytest.mark.integration
-
-
-async def _ga(migrated_db):
-    async with migrated_db() as s:
-        await seed_system_roles(s)
-        await s.commit()
-    tok, uid = await make_user_token(migrated_db, jti="ga", admin=True)
-    return {"Authorization": f"Bearer {tok}"}, uid
-
-
-async def _submitted_report(c, ah):
-    """Template (one required, numeric-graded section) -> exercise -> team -> report -> submitted.
-
-    Returns (exercise_id, report_id, section_id). grade_mode is 'numeric' so
-    gradable_section_count is 1 — Tasks 6-8 grade this section.
-    """
-    tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()["data"][
-        "id"
-    ]
-    await c.post(
-        f"/api/v1/templates/{tid}/sections",
-        json={
-            "name": "S",
-            "field_type": "rich_text",
-            "is_required": True,
-            "grade_mode": "numeric",
-            "grade_min": 0,
-            "grade_max": 10,
-        },
-        headers=ah,
-    )
-    await c.post(f"/api/v1/templates/{tid}/publish", headers=ah)
-    ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
-    team = (await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "A", "team_type": "blue"}, headers=ah)).json()[
-        "data"
-    ]["id"]
-    detail = (
-        await c.post(
-            f"/api/v1/exercises/{ex}/reports",
-            json={"template_id": tid, "team_id": team, "name": "R"},
-            headers=ah,
-        )
-    ).json()["data"]
-    rid, sid = detail["id"], detail["sections"][0]["id"]
-    await c.patch(
-        f"/api/v1/exercises/{ex}/reports/{rid}/sections/{sid}",
-        json={"version": 1, "body": {"kind": "rich_text", "content": "<p>done</p>"}},
-        headers=ah,
-    )
-    r = await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/submit", headers=ah)
-    assert r.json()["data"]["status"] == "submitted", r.text
-    return ex, rid, sid
 
 
 async def _draft_report(c, ah):
@@ -85,21 +33,6 @@ async def _draft_report(c, ah):
     return ex, detail["id"], detail["sections"][0]["id"]
 
 
-async def _evaluator(migrated_db, c, ah, exercise_id, jti):
-    """Create a user and grant them the 'evaluator' system role in the exercise.
-
-    Returns (headers, user_id).
-    """
-    tok, uid = await make_user_token(migrated_db, jti=jti)
-    r = await c.post(
-        f"/api/v1/exercises/{exercise_id}/roles",
-        json={"user_id": uid, "role_key": "evaluator"},
-        headers=ah,
-    )
-    assert r.status_code == 201, r.text
-    return {"Authorization": f"Bearer {tok}"}, uid
-
-
 def _url(ex, rid):
     return f"/api/v1/exercises/{ex}/reports/{rid}/evaluations"
 
@@ -112,19 +45,19 @@ async def _set_report_status(migrated_db, rid, status):
 
 
 async def test_global_admin_assigns_evaluator_to_submitted_report(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
         assert r.status_code == 201, r.text
 
 
 async def test_assign_returns_data_envelope_with_evaluation_id(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         d = (await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)).json()["data"]
         assert d["id"]
         assert d["report_id"] == rid
@@ -135,10 +68,10 @@ async def test_assign_returns_data_envelope_with_evaluation_id(migrated_db: asyn
 
 
 async def test_assign_sets_evaluation_status_to_assigned(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         d = (await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)).json()["data"]
         assert d["status"] == "assigned"
         assert d["completed_at"] is None
@@ -146,10 +79,10 @@ async def test_assign_sets_evaluation_status_to_assigned(migrated_db: async_sess
 
 
 async def test_assign_records_assigned_by_as_the_calling_admin(migrated_db: async_sessionmaker) -> None:
-    ah, ga_uid = await _ga(migrated_db)
+    ah, ga_uid = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         evid = (await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)).json()["data"]["id"]
     async with migrated_db() as s:
         row = (
@@ -160,27 +93,27 @@ async def test_assign_records_assigned_by_as_the_calling_admin(migrated_db: asyn
 
 async def test_assign_leaves_report_status_submitted(migrated_db: async_sessionmaker) -> None:
     # L5 — assignment alone does not begin evaluation; only a grade/feedback write does (Task 7).
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
         got = (await c.get(f"/api/v1/exercises/{ex}/reports/{rid}", headers=ah)).json()["data"]
         assert got["status"] == "submitted"
 
 
 async def test_assign_to_draft_report_returns_409(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await _draft_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
         assert r.status_code == 409
         assert r.json()["error"]["message"] == "report_not_submitted"
 
 
 async def test_assign_to_pending_approval_report_returns_409(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()["data"][
             "id"
@@ -210,17 +143,17 @@ async def test_assign_to_pending_approval_report_returns_409(migrated_db: async_
         )
         submitted = (await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/submit", headers=ah)).json()["data"]
         assert submitted["status"] == "pending_approval"
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
         assert r.status_code == 409
         assert r.json()["error"]["message"] == "report_not_submitted"
 
 
 async def test_assign_to_evaluated_report_returns_409(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         # No finalize endpoint until W5-3; drive the terminal state directly.
         await _set_report_status(migrated_db, rid, "evaluated")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
@@ -230,22 +163,22 @@ async def test_assign_to_evaluated_report_returns_409(migrated_db: async_session
 
 async def test_assign_second_evaluator_to_under_evaluation_report_succeeds(migrated_db: async_sessionmaker) -> None:
     # A second evaluator may join once grading has begun (multi-evaluator, W5-3).
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid1 = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid1 = await evaluator(migrated_db, c, ah, ex, "ev1")
         await c.post(_url(ex, rid), json={"evaluator_id": uid1}, headers=ah)
         await _set_report_status(migrated_db, rid, "under_evaluation")
-        _, uid2 = await _evaluator(migrated_db, c, ah, ex, "ev2")
+        _, uid2 = await evaluator(migrated_db, c, ah, ex, "ev2")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid2}, headers=ah)
         assert r.status_code == 201, r.text
 
 
 async def test_assign_same_evaluator_twice_returns_409_duplicate(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         assert (await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)).status_code == 201
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
         assert r.status_code == 409
@@ -254,9 +187,9 @@ async def test_assign_same_evaluator_twice_returns_409_duplicate(migrated_db: as
 
 async def test_assign_user_without_evaluator_role_in_exercise_returns_422(migrated_db: async_sessionmaker) -> None:
     # Guards that the target actually holds evaluations:write *in this exercise*.
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
+        ex, rid, _ = await submitted_report(c, ah)
         _, uid = await make_user_token(migrated_db, jti="nobody")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
         assert r.status_code == 422
@@ -264,36 +197,36 @@ async def test_assign_user_without_evaluator_role_in_exercise_returns_422(migrat
 
 
 async def test_assign_unknown_user_returns_404(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
+        ex, rid, _ = await submitted_report(c, ah)
         r = await c.post(_url(ex, rid), json={"evaluator_id": "00000000-0000-0000-0000-000000000000"}, headers=ah)
         assert r.status_code == 404
 
 
 async def test_assign_malformed_user_id_returns_404(migrated_db: async_sessionmaker) -> None:
     # evaluator_id is typed str so this handler owns the response — not a Pydantic 422.
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
+        ex, rid, _ = await submitted_report(c, ah)
         r = await c.post(_url(ex, rid), json={"evaluator_id": "not-a-uuid"}, headers=ah)
         assert r.status_code == 404
 
 
 async def test_assign_by_non_admin_evaluator_returns_403(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        eh, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        eh, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=eh)
         assert r.status_code == 403
 
 
 async def test_assign_with_aggregated_weight_persists_the_weight(migrated_db: async_sessionmaker) -> None:
-    ah, _ = await _ga(migrated_db)
+    ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, _ = await _submitted_report(c, ah)
-        _, uid = await _evaluator(migrated_db, c, ah, ex, "ev1")
+        ex, rid, _ = await submitted_report(c, ah)
+        _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
         evid = (await c.post(_url(ex, rid), json={"evaluator_id": uid, "aggregated_weight": "2.5"}, headers=ah)).json()[
             "data"
         ]["id"]
