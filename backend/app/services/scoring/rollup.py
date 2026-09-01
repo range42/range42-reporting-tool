@@ -17,12 +17,18 @@ Keeping the split means the scoring rules can be reasoned about — and re-deriv
 a failing report — without standing up a database.
 """
 
+from __future__ import annotations
+
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, localcontext
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
+
+if TYPE_CHECKING:  # timeline imports rollup, so keep this one-directional at runtime
+    from app.services.scoring.timeline import TimelineEntry
 
 logger = structlog.get_logger(__name__)
 
@@ -53,6 +59,8 @@ class SectionGradeInput:
     grade_min: Decimal | None
     grade_max: Decimal | None
     grade_weight: Decimal
+    # Template ordering, echoed into the §6.10 timeline so sections render in authoring order.
+    position: int = 0
 
 
 @dataclass(frozen=True)
@@ -63,6 +71,8 @@ class EvaluationInput:
     evaluator_id: str
     aggregated_weight: Decimal
     sections: tuple[SectionGradeInput, ...] = ()
+    # M16 — feeds the derived ``evaluated_at``; None while this evaluator is still working.
+    completed_at: datetime | None = None
 
 
 def _dec(v: object) -> Decimal:
@@ -267,14 +277,16 @@ def compute_report_grade(evaluations: Sequence[EvaluationInput]) -> Decimal | No
 
 @dataclass(frozen=True)
 class GradeTimeline:
-    """The §6.10 timeline shape returned by a rollup.
+    """What ``recompute_report_grade`` hands back: the persisted grade plus its §6.10 entry.
 
-    Reserved shape only; fields firm up in WP5.
+    ``entry`` carries the full timeline shape so a caller can render grade history without a
+    second query. It is None only when the report has no evaluations to describe.
     """
 
     report_id: str
-    overall_grade: str | None = None
-    entries: list[dict[str, object]] = field(default_factory=list)
+    overall_grade: Decimal | None = None
+    grade_version: int = 0
+    entry: TimelineEntry | None = None
 
 
 def rollup(report_id: str) -> GradeTimeline:
