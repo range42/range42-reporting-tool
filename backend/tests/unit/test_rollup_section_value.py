@@ -58,11 +58,10 @@ def test_section_value_for_unknown_grade_mode_raises_value_error() -> None:
 
 # --- pass_fail scaling (M6) --------------------------------------------------
 #
-# NOTE on the fixtures below: a pass_fail section can never carry grade_min/grade_max in real
-# data — section_invariant_error (app/schemas/template.py:64) rejects that at template
-# authoring time. The first three tests exercise M6's formula on explicit bounds because that
-# is what the spec defines; test_pass_fail_without_template_bounds_* covers what the database
-# actually holds. See the module note in rollup.py.
+# A pass_fail section MAY declare grade_min/grade_max (operator decision, 2026-09-01), which
+# is what makes a pass worth full marks beside numeric siblings. Sections authored before that
+# carry neither — test_pass_fail_without_template_bounds_* covers them, and they scale onto
+# [0, 1] where a pass counts as 1.
 
 
 def _pf(**kw) -> SectionGradeInput:
@@ -95,8 +94,8 @@ def test_pass_fail_with_out_of_range_stored_grade_raises_value_error() -> None:
 
 
 def test_pass_fail_without_template_bounds_scales_to_zero_one() -> None:
-    # The real-data shape: WP3 forbids grade_min/grade_max on pass_fail, so both are NULL and
-    # [0, 1] is the only scale available. Comparability with numeric siblings is B3's problem.
+    # Legacy shape: no bounds declared, so [0, 1] is the only scale available and a pass is
+    # worth 1. Fixed by editing the template to declare a range.
     unbounded = _pf(grade_min=None, grade_max=None)
     assert compute_section_value(unbounded) == Decimal("1")
     assert compute_section_value(_pf(grade=Decimal("0"), grade_min=None, grade_max=None)) == Decimal("0")
