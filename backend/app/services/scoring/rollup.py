@@ -17,11 +17,24 @@ Keeping the split means the scoring rules can be reasoned about — and re-deriv
 a failing report — without standing up a database.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 from typing import Any
 
+import structlog
+
+logger = structlog.get_logger(__name__)
+
 _GRADE_MODES = frozenset({"numeric", "pass_fail", "rubric", "not_graded"})
+
+_CENTS = Decimal("0.01")
+# report.overall_grade and section_grade.grade are both NUMERIC(5,2).
+_MAX_NUMERIC_5_2 = Decimal("999.99")
+
+
+class RollupOverflow(Exception):
+    """A computed grade exceeds NUMERIC(5,2). Indicates a template grade_max misconfiguration."""
 
 
 @dataclass(frozen=True)
@@ -159,6 +172,68 @@ def compute_section_value(s: SectionGradeInput) -> Decimal | None:
     if s.grade_mode == "pass_fail":
         return _scale_pass_fail(s)
     return s.grade  # numeric, and rubric (pre-rolled per M7)
+
+
+def has_mixed_grade_max(sections: Sequence[SectionGradeInput]) -> bool:
+    """Whether the contributing sections disagree about their upper bound.
+
+    M12 keeps the RAW weighted average and does not normalize across scales, so a 0-100
+    section averaged with a 0-10 one legitimately dominates. That is almost always a template
+    mistake rather than an intent, hence the flag — the caller warns, the maths does not change.
+    Sections that contribute nothing are ignored; their bounds never reach the average.
+    """
+    maxima = {s.grade_max for s in sections if s.grade_mode != "not_graded" and s.grade_max is not None}
+    return len(maxima) > 1
+
+
+def quantize_grade(value: Decimal) -> Decimal:
+    """Round to the column's 2 decimal places, HALF_UP (M11). Only called on persist.
+
+    HALF_UP, not Python's default banker's rounding: 8.125 becomes 8.13, not 8.12. Repeatedly
+    rounding half-to-even would bias a long run of grades downward, and it surprises anyone
+    checking the arithmetic by hand.
+    """
+    if value > _MAX_NUMERIC_5_2 or value < -_MAX_NUMERIC_5_2:
+        raise RollupOverflow(f"grade {value} exceeds NUMERIC(5,2)")
+    return value.quantize(_CENTS, rounding=ROUND_HALF_UP)
+
+
+def compute_weighted_average(pairs: Sequence[tuple[Decimal, Decimal]]) -> Decimal | None:
+    """Σ(value × weight) / Σ weight (§4.2).
+
+    None when the denominator is zero — callers must persist that as SQL NULL, never as 0.
+    Shared with Task 5's report-level aggregation; there is deliberately one implementation.
+    """
+    total_weight = sum((w for _, w in pairs), Decimal(0))
+    if total_weight == 0:
+        return None
+    with localcontext() as ctx:
+        ctx.prec = 28
+        return sum((v * w for v, w in pairs), Decimal(0)) / total_weight
+
+
+def compute_evaluation_grade(ev: EvaluationInput) -> Decimal | None:
+    """One evaluator's overall grade for a report.
+
+    Sections contributing None — ``not_graded`` (M4) or ungraded (M5) — are excluded from BOTH
+    the numerator and the weight denominator. A zero-weight section is excluded too: it would
+    add nothing to either sum, and keeping it risks a 0/0.
+    """
+    pairs: list[tuple[Decimal, Decimal]] = []
+    for s in ev.sections:
+        if s.grade_weight < 0:
+            raise ValueError(f"negative grade_weight on section {s.section_def_id}")
+        value = compute_section_value(s)
+        if value is not None and s.grade_weight != 0:
+            pairs.append((value, s.grade_weight))
+    if has_mixed_grade_max(ev.sections):
+        logger.warning(
+            "rollup_mixed_grade_max",
+            evaluation_id=ev.evaluation_id,
+            detail="sections disagree on grade_max; the raw weighted average is used (M12)",
+        )
+    avg = compute_weighted_average(pairs)
+    return None if avg is None else quantize_grade(avg)
 
 
 @dataclass(frozen=True)
