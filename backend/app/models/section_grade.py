@@ -32,7 +32,10 @@ class SectionGrade(Base, UUIDMixin, TimestampMixin):
     )
     grade: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     pass_fail_result: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    rubric_scores: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
+    # none_as_null: a Python None must write SQL NULL, not JSONB 'null'. ck_section_grade_shape
+    # reads "rubric_scores IS NULL", which a JSON null does not satisfy — switching a row from
+    # rubric to pass_fail grading would otherwise trip the constraint.
+    rubric_scores: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     graded_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False

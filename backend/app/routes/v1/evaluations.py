@@ -10,6 +10,8 @@ attachments deviation already shipped in WP3.
 """
 
 import uuid
+from decimal import Decimal
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
@@ -29,7 +31,10 @@ from app.schemas.evaluation import (
     EvaluationOut,
     EvaluationUpdate,
     GradableSectionOut,
+    SectionGradeOut,
+    SectionGradeUpsert,
 )
+from app.services.scoring import grade_validation
 from app.services.workflow import state_machine
 
 router = APIRouter(tags=["evaluations"])
@@ -135,6 +140,56 @@ async def _gradable_sections(
         )
     ).all()
     return [GradableSectionOut.from_models(s, d, g) for s, d, g in rows]
+
+
+async def _gradable_section(
+    db: AsyncSession, report_id: uuid.UUID, section_id: uuid.UUID
+) -> tuple[ReportSection, TemplateSectionDef]:
+    """One section *of this report* with its template definition; 404 on a foreign section."""
+    row = (
+        await db.execute(
+            select(ReportSection, TemplateSectionDef)
+            .join(TemplateSectionDef, TemplateSectionDef.id == ReportSection.section_def_id)
+            .where(ReportSection.id == section_id, ReportSection.report_id == report_id)
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail={"error": "section_not_found"})
+    return row[0], row[1]
+
+
+async def _upsert_grade(
+    db: AsyncSession,
+    ev: Evaluation,
+    section: ReportSection,
+    grade: Decimal | None,
+    pass_fail: bool | None,
+    rubric: list[dict[str, Any]] | None,
+    feedback: str | None,
+    actor_id: uuid.UUID,
+) -> SectionGrade:
+    """Create or update the caller's grade for one section.
+
+    Keyed on UNIQUE(evaluation_id, report_section_id), which is per-evaluator: two evaluators
+    grading the same section produce two rows, never a conflict.
+    """
+    sg = (
+        await db.execute(
+            select(SectionGrade).where(
+                SectionGrade.evaluation_id == ev.id, SectionGrade.report_section_id == section.id
+            )
+        )
+    ).scalar_one_or_none()
+    if sg is None:
+        sg = SectionGrade(evaluation_id=ev.id, report_section_id=section.id, graded_by=actor_id)
+        db.add(sg)
+    sg.grade = grade
+    sg.pass_fail_result = pass_fail
+    sg.rubric_scores = rubric
+    sg.feedback = feedback
+    sg.graded_by = actor_id
+    await db.flush()
+    return sg
 
 
 async def _begin_evaluation(
@@ -303,3 +358,80 @@ async def update_evaluation(
     # server-side onupdate=now() expires updated_at on flush; reload before serializing.
     await db.refresh(ev)
     return DataEnvelope(data=await _evaluation_out(db, ev))
+
+
+@router.put(_BASE + "/{evid}/grades/{section_id}")
+async def upsert_section_grade(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    section_id: uuid.UUID,
+    body: SectionGradeUpsert,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[SectionGradeOut]:
+    """Create or replace the caller's grade for one section (L8).
+
+    Every rejection — 403, 404, 409, 422 — is raised before the first mutation and before
+    ``record_audit``, so a refused write leaves no row and no audit trail (Task 11 asserts it).
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    ev = await _get_evaluation(db, report.id, evid)
+    _assert_evaluation_access(ev, user)
+    if ev.status == "completed":
+        raise HTTPException(status_code=409, detail={"error": "evaluation_completed"})
+    section, defn = await _gradable_section(db, report.id, section_id)
+    try:
+        grade, pass_fail, rubric = grade_validation.validate_grade_payload(defn, body)
+    except grade_validation.GradeValidationError as exc:
+        raise HTTPException(status_code=422, detail={"error": exc.code, "mode": defn.grade_mode}) from None
+    await _begin_evaluation(db, ev, report, actor_id=user.id, ip=client_ip(request))
+    sg = await _upsert_grade(db, ev, section, grade, pass_fail, rubric, body.feedback, user.id)
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="section_grade.saved",
+        resource_type="section_grade",
+        resource_id=sg.id,
+        details={"evaluation_id": str(ev.id), "report_section_id": str(section.id), "grade_mode": defn.grade_mode},
+        ip=client_ip(request),
+    )
+    # === W5-2 WIRING POINT (A7) ===
+    # rollup.recompute_report_grade(db, report) goes HERE, inside this same transaction.
+    # Leave this comment in place; it is the single insertion point for the grade math.
+    await db.refresh(sg)
+    return DataEnvelope(data=SectionGradeOut.from_model(sg))
+
+
+@router.get(_BASE + "/{evid}/grades")
+async def list_section_grades(
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[list[SectionGradeOut]]:
+    """The evaluation's own grades, ordered by section position.
+
+    No separate filter: "own grades" falls out of the D1 gate on "own evaluation". A Global
+    Admin reads any evaluation's grades, one evaluation at a time.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    ev = await _get_evaluation(db, report.id, evid)
+    _assert_evaluation_access(ev, user)
+    rows = (
+        (
+            await db.execute(
+                select(SectionGrade)
+                .join(ReportSection, ReportSection.id == SectionGrade.report_section_id)
+                .where(SectionGrade.evaluation_id == ev.id)
+                .order_by(ReportSection.position)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return DataEnvelope(data=[SectionGradeOut.from_model(g) for g in rows])
