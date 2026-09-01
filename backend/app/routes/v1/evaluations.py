@@ -27,8 +27,10 @@ from app.schemas.evaluation import (
     EvaluationCreate,
     EvaluationDetailOut,
     EvaluationOut,
+    EvaluationUpdate,
     GradableSectionOut,
 )
+from app.services.workflow import state_machine
 
 router = APIRouter(tags=["evaluations"])
 
@@ -135,6 +137,35 @@ async def _gradable_sections(
     return [GradableSectionOut.from_models(s, d, g) for s, d, g in rows]
 
 
+async def _begin_evaluation(
+    db: AsyncSession,
+    ev: Evaluation,
+    report: Report,
+    *,
+    actor_id: uuid.UUID,
+    ip: str | None,
+) -> None:
+    """L5 — §7.2's 'assigned AND begins evaluation'. Idempotent: no-op when already begun,
+    so no duplicate transition audit row is ever emitted.
+
+    Assignment does not begin evaluation; the first evaluator write does. Task 8's grade
+    upsert calls this same function, which is why it must stay idempotent.
+    """
+    if ev.status == "assigned":
+        ev.status = "in_progress"
+        await db.flush()
+    if report.status == "submitted":
+        await state_machine.transition(
+            db,
+            report,
+            target_status="under_evaluation",
+            actor_id=actor_id,
+            action="report.under_evaluation",
+            details={"evaluation_id": str(ev.id)},
+            ip=ip,
+        )
+
+
 @router.post(_BASE, status_code=201)
 async def assign_evaluator(
     request: Request,
@@ -233,3 +264,42 @@ async def get_evaluation(
             sections=await _gradable_sections(db, report.id, ev.id),
         )
     )
+
+
+@router.patch(_BASE + "/{evid}")
+async def update_evaluation(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    body: EvaluationUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[EvaluationOut]:
+    """Update the evaluation's overall feedback; the first write begins evaluation (L5).
+
+    Authorize before mutating: the D1 gate runs ahead of every write and audit call, so a
+    rejected caller leaves no trace behind (Task 11 pins that).
+
+    A7 / D3 sole-writer guards: this handler never touches ``report.overall_grade``,
+    ``evaluation.overall_grade`` or ``report.grade_version`` — the W5-2 rollup owns those.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    ev = await _get_evaluation(db, report.id, evid)
+    _assert_evaluation_access(ev, user)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(ev, field, value)
+    await _begin_evaluation(db, ev, report, actor_id=user.id, ip=client_ip(request))
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="evaluation.feedback_updated",
+        resource_type="evaluation",
+        resource_id=ev.id,
+        details={"report_id": str(report.id)},
+        ip=client_ip(request),
+    )
+    # server-side onupdate=now() expires updated_at on flush; reload before serializing.
+    await db.refresh(ev)
+    return DataEnvelope(data=await _evaluation_out(db, ev))
