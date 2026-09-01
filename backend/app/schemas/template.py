@@ -61,10 +61,20 @@ def section_invariant_error(
         for c in rubric_criteria:
             if float(c.get("max_score", 0)) <= 0 or float(c.get("weight", 0)) <= 0:
                 return "each rubric criterion needs max_score>0 and weight>0"
-    if grade_mode in ("pass_fail", "not_graded") and (
-        grade_min is not None or grade_max is not None or rubric_criteria is not None
-    ):
-        return f"{grade_mode} grading must not set grade_min/grade_max/rubric_criteria"
+    if grade_mode == "pass_fail":
+        # Bounds are OPTIONAL and declare what a pass is worth: a pass scales to grade_max and
+        # a fail to grade_min (rollup.py::_scale_pass_fail). Without them the section scales
+        # onto [0, 1], which under-scores it next to numeric siblings on a mixed template —
+        # so a mixed template should set them. Optional, not required, because sections
+        # authored before this rule have neither and must stay valid.
+        if (grade_min is None) != (grade_max is None):
+            return "pass_fail grading needs both grade_min and grade_max, or neither"
+        if grade_min is not None and grade_max is not None and grade_min >= grade_max:
+            return "pass_fail grading requires grade_min < grade_max"
+        if rubric_criteria is not None:
+            return "pass_fail grading must not set rubric_criteria"
+    if grade_mode == "not_graded" and (grade_min is not None or grade_max is not None or rubric_criteria is not None):
+        return "not_graded grading must not set grade_min/grade_max/rubric_criteria"
     return None
 
 

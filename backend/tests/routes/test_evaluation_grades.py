@@ -319,3 +319,20 @@ async def test_grade_round_trips_as_decimal_not_float(migrated_db: async_session
     async with migrated_db() as s:
         v = (await s.execute(text("SELECT grade FROM section_grade LIMIT 1"))).scalar_one()
         assert isinstance(v, Decimal)
+
+
+# --- pass_fail sections that declare what a pass is worth ---------------------
+
+BOUNDED_PASS_FAIL = {"grade_mode": "pass_fail", "grade_min": 0, "grade_max": 10}
+
+
+async def test_pass_fail_section_may_declare_grade_bounds(migrated_db: async_sessionmaker) -> None:
+    """A pass_fail section can carry grade_min/grade_max so a pass is worth full marks beside
+    numeric siblings. The stored grade stays 0/1 — rollup.py scales it, not the write path."""
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        # _report_with_section asserts 201 on the section POST, which is the half that used to fail.
+        ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **BOUNDED_PASS_FAIL)
+        d = (await c.put(_grade_url(ex, rid, evid, sid), json={"pass_fail_result": True}, headers=h)).json()["data"]
+        assert d["pass_fail_result"] is True
+        assert d["grade"] == "1.00"
