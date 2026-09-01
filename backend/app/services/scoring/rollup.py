@@ -51,6 +51,23 @@ class EvaluationInput:
     sections: tuple[SectionGradeInput, ...] = ()
 
 
+def _scale_pass_fail(s: SectionGradeInput) -> Decimal:
+    """§4.2: '1.0=pass, 0.0=fail scaled to grade_max'. The stored value is 0/1 (W5-1 L8);
+    grade_min is the floor so a grade_min>0 section stays comparable with numeric siblings.
+
+    BOUNDS ARE USUALLY ABSENT. ``section_invariant_error`` forbids grade_min/grade_max on a
+    ``pass_fail`` section, so in practice both are NULL and this scales onto [0, 1] — meaning a
+    pass_fail section contributes at most 1 while a numeric sibling contributes up to its own
+    grade_max. That cross-scale comparison is B3, unresolved; the explicit-bounds path below is
+    kept because it is what M6 specifies and what B3 would most likely enable.
+    """
+    if s.grade not in (Decimal(0), Decimal(1)):
+        raise ValueError(f"pass_fail grade must be 0 or 1, got {s.grade}")
+    low = s.grade_min if s.grade_min is not None else Decimal(0)
+    high = s.grade_max if s.grade_max is not None else Decimal(1)
+    return low + s.grade * (high - low)
+
+
 def compute_section_value(s: SectionGradeInput) -> Decimal | None:
     """The scaled value this section contributes, or None when it contributes nothing.
 
@@ -64,7 +81,9 @@ def compute_section_value(s: SectionGradeInput) -> Decimal | None:
         return None
     if s.grade is None:
         return None
-    return s.grade  # numeric, and rubric (pre-rolled per M7); pass_fail scaling lands in Task 2
+    if s.grade_mode == "pass_fail":
+        return _scale_pass_fail(s)
+    return s.grade  # numeric, and rubric (pre-rolled per M7)
 
 
 @dataclass(frozen=True)
