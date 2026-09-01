@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -37,6 +38,15 @@ class Report(Base, UUIDMixin, TimestampMixin, MetadataMixin):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     writer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overall_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A7 sole-writer: app/services/scoring/rollup.py. No other code path may set these two.
+    overall_grade: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    overall_grade_is_manual: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # E3: monotonic publish counter, incremented by rollup.py in the grade-save transaction.
+    # Never decreases; NOT incremented while overall_grade_is_manual suppresses recomputation.
+    grade_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     assigned_writer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user.id"), nullable=True
     )

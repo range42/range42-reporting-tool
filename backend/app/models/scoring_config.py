@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, text
+from sqlalchemy import Boolean, ForeignKey, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,4 +19,9 @@ class ScoringConfig(Base, UUIDMixin, TimestampMixin):
     )
     teams_see_own_scores: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # G-6: the all_must_finalize / any_can_finalize field ARCHITECTURE §4.2's aggregation rule
+    # references but never declares. Created + defaulted in W5-1; CONSUMED BY W5-3.
+    finalize_policy: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="all_must_finalize", server_default=text("'all_must_finalize'")
     )

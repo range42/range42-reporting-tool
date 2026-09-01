@@ -24,7 +24,12 @@ from app.models.report import Report
 ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
     "draft": frozenset({"pending_approval", "submitted"}),
     "pending_approval": frozenset({"submitted", "draft"}),
-    "submitted": frozenset({"draft"}),
+    "submitted": frozenset({"draft", "under_evaluation"}),
+    # WP5: evaluation lifecycle. under_evaluation/evaluated never return to draft — a
+    # graded report is reworked by reopening the evaluation (W5-4), not by un-submitting.
+    "under_evaluation": frozenset({"evaluated"}),
+    # §6.8 POST /evaluations/{id}/reopen (Global Admin only, W5-4). Not in §7.2's table — see A3.
+    "evaluated": frozenset({"under_evaluation"}),
 }
 
 
