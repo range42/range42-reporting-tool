@@ -10,6 +10,7 @@ attachments deviation already shipped in WP3.
 """
 
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -28,6 +29,7 @@ from app.schemas.common import DataEnvelope
 from app.schemas.evaluation import (
     EvaluationCreate,
     EvaluationDetailOut,
+    EvaluationFinalizeOut,
     EvaluationOut,
     EvaluationUpdate,
     GradableSectionOut,
@@ -36,6 +38,7 @@ from app.schemas.evaluation import (
     SectionGradeOut,
     SectionGradeUpsert,
 )
+from app.services.evaluation.finalize_gate import is_gate_open, resolve_finalize_policy
 from app.services.scoring import grade_validation, rollup
 from app.services.workflow import state_machine
 
@@ -532,6 +535,158 @@ async def set_overall_grade(
             report_id=str(report.id),
             overall_grade=report.overall_grade,
             overall_grade_is_manual=report.overall_grade_is_manual,
+            grade_version=report.grade_version,
+        )
+    )
+
+
+# --- W5-3: finalize -------------------------------------------------------------------
+
+
+async def _lock_report(db: AsyncSession, report_id: uuid.UUID) -> None:
+    """Serialize concurrent finalizes of the same report, BEFORE the guards run.
+
+    Two evaluators pressing Finalize at the same moment would otherwise both read a gate that
+    is still closed and neither would transition the report. Locking first means the second
+    waits, re-reads the first one's committed ``completed`` row, and settles the gate.
+    """
+    await db.execute(select(Report.id).where(Report.id == report_id).with_for_update())
+
+
+async def _ungraded_section_def_ids(db: AsyncSession, report_id: uuid.UUID, evaluation_id: uuid.UUID) -> list[str]:
+    """Gradeable sections this evaluation has not scored (§7.2).
+
+    ``grade_mode='not_graded'`` sections are excluded — they are not gradeable, so they can
+    never block a finalize.
+    """
+    rows = (
+        await db.execute(
+            select(ReportSection.section_def_id)
+            .join(TemplateSectionDef, TemplateSectionDef.id == ReportSection.section_def_id)
+            .outerjoin(
+                SectionGrade,
+                (SectionGrade.report_section_id == ReportSection.id) & (SectionGrade.evaluation_id == evaluation_id),
+            )
+            .where(
+                ReportSection.report_id == report_id,
+                TemplateSectionDef.grade_mode != "not_graded",
+                SectionGrade.id.is_(None),
+            )
+            .order_by(ReportSection.position)
+        )
+    ).scalars()
+    return [str(sid) for sid in rows]
+
+
+async def _assert_finalizable(db: AsyncSession, ev: Evaluation, report: Report, user: User) -> None:
+    """Every rejection a finalize can raise, before the first mutation.
+
+    Extracted so W5-4's re-finalize path reuses it verbatim rather than restating the guards
+    and drifting from them.
+    """
+    _assert_evaluation_access(ev, user)
+    if ev.unassigned_at is not None:
+        raise HTTPException(status_code=409, detail={"error": "evaluation_unassigned"})
+    if ev.status == "completed":
+        raise HTTPException(status_code=409, detail={"error": "already_finalized"})
+    if report.status != "under_evaluation":
+        raise HTTPException(status_code=409, detail={"error": "invalid_state", "status": report.status})
+    missing = await _ungraded_section_def_ids(db, report.id, ev.id)
+    if missing:
+        raise HTTPException(status_code=409, detail={"error": "section_grade_missing", "section_def_ids": missing})
+
+
+async def _settle_finalize_gate(
+    db: AsyncSession,
+    report: Report,
+    *,
+    exercise_id: uuid.UUID,
+    evaluation_id: uuid.UUID,
+    actor_id: uuid.UUID,
+    ip: str | None,
+) -> tuple[bool, str]:
+    """Ask the gate whether the report is finished, and transition it if so.
+
+    Reads the facts back through ``rollup.load_evaluation_facts`` — the SAME query the
+    aggregate used — so the report can never be declared evaluated over a different set of
+    evaluations than the one its grade was computed from.
+
+    Returns ``(gate_satisfied, mode)``. The report.evaluated event seam (L11) is Task 11's.
+    """
+    mode = await resolve_finalize_policy(db, exercise_id)
+    facts = await rollup.load_evaluation_facts(db, report.id)
+    satisfied = is_gate_open(facts, mode)
+    if satisfied:
+        await state_machine.transition(
+            db,
+            report,
+            target_status="evaluated",
+            actor_id=actor_id,
+            action="report.evaluated",
+            details={"finalize_policy": mode, "evaluation_id": str(evaluation_id)},
+            ip=ip,
+        )
+    else:
+        await record_audit(
+            db,
+            user_id=actor_id,
+            action="evaluation.completed",
+            resource_type="evaluation",
+            resource_id=evaluation_id,
+            details={"finalize_policy": mode, "finalize_gate_satisfied": False},
+            ip=ip,
+        )
+    return satisfied, mode
+
+
+@router.post(_BASE + "/{evid}/finalize")
+async def finalize_evaluation(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[EvaluationFinalizeOut]:
+    """Mark this evaluator's work done, then settle the report-level gate (§7.2).
+
+    ORDER IS LOAD-BEARING: lock, guard, complete the evaluation, recompute the aggregate,
+    THEN ask the gate. A gate settled before the recompute would fire ``report.evaluated``
+    carrying the previous grade — announcing a number that the same request then changes.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    await _lock_report(db, report.id)
+    ev = await _get_evaluation(db, report.id, evid)
+    await _assert_finalizable(db, ev, report, user)
+
+    ev.status = "completed"
+    ev.completed_at = datetime.now(UTC)
+    ev.finalized_by = user.id
+    # D2's finalize-on-behalf-of is Task 8; what is recorded here is the plain fact that
+    # somebody other than the assigned evaluator pressed the button.
+    ev.finalize_is_admin_override = ev.evaluator_id != user.id
+    await db.flush()
+
+    # A7: rollup stays the sole writer of overall_grade / grade_version.
+    await rollup.recompute_report_grade(
+        db, report, actor_id=user.id, trigger="evaluation.finalized", ip=client_ip(request)
+    )
+    satisfied, mode = await _settle_finalize_gate(
+        db,
+        report,
+        exercise_id=exercise_id,
+        evaluation_id=ev.id,
+        actor_id=user.id,
+        ip=client_ip(request),
+    )
+    return DataEnvelope(
+        data=EvaluationFinalizeOut(
+            evaluation=await _evaluation_out(db, ev),
+            report_status=report.status,
+            finalize_gate_satisfied=satisfied,
+            finalize_policy=mode,
+            overall_grade=report.overall_grade,
             grade_version=report.grade_version,
         )
     )

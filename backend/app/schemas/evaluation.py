@@ -215,3 +215,27 @@ class ReportGradeOut(BaseModel):
     @field_serializer("overall_grade")
     def _two_dp(self, v: Decimal | None) -> str | None:
         return None if v is None else f"{v:.2f}"
+
+
+class EvaluationFinalizeOut(BaseModel):
+    """What ``POST .../evaluations/{evid}/finalize`` returns (W5-3).
+
+    A provisional shape: Task 10's ``EvaluationBreakdownOut`` adds the per-evaluator breakdown
+    with D1 scoping. What is settled here is the caller's immediate question — did my finalize
+    close the gate, and what is the report's grade now.
+
+    ``finalize_gate_satisfied`` is the gate's answer AFTER this finalize, so a first-of-two
+    evaluator sees ``false`` and knows the report is still waiting on a peer, without being
+    told who that peer is (D1).
+    """
+
+    evaluation: EvaluationOut
+    report_status: str
+    finalize_gate_satisfied: bool
+    finalize_policy: str
+    overall_grade: Decimal | None
+    grade_version: int
+
+    @field_serializer("overall_grade")
+    def _two_dp(self, v: Decimal | None) -> str | None:
+        return None if v is None else f"{v:.2f}"

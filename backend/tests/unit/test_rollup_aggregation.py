@@ -2,14 +2,20 @@
 
 Each evaluation carries an ``aggregated_weight``, so a lead evaluator can count for more than
 a shadow one. The report grade is the weighted average of the per-evaluator grades.
+
+This exercises the COMPOSITION — sections to an evaluator grade to a report grade — through
+``compute_evaluation_grade`` and W5-3's ``aggregate_overall_grade``. W5-2's
+``compute_report_grade`` is gone; ``test_scoring_aggregate.py`` covers the aggregate in
+isolation, and what is pinned here is that the two halves still meet on the plan's numbers.
 """
 
 from decimal import Decimal
 
+from app.services.scoring.aggregate import EvaluationFacts, aggregate_overall_grade
 from app.services.scoring.rollup import (
     EvaluationInput,
     SectionGradeInput,
-    compute_report_grade,
+    compute_evaluation_grade,
 )
 
 
@@ -32,58 +38,79 @@ def _ev(*sections: SectionGradeInput, weight: str = "1", eid: str = "e") -> Eval
     )
 
 
+def _facts(ev: EvaluationInput, *, status: str = "completed", unassigned: bool = False) -> EvaluationFacts:
+    """One evaluation's aggregation facts, with its sections already folded into a grade."""
+    return EvaluationFacts(
+        evaluation_id=ev.evaluation_id,
+        status=status,
+        overall_grade=compute_evaluation_grade(ev),
+        aggregated_weight=ev.aggregated_weight,
+        is_unassigned=unassigned,
+    )
+
+
+def _report_grade(*evaluations: EvaluationInput, **kw: object) -> Decimal | None:
+    return aggregate_overall_grade([_facts(e, **kw) for e in evaluations])  # type: ignore[arg-type]
+
+
 def test_single_evaluator_report_grade_equals_that_evaluators_grade() -> None:
-    assert compute_report_grade([_ev(_s("8"), _s("6"))]) == Decimal("7.00")
+    assert _report_grade(_ev(_s("8"), _s("6"))) == Decimal("7.00")
 
 
 def test_report_grade_is_weighted_average_of_evaluator_grades() -> None:
     # Equal aggregated_weight -> plain mean of 8 and 6.
-    assert compute_report_grade([_ev(_s("8"), eid="a"), _ev(_s("6"), eid="b")]) == Decimal("7.00")
+    assert _report_grade(_ev(_s("8"), eid="a"), _ev(_s("6"), eid="b")) == Decimal("7.00")
 
 
 def test_report_grade_honors_unequal_aggregated_weights() -> None:
     # (9*3 + 5*1) / 4 = 8
     evaluations = [_ev(_s("9"), weight="3", eid="lead"), _ev(_s("5"), weight="1", eid="shadow")]
-    assert compute_report_grade(evaluations) == Decimal("8.00")
+    assert _report_grade(*evaluations) == Decimal("8.00")
 
 
 def test_report_grade_excludes_evaluations_with_no_grades() -> None:
     # An assigned-but-unstarted evaluator must not pull the report toward zero, and their
     # weight must leave the denominator too: this is 8, not 4.
     evaluations = [_ev(_s("8"), eid="done"), _ev(_s(None), weight="5", eid="unstarted")]
-    assert compute_report_grade(evaluations) == Decimal("8.00")
+    assert _report_grade(*evaluations) == Decimal("8.00")
 
 
 def test_report_grade_returns_none_when_no_evaluation_has_grades() -> None:
-    assert compute_report_grade([_ev(_s(None), eid="a"), _ev(_s(None), eid="b")]) is None
+    assert _report_grade(_ev(_s(None), eid="a"), _ev(_s(None), eid="b")) is None
 
 
 def test_report_grade_returns_none_when_report_has_no_evaluations() -> None:
-    assert compute_report_grade([]) is None
+    assert _report_grade() is None
 
 
 def test_report_grade_ignores_zero_weight_evaluations() -> None:
     evaluations = [_ev(_s("8"), eid="counts"), _ev(_s("2"), weight="0", eid="ignored")]
-    assert compute_report_grade(evaluations) == Decimal("8.00")
+    assert _report_grade(*evaluations) == Decimal("8.00")
 
 
-def test_contributing_evaluations_currently_ignores_evaluation_status() -> None:
-    """W5-3 replaces this with the finalize_policy branch (G-6); expect to rewrite.
+def test_report_grade_excludes_an_in_progress_evaluation() -> None:
+    """The W5-2 behaviour this replaces: an in-progress evaluation used to contribute.
 
-    W5-2's provisional M8 policy: any evaluation with at least one graded section contributes,
-    so a grade is visible before anyone finalizes. EvaluationInput deliberately carries no
-    status field yet — when W5-3 adds one and honours all_must_finalize, this test should fail
-    loudly rather than let the behaviour drift unnoticed.
+    W5-2's provisional M8 policy let any evaluation with a graded section count, so a grade was
+    visible before anyone finalized. L7 narrows the numerator to completed evaluations, which is
+    why the same input now yields None.
     """
     in_progress = _ev(_s("8"), eid="still-grading")
-    assert compute_report_grade([in_progress]) == Decimal("8.00")
+    assert _report_grade(in_progress, status="in_progress") is None
+
+
+def test_report_grade_excludes_an_unassigned_evaluation() -> None:
+    # L5 renormalization: the survivor's grade stands unscaled, the removed weight simply goes.
+    kept = _ev(_s("8"), eid="kept")
+    dropped = _ev(_s("2"), weight="4", eid="dropped")
+    assert aggregate_overall_grade([_facts(kept), _facts(dropped, unassigned=True)]) == Decimal("8.00")
 
 
 def test_report_grade_quantizes_after_aggregating_not_before() -> None:
     # Per-evaluator grades are already 2dp (they are persisted values); the aggregate rounds
     # once at the end. 7.33 and 7.34 average to exactly 7.335 -> HALF_UP -> 7.34.
     evaluations = [_ev(_s("7.33"), eid="a"), _ev(_s("7.34"), eid="b")]
-    assert compute_report_grade(evaluations) == Decimal("7.34")
+    assert _report_grade(*evaluations) == Decimal("7.34")
 
 
 def test_golden_path_two_evaluators_weighted_report_grade_is_7_41() -> None:
@@ -109,4 +136,4 @@ def test_golden_path_two_evaluators_weighted_report_grade_is_7_41() -> None:
         eid="lead",
     )
     shadow = _ev(_s("5.58"), _s("6.00"), weight="1", eid="shadow")
-    assert compute_report_grade([lead, shadow]) == Decimal("7.41")
+    assert _report_grade(lead, shadow) == Decimal("7.41")
