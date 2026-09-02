@@ -109,20 +109,49 @@ def test_rubric_criterion_bounds_rejected() -> None:
     )
 
 
-def test_pass_fail_with_grade_min_rejected() -> None:
-    assert (
-        section_invariant_error(
-            field_type="rich_text",
-            char_limit=None,
-            choice_config=None,
-            grade_mode="pass_fail",
-            grade_min=0.0,
-            grade_max=None,
-            rubric_criteria=None,
-            grade_weight=1.0,
-        )
-        is not None
+def _pass_fail(**kw) -> str | None:
+    base = dict(
+        field_type="rich_text",
+        char_limit=None,
+        choice_config=None,
+        grade_mode="pass_fail",
+        grade_min=None,
+        grade_max=None,
+        rubric_criteria=None,
+        grade_weight=1.0,
     )
+    return section_invariant_error(**{**base, **kw})
+
+
+def test_pass_fail_without_bounds_is_valid() -> None:
+    # Sections authored before bounds were allowed carry neither; they stay valid and scale
+    # onto [0, 1] at rollup.
+    assert _pass_fail() is None
+
+
+def test_pass_fail_with_both_bounds_is_valid() -> None:
+    # Declares what a pass is worth, so it can sit on a mixed template beside numeric sections.
+    assert _pass_fail(grade_min=0.0, grade_max=10.0) is None
+
+
+def test_pass_fail_with_only_grade_min_rejected() -> None:
+    assert _pass_fail(grade_min=0.0) is not None
+
+
+def test_pass_fail_with_only_grade_max_rejected() -> None:
+    assert _pass_fail(grade_max=10.0) is not None
+
+
+def test_pass_fail_with_inverted_bounds_rejected() -> None:
+    assert _pass_fail(grade_min=10.0, grade_max=0.0) is not None
+
+
+def test_pass_fail_with_equal_bounds_rejected() -> None:
+    assert _pass_fail(grade_min=5.0, grade_max=5.0) is not None
+
+
+def test_pass_fail_with_rubric_criteria_rejected() -> None:
+    assert _pass_fail(rubric_criteria=[{"name": "C", "weight": 1.0, "max_score": 5}]) is not None
 
 
 def test_not_graded_with_rubric_rejected() -> None:

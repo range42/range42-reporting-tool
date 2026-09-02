@@ -154,6 +154,8 @@ class EvaluationOut(BaseModel):
     evaluator_id: str
     status: str
     overall_feedback: str | None
+    # A7 sole-writer: rollup.py computes this; no route sets it directly.
+    overall_grade: Decimal | None
     completed_at: datetime | None
     reopen_count: int
     graded_section_count: int
@@ -171,6 +173,7 @@ class EvaluationOut(BaseModel):
             evaluator_id=str(e.evaluator_id),
             status=e.status,
             overall_feedback=e.overall_feedback,
+            overall_grade=e.overall_grade,
             completed_at=e.completed_at,
             reopen_count=e.reopen_count,
             graded_section_count=graded,
@@ -186,3 +189,29 @@ class EvaluationDetailOut(EvaluationOut):
     # E3 — exposed so a client can detect that a reopen invalidated published numbers.
     grade_version: int
     sections: list[GradableSectionOut]
+
+
+class ManualGradeRequest(BaseModel):
+    """Body of ``PUT .../reports/{rid}/overall-grade`` (M9).
+
+    ``overall_grade=None`` clears the override and hands the number back to the rollup.
+    ``reason`` is mandatory and lands in the audit row — the §6.8 reopen precedent.
+    The bounds mirror ``report.overall_grade``'s NUMERIC(5,2): anything the column could not
+    store is refused here, with the caller's own digits, instead of surfacing as a DB error.
+    """
+
+    overall_grade: Decimal | None = Field(default=None, ge=0, max_digits=5, decimal_places=2)
+    reason: str = Field(min_length=1)
+
+
+class ReportGradeOut(BaseModel):
+    """The report-level grade state after a manual set/clear — what the M9 route returns."""
+
+    report_id: str
+    overall_grade: Decimal | None
+    overall_grade_is_manual: bool
+    grade_version: int
+
+    @field_serializer("overall_grade")
+    def _two_dp(self, v: Decimal | None) -> str | None:
+        return None if v is None else f"{v:.2f}"

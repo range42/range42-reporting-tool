@@ -31,10 +31,12 @@ from app.schemas.evaluation import (
     EvaluationOut,
     EvaluationUpdate,
     GradableSectionOut,
+    ManualGradeRequest,
+    ReportGradeOut,
     SectionGradeOut,
     SectionGradeUpsert,
 )
-from app.services.scoring import grade_validation
+from app.services.scoring import grade_validation, rollup
 from app.services.workflow import state_machine
 
 router = APIRouter(tags=["evaluations"])
@@ -398,9 +400,11 @@ async def upsert_section_grade(
         details={"evaluation_id": str(ev.id), "report_section_id": str(section.id), "grade_mode": defn.grade_mode},
         ip=client_ip(request),
     )
-    # === W5-2 WIRING POINT (A7) ===
-    # rollup.recompute_report_grade(db, report) goes HERE, inside this same transaction.
-    # Leave this comment in place; it is the single insertion point for the grade math.
+    # A7: rollup is the sole writer of report.overall_grade / evaluation.overall_grade /
+    # grade_version, and runs inside THIS transaction so a grade write and its rollup are atomic.
+    await rollup.recompute_report_grade(
+        db, report, actor_id=user.id, trigger="section_grade.saved", ip=client_ip(request)
+    )
     await db.refresh(sg)
     return DataEnvelope(data=SectionGradeOut.from_model(sg))
 
@@ -435,3 +439,99 @@ async def list_section_grades(
         .all()
     )
     return DataEnvelope(data=[SectionGradeOut.from_model(g) for g in rows])
+
+
+@router.delete(_BASE + "/{evid}/grades/{section_id}", status_code=204)
+async def delete_section_grade(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    section_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> None:
+    """Remove the caller's grade for one section and recompute (edge case 3).
+
+    NOT IN §6.8 — see ambiguity B6. It exists because a grade has to be retractable and PUT
+    cannot express it: L8's numeric branch REQUIRES ``grade``, so there is no payload meaning
+    "un-grade this". Overloading PUT with null semantics would collide with the mode table, so
+    the retraction gets its own verb.
+
+    Deleting the last grade returns the report to an ungraded state — overall_grade goes back
+    to NULL, not 0, and grade_version still advances because the published number changed.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    ev = await _get_evaluation(db, report.id, evid)
+    _assert_evaluation_access(ev, user)
+    if ev.status == "completed":
+        raise HTTPException(status_code=409, detail={"error": "evaluation_completed"})
+    section, _defn = await _gradable_section(db, report.id, section_id)
+    sg = (
+        await db.execute(
+            select(SectionGrade).where(
+                SectionGrade.evaluation_id == ev.id, SectionGrade.report_section_id == section.id
+            )
+        )
+    ).scalar_one_or_none()
+    if sg is None:
+        raise HTTPException(status_code=404, detail={"error": "grade_not_found"})
+    await db.delete(sg)
+    await db.flush()
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="section_grade.deleted",
+        resource_type="section_grade",
+        resource_id=sg.id,
+        details={"evaluation_id": str(ev.id), "report_section_id": str(section.id)},
+        ip=client_ip(request),
+    )
+    await rollup.recompute_report_grade(
+        db, report, actor_id=user.id, trigger="section_grade.deleted", ip=client_ip(request)
+    )
+
+
+# --- M9: manual overall-grade override ------------------------------------------------
+#
+# ROUTER HOME (locked): the path is report-scoped, so ``reports.py`` would be the obvious host,
+# but the handler has to reach ``rollup`` and every grade-writing route belongs in ONE file so
+# the sole-writer surface (M2) can be audited by reading a single module. Hence it lives here.
+
+
+@router.put("/exercises/{exercise_id}/reports/{rid}/overall-grade")
+async def set_overall_grade(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    body: ManualGradeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[ReportGradeOut]:
+    """Set ``report.overall_grade`` by hand, or clear the override (M9, §4.2).
+
+    Authorization: Global Admin, or an evaluator ASSIGNED TO THIS REPORT. Holding
+    ``evaluations:write`` in the exercise is not enough — D1 (E1) applies to the report-level
+    number exactly as it does to a peer's evaluation, so an unassigned evaluator 403s. Every
+    rejection precedes the first write, so a refused call leaves no row and no audit trail.
+
+    ``overall_grade=None`` clears the flag and recomputes at once, so the report never sits on a
+    stale hand-set number. Both branches go through ``rollup.set_manual_grade`` (M2) and both
+    bump ``grade_version`` (D3) because either way a new number is published.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    if not user.is_global_admin and await _existing_evaluation(db, report.id, user.id) is None:
+        raise HTTPException(status_code=403, detail={"error": "not_assigned_to_report"})
+    await rollup.set_manual_grade(
+        db, report, body.overall_grade, actor_id=user.id, reason=body.reason, ip=client_ip(request)
+    )
+    return DataEnvelope(
+        data=ReportGradeOut(
+            report_id=str(report.id),
+            overall_grade=report.overall_grade,
+            overall_grade_is_manual=report.overall_grade_is_manual,
+            grade_version=report.grade_version,
+        )
+    )

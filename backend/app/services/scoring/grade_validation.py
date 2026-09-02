@@ -15,7 +15,7 @@ grade_mode   required                      forbidden                        stor
 ===========  ============================  ===============================  ======================
 numeric      grade in [min, max]           pass_fail_result, rubric_scores  grade
 pass_fail    pass_fail_result              grade, rubric_scores             pass_fail_result + 1/0
-rubric       rubric_scores within criteria grade, pass_fail_result          rubric_scores
+rubric       rubric_scores within criteria grade, pass_fail_result          rubric_scores + pre-rolled grade
 not_graded   --                            everything                       no row, ever
 ===========  ============================  ===============================  ======================
 """
@@ -27,6 +27,7 @@ from typing import Any
 
 from app.models.template_section_def import TemplateSectionDef
 from app.schemas.evaluation import SectionGradeUpsert
+from app.services.scoring import rollup
 
 # Error codes; the route surfaces these verbatim as ``detail["error"]``.
 INVALID_FOR_MODE = "invalid_grade_for_mode"
@@ -48,8 +49,9 @@ class GradeValidationError(Exception):
         self.code = code
 
 
-def _dec(v: float | None) -> Decimal | None:
-    """Float column -> Decimal without binary-float artefacts (grade_* are Float in the DB)."""
+def _dec(v: object) -> Decimal | None:
+    """DB scalar (the grade_* columns are Float) or JSONB number -> Decimal via str, so no
+    binary-float error ever reaches the arithmetic. Never route a value through float() first."""
     return None if v is None else Decimal(str(v))
 
 
@@ -85,7 +87,7 @@ def _validate_rubric(defn: TemplateSectionDef, body: SectionGradeUpsert) -> Vali
         raise GradeValidationError(NO_RUBRIC_CRITERIA)
     if body.rubric_scores is None:
         raise GradeValidationError(INVALID_FOR_MODE)
-    maxima = {str(c.get("name")): _dec(float(c.get("max_score", 0))) for c in defn.rubric_criteria}
+    maxima = {str(c.get("name")): _dec(c.get("max_score", 0)) for c in defn.rubric_criteria}
     scored: list[dict[str, Any]] = []
     for entry in body.rubric_scores:
         ceiling = maxima.get(entry.criterion)
@@ -93,8 +95,13 @@ def _validate_rubric(defn: TemplateSectionDef, body: SectionGradeUpsert) -> Vali
             raise GradeValidationError(INVALID_FOR_MODE)
         # score as str, not float: JSONB has no Decimal and a float here would bite W5-2.
         scored.append({"criterion": entry.criterion, "score": str(entry.score), "note": entry.note})
-    # grade stays NULL — W5-2's pre-rollup derives the number from these scores.
-    return None, None, scored
+    # M7 — pre-roll the criteria into the section's own grade and persist it alongside the
+    # scores, so the report rollup reads one number per section instead of re-deriving the
+    # rubric every time. rollup.compute_rubric_rollup is the sole owner of that formula.
+    grade = rollup.compute_rubric_rollup(
+        defn.rubric_criteria, scored, grade_min=_dec(defn.grade_min), grade_max=_dec(defn.grade_max)
+    )
+    return grade, None, scored
 
 
 _VALIDATORS = {

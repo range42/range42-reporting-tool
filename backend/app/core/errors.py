@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -16,8 +18,11 @@ def _sanitize_item(obj: object) -> object:
 
     The ``isinstance(Exception)`` guard is checked first so it applies uniformly
     regardless of nesting depth — top-level, dict value, or list item.
+
+    ``Decimal`` gets the same treatment: a ``ge``/``le``/``max_digits`` constraint on a
+    ``Decimal`` field is echoed into ``ctx`` as a ``Decimal``, which ``json`` refuses too.
     """
-    if isinstance(obj, Exception):
+    if isinstance(obj, Exception | Decimal):
         return str(obj)
     if isinstance(obj, dict):
         return {k: _sanitize_item(v) for k, v in obj.items()}
