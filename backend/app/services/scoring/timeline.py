@@ -21,10 +21,9 @@ from app.services.scoring.rollup import (
     EvaluationInput,
     SectionGradeInput,
     compute_section_value,
-    compute_weighted_average,
     has_mixed_grade_max,
-    quantize_grade,
 )
+from app.services.scoring.weighting import compute_weighted_average, quantize_grade
 
 
 @dataclass(frozen=True)

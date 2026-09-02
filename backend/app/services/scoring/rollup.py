@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import ROUND_HALF_UP, Decimal, localcontext
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import record_audit
 from app.models import Evaluation, Report, ReportSection, ReportTemplate, SectionGrade, TemplateSectionDef
+from app.services.scoring.weighting import compute_weighted_average, quantize_grade
 
 if TYPE_CHECKING:  # timeline imports rollup, so keep this one-directional at runtime
     from app.services.scoring.timeline import TimelineEntry
@@ -39,14 +40,6 @@ if TYPE_CHECKING:  # timeline imports rollup, so keep this one-directional at ru
 logger = structlog.get_logger(__name__)
 
 _GRADE_MODES = frozenset({"numeric", "pass_fail", "rubric", "not_graded"})
-
-_CENTS = Decimal("0.01")
-# report.overall_grade and section_grade.grade are both NUMERIC(5,2).
-_MAX_NUMERIC_5_2 = Decimal("999.99")
-
-
-class RollupOverflow(Exception):
-    """A computed grade exceeds NUMERIC(5,2). Indicates a template grade_max misconfiguration."""
 
 
 @dataclass(frozen=True)
@@ -201,32 +194,6 @@ def has_mixed_grade_max(sections: Sequence[SectionGradeInput]) -> bool:
     """
     maxima = {s.grade_max for s in sections if s.grade_mode != "not_graded" and s.grade_max is not None}
     return len(maxima) > 1
-
-
-def quantize_grade(value: Decimal) -> Decimal:
-    """Round to the column's 2 decimal places, HALF_UP (M11). Only called on persist.
-
-    HALF_UP, not Python's default banker's rounding: 8.125 becomes 8.13, not 8.12. Repeatedly
-    rounding half-to-even would bias a long run of grades downward, and it surprises anyone
-    checking the arithmetic by hand.
-    """
-    if value > _MAX_NUMERIC_5_2 or value < -_MAX_NUMERIC_5_2:
-        raise RollupOverflow(f"grade {value} exceeds NUMERIC(5,2)")
-    return value.quantize(_CENTS, rounding=ROUND_HALF_UP)
-
-
-def compute_weighted_average(pairs: Sequence[tuple[Decimal, Decimal]]) -> Decimal | None:
-    """Σ(value × weight) / Σ weight (§4.2).
-
-    None when the denominator is zero — callers must persist that as SQL NULL, never as 0.
-    Shared with Task 5's report-level aggregation; there is deliberately one implementation.
-    """
-    total_weight = sum((w for _, w in pairs), Decimal(0))
-    if total_weight == 0:
-        return None
-    with localcontext() as ctx:
-        ctx.prec = 28
-        return sum((v * w for v, w in pairs), Decimal(0)) / total_weight
 
 
 def compute_evaluation_grade(ev: EvaluationInput) -> Decimal | None:
