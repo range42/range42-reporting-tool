@@ -391,3 +391,78 @@ async def _audit_actions(migrated_db, resource_id):
             .scalars()
             .all()
         )
+
+
+# --- any_can_finalize: the gate opening must not lock out the remaining evaluators ----
+
+
+async def test_remaining_evaluators_can_still_finalize_after_the_gate_opened(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Under ``any_can_finalize`` the first finalize marks the report evaluated (§7.2).
+
+    That must not strand the other evaluators: their own work is still in progress, and
+    refusing it would leave an evaluation permanently un-finalizable through no fault of the
+    person assigned to it.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        for (h, evid), value in zip(graders, ("8", "6"), strict=True):
+            await _grade(c, ex, rid, evid, sid, value, h)
+        await _set_policy(migrated_db, ex, ANY_CAN_FINALIZE)
+        first_h, first_evid = graders[0]
+        second_h, second_evid = graders[1]
+        assert (await c.post(_finalize_url(ex, rid, first_evid), headers=first_h)).status_code == 200
+        assert (await _report_row(migrated_db, rid))[0] == "evaluated"
+
+        # Act
+        r = await c.post(_finalize_url(ex, rid, second_evid), headers=second_h)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["report_status"] == "evaluated"
+    status, _at, _g, _by, _ovr = await _evaluation_row(migrated_db, second_evid)
+    assert status == "completed"
+
+
+async def test_a_later_finalize_republishes_the_aggregate_with_a_new_version(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """The second evaluator joins the numerator, so the published number changes."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        for (h, evid), value in zip(graders, ("8", "6"), strict=True):
+            await _grade(c, ex, rid, evid, sid, value, h)
+        await _set_policy(migrated_db, ex, ANY_CAN_FINALIZE)
+        first_h, first_evid = graders[0]
+        second_h, second_evid = graders[1]
+        await c.post(_finalize_url(ex, rid, first_evid), headers=first_h)
+        assert await _report_row(migrated_db, rid) == ("evaluated", Decimal("8.00"), 1)
+
+        # Act
+        await c.post(_finalize_url(ex, rid, second_evid), headers=second_h)
+
+    # Assert: (8 + 6) / 2 = 7.00, published as a new version so consumers see the supersession.
+    assert await _report_row(migrated_db, rid) == ("evaluated", Decimal("7.00"), 2)
+
+
+async def test_finalizing_an_evaluated_report_does_not_transition_it_again(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """``evaluated -> evaluated`` is not a legal transition; the settle step must not attempt it."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        for h, evid in graders:
+            await _grade(c, ex, rid, evid, sid, "8", h)
+        await _set_policy(migrated_db, ex, ANY_CAN_FINALIZE)
+        for h, evid in graders:
+            assert (await c.post(_finalize_url(ex, rid, evid), headers=h)).status_code == 200
+
+    # Assert: exactly one report.evaluated row, not one per finalize.
+    assert (await _audit_actions(migrated_db, rid)).count("report.evaluated") == 1

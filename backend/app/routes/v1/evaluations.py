@@ -542,6 +542,15 @@ async def set_overall_grade(
 
 # --- W5-3: finalize -------------------------------------------------------------------
 
+# An evaluator may finalize their own work while the report is under evaluation OR already
+# evaluated. The second case is ``any_can_finalize``: the first finalize opens the gate and the
+# report becomes ``evaluated`` immediately, but the other assigned evaluators are still
+# mid-grading. Refusing them would strand their evaluations permanently — un-finalizable
+# through no fault of theirs, and invisible in the breakdown — so the gate opening must not
+# double as a deadline. Their later finalize still joins the aggregate and publishes a new
+# grade_version, which is how a consumer notices the number was refined.
+_FINALIZABLE_REPORT_STATUSES = frozenset({"under_evaluation", "evaluated"})
+
 
 async def _lock_report(db: AsyncSession, report_id: uuid.UUID) -> None:
     """Serialize concurrent finalizes of the same report, BEFORE the guards run.
@@ -589,7 +598,7 @@ async def _assert_finalizable(db: AsyncSession, ev: Evaluation, report: Report, 
         raise HTTPException(status_code=409, detail={"error": "evaluation_unassigned"})
     if ev.status == "completed":
         raise HTTPException(status_code=409, detail={"error": "already_finalized"})
-    if report.status != "under_evaluation":
+    if report.status not in _FINALIZABLE_REPORT_STATUSES:
         raise HTTPException(status_code=409, detail={"error": "invalid_state", "status": report.status})
     missing = await _ungraded_section_def_ids(db, report.id, ev.id)
     if missing:
@@ -616,7 +625,10 @@ async def _settle_finalize_gate(
     mode = await resolve_finalize_policy(db, exercise_id)
     facts = await rollup.load_evaluation_facts(db, report.id)
     satisfied = is_gate_open(facts, mode)
-    if satisfied:
+    # Only an under_evaluation report has anywhere to go: ``evaluated -> evaluated`` is not a
+    # legal edge, and attempting it on a later finalize would raise InvalidTransition and emit
+    # a second report.evaluated row for one crossing.
+    if satisfied and report.status == "under_evaluation":
         await state_machine.transition(
             db,
             report,
