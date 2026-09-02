@@ -32,6 +32,7 @@ from app.schemas.evaluation import (
     EvaluationFinalizeOut,
     EvaluationOut,
     EvaluationUpdate,
+    FinalizeRequest,
     GradableSectionOut,
     ManualGradeRequest,
     ReportGradeOut,
@@ -605,6 +606,37 @@ async def _assert_finalizable(db: AsyncSession, ev: Evaluation, report: Report, 
         raise HTTPException(status_code=409, detail={"error": "section_grade_missing", "section_def_ids": missing})
 
 
+async def _resolve_finalize_actor(
+    db: AsyncSession, evaluation: Evaluation, body: FinalizeRequest, actor: User
+) -> tuple[uuid.UUID, bool]:
+    """Who is CREDITED with this finalize, and is it an admin override?
+
+    Mirrors ``reports.py::_resolve_on_behalf_of`` (§4.2 deadlock resolution) with one extra
+    check the approval chain cannot make: an approval step names a *role*, which many users may
+    satisfy, but an evaluation names exactly one evaluator — so ``on_behalf_of`` must name them.
+    The stricter check is available here, so it is taken.
+
+    The returned id is the credited EVALUATOR. ``finalized_by`` is set to the actor at the call
+    site, never to this value: conflating them is how the dispute trail starts lying about who
+    pressed the button.
+    """
+    if body.on_behalf_of is None:
+        return actor.id, False
+    if not actor.is_global_admin:
+        raise HTTPException(status_code=403, detail={"error": "not_global_admin"})
+    if not (body.comment or "").strip():
+        raise HTTPException(status_code=422, detail={"error": "comment_required"})
+    try:
+        target_id = uuid.UUID(body.on_behalf_of)
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"error": "invalid_on_behalf_of"}) from None
+    if (await db.execute(select(User.id).where(User.id == target_id))).scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail={"error": "user_not_found", "user_id": body.on_behalf_of})
+    if target_id != evaluation.evaluator_id:
+        raise HTTPException(status_code=422, detail={"error": "on_behalf_of_mismatch"})
+    return target_id, True
+
+
 async def _settle_finalize_gate(
     db: AsyncSession,
     report: Report,
@@ -638,16 +670,6 @@ async def _settle_finalize_gate(
             details={"finalize_policy": mode, "evaluation_id": str(evaluation_id)},
             ip=ip,
         )
-    else:
-        await record_audit(
-            db,
-            user_id=actor_id,
-            action="evaluation.completed",
-            resource_type="evaluation",
-            resource_id=evaluation_id,
-            details={"finalize_policy": mode, "finalize_gate_satisfied": False},
-            ip=ip,
-        )
     return satisfied, mode
 
 
@@ -657,6 +679,7 @@ async def finalize_evaluation(
     exercise_id: uuid.UUID,
     rid: uuid.UUID,
     evid: uuid.UUID,
+    body: FinalizeRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
@@ -666,18 +689,23 @@ async def finalize_evaluation(
     ORDER IS LOAD-BEARING: lock, guard, complete the evaluation, recompute the aggregate,
     THEN ask the gate. A gate settled before the recompute would fire ``report.evaluated``
     carrying the previous grade — announcing a number that the same request then changes.
+
+    An evaluator finalizing their own work sends no body. A Global Admin may send
+    ``on_behalf_of`` + ``comment`` to break a deadlock (D2) — see ``_resolve_finalize_actor``.
     """
+    body = body or FinalizeRequest()
     report: Report = await _get_report(db, exercise_id, rid)
     await _lock_report(db, report.id)
     ev = await _get_evaluation(db, report.id, evid)
     await _assert_finalizable(db, ev, report, user)
+    credited_evaluator_id, is_override = await _resolve_finalize_actor(db, ev, body, user)
 
     ev.status = "completed"
     ev.completed_at = datetime.now(UTC)
+    # ``finalized_by`` is the ACTOR, ``evaluator_id`` stays the credited evaluator (D2).
     ev.finalized_by = user.id
-    # D2's finalize-on-behalf-of is Task 8; what is recorded here is the plain fact that
-    # somebody other than the assigned evaluator pressed the button.
-    ev.finalize_is_admin_override = ev.evaluator_id != user.id
+    ev.finalize_is_admin_override = is_override
+    ev.finalize_comment = body.comment if is_override else None
     await db.flush()
 
     # A7: rollup stays the sole writer of overall_grade / grade_version.
@@ -690,6 +718,24 @@ async def finalize_evaluation(
         exercise_id=exercise_id,
         evaluation_id=ev.id,
         actor_id=user.id,
+        ip=client_ip(request),
+    )
+    # One row per finalize, on the evaluation, whichever way the gate went — the override facts
+    # must be recoverable even when the same request also emitted report.evaluated.
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="evaluation.completed",
+        resource_type="evaluation",
+        resource_id=ev.id,
+        details={
+            "finalize_policy": mode,
+            "finalize_gate_satisfied": satisfied,
+            "is_admin_override": is_override,
+            "credited_evaluator_id": str(credited_evaluator_id),
+            "comment": ev.finalize_comment,
+            "grade_version": report.grade_version,
+        },
         ip=client_ip(request),
     )
     return DataEnvelope(

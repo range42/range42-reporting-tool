@@ -217,6 +217,19 @@ class ReportGradeOut(BaseModel):
         return None if v is None else f"{v:.2f}"
 
 
+class FinalizeRequest(BaseModel):
+    """Body of ``POST .../evaluations/{evid}/finalize``. Both fields are optional.
+
+    An evaluator finalizing their own work sends nothing. ``on_behalf_of`` is D2's deadlock
+    exit: a Global Admin finalizes in an absent evaluator's name, and ``comment`` — mandatory
+    in that case, enforced in the handler rather than here so the error is
+    ``comment_required`` instead of a generic 422 shape — records why.
+    """
+
+    on_behalf_of: str | None = None
+    comment: str | None = None
+
+
 class EvaluationFinalizeOut(BaseModel):
     """What ``POST .../evaluations/{evid}/finalize`` returns (W5-3).
 
