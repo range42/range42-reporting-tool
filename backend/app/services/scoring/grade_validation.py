@@ -49,8 +49,9 @@ class GradeValidationError(Exception):
         self.code = code
 
 
-def _dec(v: float | None) -> Decimal | None:
-    """Float column -> Decimal without binary-float artefacts (grade_* are Float in the DB)."""
+def _dec(v: object) -> Decimal | None:
+    """DB scalar (the grade_* columns are Float) or JSONB number -> Decimal via str, so no
+    binary-float error ever reaches the arithmetic. Never route a value through float() first."""
     return None if v is None else Decimal(str(v))
 
 
@@ -86,7 +87,7 @@ def _validate_rubric(defn: TemplateSectionDef, body: SectionGradeUpsert) -> Vali
         raise GradeValidationError(NO_RUBRIC_CRITERIA)
     if body.rubric_scores is None:
         raise GradeValidationError(INVALID_FOR_MODE)
-    maxima = {str(c.get("name")): _dec(float(c.get("max_score", 0))) for c in defn.rubric_criteria}
+    maxima = {str(c.get("name")): _dec(c.get("max_score", 0)) for c in defn.rubric_criteria}
     scored: list[dict[str, Any]] = []
     for entry in body.rubric_scores:
         ceiling = maxima.get(entry.criterion)
