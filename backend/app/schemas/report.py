@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
 
 from app.models.approval_record import ApprovalRecord
 from app.models.report import Report
@@ -172,7 +173,42 @@ def _writer_choice_config(cfg: dict[str, Any] | None) -> dict[str, Any] | None:
     return {**cfg, "values": values}
 
 
-class ReportOut(BaseModel):
+def _two_dp(v: Decimal | None) -> str | None:
+    """Pin NUMERIC(5,2) to one wire form — the same one ``SectionGradeOut`` uses."""
+    return None if v is None else f"{v:.2f}"
+
+
+class _GatedGradeFields(BaseModel):
+    """M17 — the report-level grade, visible only to callers the route has cleared.
+
+    Adding ``overall_grade`` to ``ReportOut`` unconditionally would leak it to every team member
+    who can read the report, including while ``scoring_config.teams_see_own_scores`` is false.
+    So the three fields are ``None`` unless the route passes ``grade_visible=True``: Global
+    Admin, ``scoring:read:all`` holders, and team members once the report is ``evaluated`` and
+    the config allows it. ``None`` therefore means "not shown to you", not "not graded" — a
+    cleared caller sees an ungraded report as ``overall_grade=None`` with ``grade_version=0``.
+    """
+
+    overall_grade: Decimal | None = None
+    overall_grade_is_manual: bool | None = None
+    grade_version: int | None = None
+
+    @field_serializer("overall_grade")
+    def _grade_two_dp(self, v: Decimal | None) -> str | None:
+        return _two_dp(v)
+
+    @staticmethod
+    def _grade_kwargs(r: Report, grade_visible: bool) -> dict[str, Any]:
+        if not grade_visible:
+            return {}
+        return {
+            "overall_grade": r.overall_grade,
+            "overall_grade_is_manual": r.overall_grade_is_manual,
+            "grade_version": r.grade_version,
+        }
+
+
+class ReportOut(_GatedGradeFields):
     id: str
     exercise_id: str
     team_id: str
@@ -192,7 +228,9 @@ class ReportOut(BaseModel):
     updated_at: datetime
 
     @classmethod
-    def from_model(cls, r: Report, section_count: int, *, can_approve: bool = False) -> ReportOut:
+    def from_model(
+        cls, r: Report, section_count: int, *, can_approve: bool = False, grade_visible: bool = False
+    ) -> ReportOut:
         return cls(
             id=str(r.id),
             exercise_id=str(r.exercise_id),
@@ -211,10 +249,11 @@ class ReportOut(BaseModel):
             can_approve=can_approve,
             created_at=r.created_at,
             updated_at=r.updated_at,
+            **cls._grade_kwargs(r, grade_visible),
         )
 
 
-class ReportDetailOut(BaseModel):
+class ReportDetailOut(_GatedGradeFields):
     id: str
     exercise_id: str
     team_id: str
@@ -244,6 +283,7 @@ class ReportDetailOut(BaseModel):
         approval_records: list[ApprovalRecord] | None = None,
         *,
         can_approve: bool = False,
+        grade_visible: bool = False,
     ) -> ReportDetailOut:
         return cls(
             id=str(r.id),
@@ -266,4 +306,5 @@ class ReportDetailOut(BaseModel):
             can_approve=can_approve,
             created_at=r.created_at,
             updated_at=r.updated_at,
+            **cls._grade_kwargs(r, grade_visible),
         )

@@ -31,6 +31,8 @@ from app.schemas.evaluation import (
     EvaluationOut,
     EvaluationUpdate,
     GradableSectionOut,
+    ManualGradeRequest,
+    ReportGradeOut,
     SectionGradeOut,
     SectionGradeUpsert,
 )
@@ -488,4 +490,48 @@ async def delete_section_grade(
     )
     await rollup.recompute_report_grade(
         db, report, actor_id=user.id, trigger="section_grade.deleted", ip=client_ip(request)
+    )
+
+
+# --- M9: manual overall-grade override ------------------------------------------------
+#
+# ROUTER HOME (locked): the path is report-scoped, so ``reports.py`` would be the obvious host,
+# but the handler has to reach ``rollup`` and every grade-writing route belongs in ONE file so
+# the sole-writer surface (M2) can be audited by reading a single module. Hence it lives here.
+
+
+@router.put("/exercises/{exercise_id}/reports/{rid}/overall-grade")
+async def set_overall_grade(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    body: ManualGradeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[ReportGradeOut]:
+    """Set ``report.overall_grade`` by hand, or clear the override (M9, §4.2).
+
+    Authorization: Global Admin, or an evaluator ASSIGNED TO THIS REPORT. Holding
+    ``evaluations:write`` in the exercise is not enough — D1 (E1) applies to the report-level
+    number exactly as it does to a peer's evaluation, so an unassigned evaluator 403s. Every
+    rejection precedes the first write, so a refused call leaves no row and no audit trail.
+
+    ``overall_grade=None`` clears the flag and recomputes at once, so the report never sits on a
+    stale hand-set number. Both branches go through ``rollup.set_manual_grade`` (M2) and both
+    bump ``grade_version`` (D3) because either way a new number is published.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    if not user.is_global_admin and await _existing_evaluation(db, report.id, user.id) is None:
+        raise HTTPException(status_code=403, detail={"error": "not_assigned_to_report"})
+    await rollup.set_manual_grade(
+        db, report, body.overall_grade, actor_id=user.id, reason=body.reason, ip=client_ip(request)
+    )
+    return DataEnvelope(
+        data=ReportGradeOut(
+            report_id=str(report.id),
+            overall_grade=report.overall_grade,
+            overall_grade_is_manual=report.overall_grade_is_manual,
+            grade_version=report.grade_version,
+        )
     )

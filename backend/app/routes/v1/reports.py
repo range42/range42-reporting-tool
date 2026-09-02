@@ -15,6 +15,7 @@ from app.core.permissions import (
     REPORTS_RECALL,
     REPORTS_SUBMIT,
     REPORTS_WRITE,
+    SCORING_READ_ALL,
 )
 from app.core.rbac import get_current_user, require_global_admin, require_permission, require_permission_any
 from app.core.sanitize import html_to_plain, sanitize_html
@@ -24,6 +25,7 @@ from app.models import (
     Report,
     ReportSection,
     ReportTemplate,
+    ScoringConfig,
     Team,
     TeamMember,
     TemplateSectionDef,
@@ -128,6 +130,37 @@ async def _assert_report_access(
     if not write and await _has_permission(db, exercise_id, user, REPORTS_READ_ALL):
         return
     raise HTTPException(status_code=403, detail="insufficient permissions")
+
+
+class _GradeGate:
+    """M17 — decides, per report, whether the caller may see the report-level grade.
+
+    The caller-level facts (Global Admin, ``scoring:read:all``, the exercise's
+    ``teams_see_own_scores``) are resolved ONCE per request; ``allows`` then costs nothing per
+    row, so the list route stays free of an N+1 over the page.
+
+    Rule: Global Admin and ``scoring:read:all`` holders always see it. A team member sees it
+    only once the report is ``evaluated`` AND ``teams_see_own_scores`` is true — before that
+    a half-graded number would be published to the team being graded. Anyone else (a caller
+    with ``reports:read:all`` but no scoring read, should such a role ever exist) sees nothing.
+    """
+
+    def __init__(self, *, reads_all_scores: bool, teams_see_own_scores: bool) -> None:
+        self._reads_all_scores = reads_all_scores
+        self._teams_see_own_scores = teams_see_own_scores
+
+    @classmethod
+    async def resolve(cls, db: AsyncSession, exercise_id: uuid.UUID, user: User) -> _GradeGate:
+        reads_all = user.is_global_admin or await _has_permission(db, exercise_id, user, SCORING_READ_ALL)
+        teams_see = (
+            await db.execute(select(ScoringConfig.teams_see_own_scores).where(ScoringConfig.exercise_id == exercise_id))
+        ).scalar_one_or_none()
+        return cls(reads_all_scores=reads_all, teams_see_own_scores=bool(teams_see))
+
+    def allows(self, report: Report, *, is_team_member: bool) -> bool:
+        if self._reads_all_scores:
+            return True
+        return is_team_member and report.status == "evaluated" and self._teams_see_own_scores
 
 
 async def _assert_section_write_access(db: AsyncSession, exercise_id: uuid.UUID, report: Report, user: User) -> None:
@@ -425,11 +458,12 @@ async def list_reports(
     if status is not None:
         filt.append(Report.status == status)
     # team scoping unless caller can read all (or is admin)
+    team_ids = await _caller_team_ids(db, exercise_id, user)
     if not (user.is_global_admin or await _has_permission(db, exercise_id, user, REPORTS_READ_ALL)):
-        team_ids = await _caller_team_ids(db, exercise_id, user)
         if not team_ids:
             return DataEnvelope(data=[], meta=Page(page=pp.page, per_page=pp.per_page, total=0))
         filt.append(Report.team_id.in_(team_ids))
+    grade_gate = await _GradeGate.resolve(db, exercise_id, user)
 
     base = select(Report).where(*filt)
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
@@ -462,6 +496,7 @@ async def list_reports(
             r,
             counts.get(r.id, 0),
             can_approve=await _can_approve(db, exercise_id, r, user, approved_by_report.get(r.id, set())),
+            grade_visible=grade_gate.allows(r, is_team_member=r.team_id in team_ids),
         )
         for r in rows
     ]
@@ -483,9 +518,15 @@ async def get_report(
     await _assert_report_access(db, exercise_id, report, user, write=False)
     approved = await _approved_steps(db, report.id)
     can_approve = await _can_approve(db, exercise_id, report, user, approved)
+    grade_gate = await _GradeGate.resolve(db, exercise_id, user)
+    is_team_member = report.team_id in await _caller_team_ids(db, exercise_id, user)
     return DataEnvelope(
         data=ReportDetailOut.from_models(
-            report, await _section_pairs(db, rid), await _approval_records(db, rid), can_approve=can_approve
+            report,
+            await _section_pairs(db, rid),
+            await _approval_records(db, rid),
+            can_approve=can_approve,
+            grade_visible=grade_gate.allows(report, is_team_member=is_team_member),
         )
     )
 
