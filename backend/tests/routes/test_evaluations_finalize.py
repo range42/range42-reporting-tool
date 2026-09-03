@@ -6,14 +6,18 @@ before a report's grade is aggregated. Exercises created before WP5 have no
 rather than NULL — the aggregation branch reads a mode, never an absence.
 """
 
+import asyncio
 import uuid
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models import AuditLog
+from app.routes.v1.evaluation_finalize import _get_report_for_update
+from app.routes.v1.reports import _get_report
 from app.services.evaluation.finalize_gate import (
     ALL_MUST_FINALIZE,
     ANY_CAN_FINALIZE,
@@ -659,3 +663,213 @@ async def test_report_evaluated_section_grades_exclude_an_unassigned_evaluator(
     assert row.details["overall_grade"] == "9.00"
     [section] = row.details["section_grades"]
     assert section["grade"] == "9.00"
+
+
+# ======================================================================================
+# W5-3 Task 12 — concurrent finalize by two evaluators.
+#
+# THE RACE: finalize reads every sibling evaluation, then writes the parent report. Two
+# evaluators pressing the button at the same instant each read a pre-state in which the other
+# has not finished, so without serialization you get one of two wrong outcomes:
+#
+#   * neither transitions — both see a gate that is still closed, and the report is stuck
+#     ``under_evaluation`` with every evaluator finished; or
+#   * a lost update — each aggregates over its own contribution alone and the last write wins
+#     with half the data, publishing a grade that averages one evaluator.
+#
+# HOW MUCH OF THIS THE HTTP TESTS ACTUALLY COVER: less than it looks. ``asyncio.gather`` over
+# ``httpx.ASGITransport`` does NOT overlap requests in this harness — measured at the handler
+# boundary, request 2 does not enter until request 1 has returned, with one shared client or
+# two. So the gathered tests below are BACK-TO-BACK calls: they pin the idempotence of the
+# outcome (one transition, one event, one version bump, a clean 409) but they cannot fail on a
+# lost update or a stale read.
+#
+# The race itself is therefore exercised at the session level, in the two tests at the end of
+# this block, where two transactions can be driven against each other deterministically.
+#
+# LOCK ORDER IS ALWAYS report-then-evaluation. W5-4's reopen must take the same order or the
+# two slices deadlock against each other in production.
+# ======================================================================================
+
+
+async def _two_graded_evaluators(migrated_db, c, ah, *, grades=("8", "6")):
+    """A submitted report with two evaluators who have graded but not finalized."""
+    ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+    for (h, evid), value in zip(graders, grades, strict=True):
+        await _grade(c, ex, rid, evid, sid, value, h)
+    return ex, rid, sid, graders
+
+
+async def test_back_to_back_finalize_by_two_evaluators_transitions_the_report_exactly_once(
+    migrated_db: async_sessionmaker,
+) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, graders = await _two_graded_evaluators(migrated_db, c, ah)
+        (h_a, evid_a), (h_b, evid_b) = graders
+
+        # Act: gathered, though the harness runs them back-to-back (see the note above).
+        first, second = await asyncio.gather(
+            c.post(_finalize_url(ex, rid, evid_a), headers=h_a),
+            c.post(_finalize_url(ex, rid, evid_b), headers=h_b),
+        )
+
+    # Assert
+    assert {first.status_code, second.status_code} == {200}, (first.text, second.text)
+    assert (await _report_row(migrated_db, rid))[0] == "evaluated"
+    actions = await _audit_actions(migrated_db, rid)
+    assert actions.count("report.evaluated") == 1
+    assert len(await _event_rows(migrated_db, rid)) == 1
+
+
+async def test_back_to_back_finalize_by_two_evaluators_produces_a_consistent_aggregate(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """THE LOST-UPDATE ASSERTION.
+
+    Grades 8 and 6 at equal weight aggregate to 7.00. Either request aggregating over its own
+    contribution alone would publish 8.00 or 6.00 — both plausible-looking numbers, which is
+    what makes this failure mode survive review.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, graders = await _two_graded_evaluators(migrated_db, c, ah, grades=("8", "6"))
+        (h_a, evid_a), (h_b, evid_b) = graders
+
+        # Act
+        await asyncio.gather(
+            c.post(_finalize_url(ex, rid, evid_a), headers=h_a),
+            c.post(_finalize_url(ex, rid, evid_b), headers=h_b),
+        )
+
+    # Assert
+    status, overall, _version = await _report_row(migrated_db, rid)
+    assert status == "evaluated"
+    assert overall == Decimal("7.00")
+
+
+async def test_second_finalize_on_the_same_evaluation_returns_409_not_a_duplicate_transition(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Two presses of ONE evaluator's button — the guard must reject, not re-transition."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        first, second = await asyncio.gather(
+            c.post(_finalize_url(ex, rid, evid), headers=h),
+            c.post(_finalize_url(ex, rid, evid), headers=h),
+        )
+
+    # Assert: exactly one wins, the other is a clean 409 — never a 500 from a duplicate
+    # transition escaping as InvalidTransition.
+    assert sorted([first.status_code, second.status_code]) == [200, 409]
+    loser = first if first.status_code == 409 else second
+    assert loser.json()["error"]["message"] == "already_finalized"
+    assert (await _audit_actions(migrated_db, rid)).count("report.evaluated") == 1
+
+
+async def test_losing_a_finalize_race_does_not_double_bump_grade_version(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """D3 — the version identifies the published grade, so one crossing is one version.
+
+    Two concurrent finalizes publish one aggregate between them. A version bumped twice would
+    tell every consumer the grade changed again when it did not.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, graders = await _two_graded_evaluators(migrated_db, c, ah, grades=("8", "8"))
+        (h_a, evid_a), (h_b, evid_b) = graders
+
+        # Act: identical grades, so the aggregate is 8.00 no matter who lands first and the
+        # version can only move for a real publication.
+        await asyncio.gather(
+            c.post(_finalize_url(ex, rid, evid_a), headers=h_a),
+            c.post(_finalize_url(ex, rid, evid_b), headers=h_b),
+        )
+
+    # Assert
+    _status, overall, version = await _report_row(migrated_db, rid)
+    assert overall == Decimal("8.00")
+    assert version == 1
+
+
+# --- the race, where it can actually be driven: two transactions ------------------------
+
+
+async def _report_ids(migrated_db, c, ah):
+    """A submitted, graded, single-evaluator report. Returns (exercise_id, report_id)."""
+    ex, rid, sid = await submitted_report(c, ah)
+    h, uid = await evaluator(migrated_db, c, ah, ex, "lock-0")
+    evid = await assign(c, ah, ex, rid, uid)
+    await _grade(c, ex, rid, evid, sid, "8", h)
+    return ex, rid
+
+
+async def test_get_report_for_update_sees_state_committed_by_another_transaction(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """THE STALE-READ BUG THIS TASK EXISTS TO CLOSE.
+
+    Locking the row is not enough on its own. A handler that loads the report, THEN blocks on
+    the lock, still holds the attribute values it read before waiting — the sessionmaker uses
+    ``expire_on_commit=False``, so nothing invalidates them. The loser of a finalize race would
+    read ``status == 'under_evaluation'`` from that snapshot, decide the report had not crossed
+    yet, and emit a second ``report.evaluated`` for one crossing.
+
+    Acquiring the lock and re-reading the row must be the same operation.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid = await _report_ids(migrated_db, c, ah)
+
+    async with migrated_db() as s1:
+        await _get_report(s1, uuid.UUID(ex), uuid.UUID(rid))  # the pre-lock snapshot
+        async with migrated_db() as s2:  # another request wins the race and commits
+            await s2.execute(text("UPDATE report SET status = 'evaluated' WHERE id = CAST(:i AS uuid)"), {"i": rid})
+            await s2.commit()
+
+        # Act
+        locked = await _get_report_for_update(s1, uuid.UUID(ex), uuid.UUID(rid))
+
+    # Assert
+    assert locked.status == "evaluated"
+
+
+async def test_get_report_for_update_blocks_a_second_transaction_until_the_first_commits(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Mutual exclusion, asserted rather than assumed.
+
+    ``lock_timeout`` is what makes this deterministic: the second transaction is told to give
+    up after 250ms instead of blocking the suite, so a lock that was never taken shows up as a
+    PASSING acquisition where a failure is expected.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid = await _report_ids(migrated_db, c, ah)
+
+    async with migrated_db() as holder:
+        await _get_report_for_update(holder, uuid.UUID(ex), uuid.UUID(rid))
+
+        # Act / Assert: a second transaction cannot take the same row.
+        async with migrated_db() as contender:
+            await contender.execute(text("SET LOCAL lock_timeout = '250ms'"))
+            with pytest.raises(DBAPIError):
+                await _get_report_for_update(contender, uuid.UUID(ex), uuid.UUID(rid))
+
+        await holder.commit()
+
+    # …and once released, it is available again.
+    async with migrated_db() as after:
+        await after.execute(text("SET LOCAL lock_timeout = '250ms'"))
+        assert (await _get_report_for_update(after, uuid.UUID(ex), uuid.UUID(rid))).id is not None

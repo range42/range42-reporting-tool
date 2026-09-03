@@ -11,6 +11,12 @@ route module, so neither has to import the other to build a payload.
 
 D1 — EVALUATOR ISOLATION applies here exactly as in ``evaluations.py``: ``_assert_evaluation_access``
 gates every path that is not already Global-Admin-only.
+
+LOCK ORDER — report, THEN evaluation. Every handler in this module takes the parent report's
+row lock as its first act, through ``_get_report_for_update``, and only then loads the
+evaluation. W5-4's reopen joins the same set and must take the same order: two paths acquiring
+these two locks in opposite orders deadlock in production, where it surfaces as hung requests
+rather than a failing test.
 """
 
 import uuid
@@ -53,14 +59,33 @@ router = APIRouter(tags=["evaluations"])
 _FINALIZABLE_REPORT_STATUSES = frozenset({"under_evaluation", "evaluated"})
 
 
-async def _lock_report(db: AsyncSession, report_id: uuid.UUID) -> None:
-    """Serialize concurrent finalizes of the same report, BEFORE the guards run.
+async def _get_report_for_update(db: AsyncSession, exercise_id: uuid.UUID, report_id: uuid.UUID) -> Report:
+    """Fetch the report with its row locked, and with COMMITTED values.
 
-    Two evaluators pressing Finalize at the same moment would otherwise both read a gate that
-    is still closed and neither would transition the report. Locking first means the second
-    waits, re-reads the first one's committed ``completed`` row, and settles the gate.
+    Serializes finalize / unassign / (W5-4) reopen against each other: all three read every
+    sibling evaluation and then write the parent report, so they must not interleave. Two
+    evaluators pressing Finalize together would otherwise both read a gate that is still closed
+    and neither would transition the report.
+
+    LOCK ORDER IS ALWAYS report-then-evaluation. W5-4 must take the same order — two code paths
+    taking these two locks in opposite orders is a production deadlock, not a test failure.
+
+    ``populate_existing`` IS THE LOAD-BEARING PART, not the ``with_for_update``. Locking alone
+    leaves the caller holding whatever it read BEFORE it began waiting: the sessionmaker runs
+    ``expire_on_commit=False``, so nothing invalidates that snapshot. The loser of a race would
+    then see ``status == 'under_evaluation'``, conclude the report had not crossed, and emit a
+    second ``report.evaluated`` for a single crossing. Acquiring the lock and re-reading are one
+    operation here so they cannot drift apart.
+
+    ``_get_report`` still runs first, for the 404 and the exercise scoping that a bare id lookup
+    cannot do.
     """
-    await db.execute(select(Report.id).where(Report.id == report_id).with_for_update())
+    report = await _get_report(db, exercise_id, report_id)
+    return (
+        await db.execute(
+            select(Report).where(Report.id == report.id).with_for_update().execution_options(populate_existing=True)
+        )
+    ).scalar_one()
 
 
 async def _ungraded_section_def_ids(db: AsyncSession, report_id: uuid.UUID, evaluation_id: uuid.UUID) -> list[str]:
@@ -202,8 +227,7 @@ async def finalize_evaluation(
     ``on_behalf_of`` + ``comment`` to break a deadlock (D2) — see ``_resolve_finalize_actor``.
     """
     body = body or FinalizeRequest()
-    report: Report = await _get_report(db, exercise_id, rid)
-    await _lock_report(db, report.id)
+    report: Report = await _get_report_for_update(db, exercise_id, rid)
     ev = await _get_evaluation(db, report.id, evid)
     await _assert_finalizable(db, ev, report, user)
     credited_evaluator_id, is_override = await _resolve_finalize_actor(db, ev, body, user)
@@ -273,8 +297,7 @@ async def unassign_evaluator(
     ORDER IS LOAD-BEARING, exactly as in finalize: lock, guard, mutate, recompute, THEN settle
     the gate — a gate settled first would announce a grade the same request goes on to change.
     """
-    report: Report = await _get_report(db, exercise_id, rid)
-    await _lock_report(db, report.id)  # lock order: report, then evaluation
+    report: Report = await _get_report_for_update(db, exercise_id, rid)  # report, then evaluation
     ev = await _get_evaluation(db, report.id, evid)
     if ev.unassigned_at is not None:
         # Not idempotent-by-silence: a second call must not re-run the recompute and bump
