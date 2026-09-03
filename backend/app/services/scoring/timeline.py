@@ -85,7 +85,7 @@ def compute_evaluated_at(evaluations: Sequence[EvaluationInput]) -> datetime | N
     return max(c for c in completions if c is not None)
 
 
-def _aggregate_section_grades(evaluations: Sequence[EvaluationInput]) -> list[SectionGradeEntry]:
+def aggregate_section_grades(evaluations: Sequence[EvaluationInput]) -> list[SectionGradeEntry]:
     """Per-section grades, aggregated across evaluators by ``aggregated_weight``.
 
     ``not_graded`` sections are omitted entirely — they are not part of the grading surface.
@@ -143,7 +143,7 @@ def build_timeline_entry(
         submitted_at=report.submitted_at,
         evaluated_at=compute_evaluated_at(evaluations),
         overall_grade=overall_grade,
-        section_grades=_aggregate_section_grades(evaluations),
+        section_grades=aggregate_section_grades(evaluations),
         grade_version=grade_version,
         is_manual=is_manual,
         mixed_scale=has_mixed_grade_max(all_sections),

@@ -466,3 +466,196 @@ async def test_finalizing_an_evaluated_report_does_not_transition_it_again(
 
     # Assert: exactly one report.evaluated row, not one per finalize.
     assert (await _audit_actions(migrated_db, rid)).count("report.evaluated") == 1
+
+
+# ======================================================================================
+# W5-3 Task 11 — the ``report.evaluated`` emit seam (L11) + WP6 handoff.
+#
+# WP5 HAS NO WEBHOOKS. No `webhook_config`, no HMAC signer, no delivery engine — those are
+# WP6 (#53/#54). What this task pins down is the CALL SITE: one function that builds the
+# §11.3 payload and records that the event happened. WP6 replaces its body with an outbox
+# insert and every caller keeps working.
+#
+# The seam is asserted through the audit row (`event.report_evaluated`) because that is the
+# only observable WP5 has. When WP6 lands, these tests should keep passing unchanged — if
+# they need editing, the seam was not a seam.
+#
+# D1 EXTENDS TO MACHINES. A webhook carrying the per-evaluator breakdown is a peer-visibility
+# hole with extra steps, and a durable one: the payload outlives the request in an outbox, a
+# delivery log and someone's HTTP endpoint.
+# ======================================================================================
+
+
+_EVALUATED_EVENT = "event.report_evaluated"
+
+
+async def _event_rows(migrated_db, rid):
+    async with migrated_db() as s:
+        return list(
+            (
+                await s.execute(
+                    select(AuditLog)
+                    .where(AuditLog.resource_id == uuid.UUID(rid), AuditLog.action == _EVALUATED_EVENT)
+                    .order_by(AuditLog.created_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+
+async def test_report_evaluated_event_is_emitted_once_when_the_gate_closes(
+    migrated_db: async_sessionmaker,
+) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        r = await c.post(_finalize_url(ex, rid, evid), headers=h)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    assert len(await _event_rows(migrated_db, rid)) == 1
+
+
+async def test_report_evaluated_event_is_not_emitted_when_the_gate_stays_open(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """One of two evaluators under ``all_must_finalize`` — nothing has been decided yet."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        (h_a, evid_a), (h_b, evid_b) = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "6", h_b)
+
+        # Act
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+    # Assert
+    assert await _event_rows(migrated_db, rid) == []
+
+
+async def test_report_evaluated_payload_matches_the_architecture_shape(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """§11.3: ``{exercise_id, report_id, team_id, overall_grade, section_grades[]}``."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        assert (await c.post(_finalize_url(ex, rid, evid), headers=h)).status_code == 200
+
+    # Assert
+    [row] = await _event_rows(migrated_db, rid)
+    payload = row.details
+    assert set(payload) == {
+        "exercise_id",
+        "report_id",
+        "team_id",
+        "overall_grade",
+        "section_grades",
+        "grade_version",
+    }
+    assert payload["exercise_id"] == ex
+    assert payload["report_id"] == rid
+    assert payload["overall_grade"] == "8.00"
+    [section] = payload["section_grades"]
+    assert set(section) == {"section_def_id", "name", "grade", "weight"}
+    assert section["grade"] == "8.00"
+
+
+async def test_report_evaluated_payload_carries_grade_version(migrated_db: async_sessionmaker) -> None:
+    """ADDITIVE TO §11.3, deliberately (§9-A8).
+
+    Delivery is at-least-once and §11.3 defines no retraction event, so a consumer's only
+    defence against acting on a superseded grade is D3's monotonic version. Without it a
+    reopen-and-regrade is indistinguishable from a duplicate delivery of the original.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        assert (await c.post(_finalize_url(ex, rid, evid), headers=h)).status_code == 200
+
+    # Assert
+    [row] = await _event_rows(migrated_db, rid)
+    _status, _overall, version = await _report_row(migrated_db, rid)
+    assert row.details["grade_version"] == version
+    assert version > 0
+
+
+async def test_report_evaluated_payload_does_not_include_per_evaluator_rows(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """D1 extends to machines — whole-payload scan, not a field check.
+
+    Two evaluators with different grades, so a payload that leaked per-evaluator values would
+    contain 9.00 and 5.00 as well as the 7.00 aggregate.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        (h_a, evid_a), (h_b, evid_b) = graders
+        await _grade(c, ex, rid, evid_a, sid, "9", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "5", h_b)
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+        assert (await c.post(_finalize_url(ex, rid, evid_b), headers=h_b)).status_code == 200
+
+    # Assert
+    [row] = await _event_rows(migrated_db, rid)
+    payload = row.details
+    assert "evaluations" not in payload
+    assert "evaluator_breakdown" not in payload
+    blob = str(payload)
+    assert evid_a not in blob
+    assert evid_b not in blob
+    assert "9.00" not in blob and "5.00" not in blob  # only the 7.00 aggregate survives
+    assert payload["overall_grade"] == "7.00"
+
+
+async def test_report_evaluated_section_grades_exclude_an_unassigned_evaluator(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """THE PAYLOAD MUST RECONCILE WITH ITSELF.
+
+    ``overall_grade`` counts only contributing evaluations (L7), so ``section_grades`` must be
+    aggregated over the same set. Averaged over every row instead, a payload would publish
+    section values that do not add up to the overall grade it ships alongside them — and the
+    consumer has no way to tell which half to trust.
+
+    Two evaluators grade 9 and 5; the 5 is unassigned before the gate closes. Both halves must
+    then read 9.00.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        (h_a, evid_a), (h_b, evid_b) = graders
+        await _grade(c, ex, rid, evid_a, sid, "9", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "5", h_b)
+        await c.post(
+            f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid_b}/unassign",
+            json={"reason": "unavailable"},
+            headers=ah,
+        )
+
+        # Act
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+    # Assert
+    [row] = await _event_rows(migrated_db, rid)
+    assert row.details["overall_grade"] == "9.00"
+    [section] = row.details["section_grades"]
+    assert section["grade"] == "9.00"

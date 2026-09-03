@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import record_audit
 from app.models import Evaluation, Report, ReportSection, ReportTemplate, SectionGrade, TemplateSectionDef
-from app.services.scoring.aggregate import EvaluationFacts, aggregate_overall_grade
+from app.services.scoring.aggregate import EvaluationFacts, aggregate_overall_grade, contributes_grade
 from app.services.scoring.weighting import compute_weighted_average, quantize_grade
 
 if TYPE_CHECKING:  # timeline imports rollup, so keep this one-directional at runtime
@@ -401,6 +401,19 @@ async def _timeline_for(
         grade_version=report.grade_version,
         entry=entry,
     )
+
+
+async def load_contributing_inputs(db: AsyncSession, report: Report) -> list[EvaluationInput]:
+    """The evaluations that feed ``report.overall_grade`` — L7-filtered, ORM rows dropped.
+
+    EXISTS SO A SECOND CONSUMER CANNOT DISAGREE WITH THE AGGREGATE. ``_load_evaluation_inputs``
+    deliberately filters nothing, and ``EvaluationInput`` carries neither ``status`` nor
+    ``unassigned_at``, so anything aggregating its output directly averages over unassigned and
+    unfinished evaluators alike. ``overall_grade`` does not. A caller that wants numbers
+    reconciling with the published grade must come through here.
+    """
+    paired = await _load_evaluation_inputs(db, report)
+    return [inp for inp, row in paired if contributes_grade(evaluation_facts(row))]
 
 
 async def recompute_report_grade(

@@ -33,7 +33,7 @@ from app.routes.v1.evaluations import (
 from app.routes.v1.reports import _get_report
 from app.schemas.common import DataEnvelope
 from app.schemas.evaluation import EvaluationBreakdownOut, FinalizeRequest, UnassignRequest
-from app.services.evaluation import breakdown
+from app.services.evaluation import breakdown, events
 from app.services.evaluation.finalize_gate import is_gate_open, resolve_finalize_policy
 from app.services.scoring import rollup
 from app.services.workflow import state_machine
@@ -157,7 +157,7 @@ async def _settle_finalize_gate(
     evaluator pressed the button, ``evaluator_unassigned`` when an admin removed the one who
     never would. Same edge, opposite stories, and a dispute needs to tell them apart.
 
-    Returns ``(gate_satisfied, mode)``. The report.evaluated event seam (L11) is Task 11's.
+    Returns ``(gate_satisfied, mode)``. Emits ``report.evaluated`` (L11) on the crossing.
     """
     mode = await resolve_finalize_policy(db, exercise_id)
     facts = await rollup.load_evaluation_facts(db, report.id)
@@ -175,6 +175,9 @@ async def _settle_finalize_gate(
             details={"finalize_policy": mode, "evaluation_id": str(evaluation_id), "trigger": trigger},
             ip=ip,
         )
+        # L11 — the emit seam, on the CROSSING only. Guarded by the same branch as the
+        # transition so a later finalize on an already-evaluated report announces nothing.
+        await events.emit_report_evaluated(db, report)
     return satisfied, mode
 
 
