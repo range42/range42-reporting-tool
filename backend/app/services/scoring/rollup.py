@@ -23,7 +23,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import ROUND_HALF_UP, Decimal, localcontext
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -32,6 +32,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import record_audit
 from app.models import Evaluation, Report, ReportSection, ReportTemplate, SectionGrade, TemplateSectionDef
+from app.services.scoring.aggregate import EvaluationFacts, aggregate_overall_grade, contributes_grade
+from app.services.scoring.weighting import compute_weighted_average, quantize_grade
 
 if TYPE_CHECKING:  # timeline imports rollup, so keep this one-directional at runtime
     from app.services.scoring.timeline import TimelineEntry
@@ -39,14 +41,6 @@ if TYPE_CHECKING:  # timeline imports rollup, so keep this one-directional at ru
 logger = structlog.get_logger(__name__)
 
 _GRADE_MODES = frozenset({"numeric", "pass_fail", "rubric", "not_graded"})
-
-_CENTS = Decimal("0.01")
-# report.overall_grade and section_grade.grade are both NUMERIC(5,2).
-_MAX_NUMERIC_5_2 = Decimal("999.99")
-
-
-class RollupOverflow(Exception):
-    """A computed grade exceeds NUMERIC(5,2). Indicates a template grade_max misconfiguration."""
 
 
 @dataclass(frozen=True)
@@ -79,6 +73,12 @@ class EvaluationInput:
     sections: tuple[SectionGradeInput, ...] = ()
     # M16 — feeds the derived ``evaluated_at``; None while this evaluator is still working.
     completed_at: datetime | None = None
+    # L7 — whether this evaluation feeds the GRADE. Carried as a resolved boolean rather than
+    # as ``status``/``unassigned_at`` so the pure layer stays free of the predicate's rules
+    # while still being able to obey it. The timeline needs both answers at once: section
+    # grades must exclude non-contributors, while ``evaluated_at`` and ``evaluator_count``
+    # must keep counting them (M16) — which a pre-filtered input list could not express.
+    contributes: bool = True
 
 
 def _dec(v: object) -> Decimal:
@@ -203,32 +203,6 @@ def has_mixed_grade_max(sections: Sequence[SectionGradeInput]) -> bool:
     return len(maxima) > 1
 
 
-def quantize_grade(value: Decimal) -> Decimal:
-    """Round to the column's 2 decimal places, HALF_UP (M11). Only called on persist.
-
-    HALF_UP, not Python's default banker's rounding: 8.125 becomes 8.13, not 8.12. Repeatedly
-    rounding half-to-even would bias a long run of grades downward, and it surprises anyone
-    checking the arithmetic by hand.
-    """
-    if value > _MAX_NUMERIC_5_2 or value < -_MAX_NUMERIC_5_2:
-        raise RollupOverflow(f"grade {value} exceeds NUMERIC(5,2)")
-    return value.quantize(_CENTS, rounding=ROUND_HALF_UP)
-
-
-def compute_weighted_average(pairs: Sequence[tuple[Decimal, Decimal]]) -> Decimal | None:
-    """Σ(value × weight) / Σ weight (§4.2).
-
-    None when the denominator is zero — callers must persist that as SQL NULL, never as 0.
-    Shared with Task 5's report-level aggregation; there is deliberately one implementation.
-    """
-    total_weight = sum((w for _, w in pairs), Decimal(0))
-    if total_weight == 0:
-        return None
-    with localcontext() as ctx:
-        ctx.prec = 28
-        return sum((v * w for v, w in pairs), Decimal(0)) / total_weight
-
-
 def compute_evaluation_grade(ev: EvaluationInput) -> Decimal | None:
     """One evaluator's overall grade for a report.
 
@@ -253,33 +227,10 @@ def compute_evaluation_grade(ev: EvaluationInput) -> Decimal | None:
     return None if avg is None else quantize_grade(avg)
 
 
-def _contributing_evaluations(
-    graded: Sequence[tuple[EvaluationInput, Decimal]],
-) -> list[tuple[EvaluationInput, Decimal]]:
-    """Which evaluations feed report.overall_grade.
-
-    W5-2 (provisional): every evaluation with at least one graded section, so a grade is
-    visible before anyone finalizes. W5-3 REPLACES THIS BODY with the
-    scoring_config.finalize_policy branch (G-6: all_must_finalize -> only status='completed'
-    contribute; any_can_finalize -> this rule stands). SINGLE SEAM — do not scatter the policy.
-
-    Takes already-computed (evaluation, grade) pairs so ``compute_evaluation_grade`` runs once
-    per evaluation; filtering raw inputs here would double every section's arithmetic.
-    """
-    return list(graded)
-
-
-def compute_report_grade(evaluations: Sequence[EvaluationInput]) -> Decimal | None:
-    """Σ(evaluation grade × aggregated_weight) / Σ aggregated_weight (§4.2).
-
-    An evaluation with nothing graded yet contributes neither a value nor its weight, so an
-    assigned-but-unstarted evaluator cannot drag the report down. None when nothing
-    contributes — the caller persists that as SQL NULL, never 0.
-    """
-    graded = [(e, g) for e in evaluations if (g := compute_evaluation_grade(e)) is not None]
-    pairs = [(g, e.aggregated_weight) for e, g in _contributing_evaluations(graded)]
-    avg = compute_weighted_average(pairs)
-    return None if avg is None else quantize_grade(avg)
+# W5-2's ``compute_report_grade`` / ``_contributing_evaluations`` are gone. Its M8 rule was
+# provisional — any evaluation with a graded section contributed, because nothing could reach
+# ``completed`` yet. W5-3 replaces it with ``aggregate.aggregate_overall_grade``, which reads
+# the status and ``unassigned_at`` that ``EvaluationInput`` deliberately never carried (L7).
 
 
 @dataclass(frozen=True)
@@ -385,11 +336,42 @@ async def _load_evaluation_inputs(db: AsyncSession, report: Report) -> list[tupl
                     aggregated_weight=ev.aggregated_weight,
                     sections=inputs,
                     completed_at=ev.completed_at,
+                    contributes=contributes_grade(evaluation_facts(ev)),
                 ),
                 ev,
             )
         )
     return paired
+
+
+def evaluation_facts(ev: Evaluation) -> EvaluationFacts:
+    """Project one ORM row onto the narrow shape aggregation and the gate agree on (L7).
+
+    The single mapping site: ``unassigned_at IS NULL`` is translated to ``is_unassigned`` here
+    and nowhere else, so the numerator and the gate can never disagree about who counts.
+    """
+    return EvaluationFacts(
+        evaluation_id=str(ev.id),
+        status=ev.status,
+        overall_grade=ev.overall_grade,
+        aggregated_weight=ev.aggregated_weight,
+        is_unassigned=ev.unassigned_at is not None,
+    )
+
+
+async def load_evaluation_facts(db: AsyncSession, report_id: uuid.UUID) -> list[EvaluationFacts]:
+    """Every evaluation of ``report_id`` as aggregation facts. One SELECT, shared with the gate.
+
+    Filters NOTHING: the L7 predicate decides what counts, not the SQL, so an admin-facing
+    breakdown can still show the unassigned rows this same query returns. Ordered by
+    ``created_at`` so two callers see the same sequence.
+    """
+    rows = (
+        (await db.execute(select(Evaluation).where(Evaluation.report_id == report_id).order_by(Evaluation.created_at)))
+        .scalars()
+        .all()
+    )
+    return [evaluation_facts(ev) for ev in rows]
 
 
 async def _timeline_for(
@@ -428,6 +410,16 @@ async def _timeline_for(
     )
 
 
+async def load_evaluation_inputs(db: AsyncSession, report: Report) -> list[EvaluationInput]:
+    """Every evaluation of ``report`` as a pure input, ORM rows dropped.
+
+    Unfiltered on purpose — each input carries its own ``contributes`` verdict, so a consumer
+    gets the L7 rules applied per field rather than losing the non-contributors it still needs
+    to count. ``aggregate_section_grades`` is what honours the flag.
+    """
+    return [inp for inp, _row in await _load_evaluation_inputs(db, report)]
+
+
 async def recompute_report_grade(
     db: AsyncSession,
     report: Report,
@@ -455,7 +447,9 @@ async def recompute_report_grade(
         await db.flush()
         return await _timeline_for(db, report, evaluations, is_manual=True)
 
-    new_grade = compute_report_grade([i for i, _ in evaluations])
+    # Built from the ORM rows just written above, so the aggregate sees this save's per-evaluator
+    # grades rather than the values the row held on load.
+    new_grade = aggregate_overall_grade([evaluation_facts(row) for _, row in evaluations])
     # Numeric comparison, never str(): NUMERIC(5,2) round-trips as Decimal("8.00") while the
     # fresh computation gives Decimal("8"). Those are ==; their str() forms are not, and
     # comparing strings would bump grade_version on every single save.

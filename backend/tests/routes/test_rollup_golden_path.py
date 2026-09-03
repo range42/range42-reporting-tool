@@ -12,15 +12,23 @@ multi-evaluator aggregation, persistence, M17 visibility — is exercised in one
         S1 = 8.00 ; S2 pass -> 10.00 ; S3 A=4, B=3 -> 0.70 -> 7.00 ; S4 no row
         (8.00·1.0 + 10.00·1.5 + 7.00·2.0) / (1.0 + 1.5 + 2.0) = 37.00 / 4.50 = 8.222… -> 8.22
 
-    Evaluator Y (aggregated_weight 2.00) computes to 7.00.
+    Evaluator Y (aggregated_weight 2.00) computes to 7.00:
+        S1 = 2.50 ; S2 pass -> 10.00 ; S3 A=4, B=3 -> 7.00
+        (2.50·1.0 + 10.00·1.5 + 7.00·2.0) / 4.50 = 31.50 / 4.50 = 7.00
 
     report.overall_grade = (8.22·1.00 + 7.00·2.00) / 3.00 = 22.22 / 3.00 = 7.406… -> 7.41
+
+W5-3 CHANGED WHEN THIS PUBLISHES. Under W5-2 each grade save moved the report grade, so the
+worked example reached version 4 by the end. L7 now excludes in-progress evaluations, and §7.2
+requires every gradeable section graded before an evaluation may finalize — which is why Y
+grades all three here rather than S1 alone. The report therefore publishes twice: 8.22 when X
+finalizes, 7.41 when Y does and the gate closes.
 """
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.routes._evaluations import assign, evaluator, ga_headers
+from tests.routes._evaluations import assign, evaluator, finalize, ga_headers
 from tests.routes._helpers import client
 
 pytestmark = pytest.mark.integration
@@ -109,14 +117,21 @@ async def test_worked_example_lands_on_8_22_and_7_41(migrated_db: async_sessionm
         s3 = await _put_grade(c, ex, rid, evid_x, sids["S3"], {"rubric_scores": scores}, hx)
         assert s3["grade"] == "7.00"  # M7 pre-rollup: 0.70 stretched onto 0-10
         assert await _evaluation_grade(c, ex, rid, evid_x, hx) == "8.22"
-        # Only X has graded — Y contributes neither a value nor its weight yet.
-        assert await _report_grade(c, ex, rid, ah) == ("8.22", False, 3)
+        # Nothing published yet: X is still in progress, so the report has no grade at all.
+        assert await _report_grade(c, ex, rid, ah) == (None, False, 0)
 
-        # Evaluator Y computes to 7.00.
-        await _put_grade(c, ex, rid, evid_y, sids["S1"], {"grade": "7"}, hy)
+        # X finalizes. Only X counts — Y contributes neither a value nor its weight yet.
+        assert (await finalize(c, hx, ex, rid, evid_x))["finalize_gate_satisfied"] is False
+        assert await _report_grade(c, ex, rid, ah) == ("8.22", False, 1)
+
+        # Evaluator Y computes to 7.00 across all three gradeable sections.
+        await _put_grade(c, ex, rid, evid_y, sids["S1"], {"grade": "2.5"}, hy)
+        await _put_grade(c, ex, rid, evid_y, sids["S2"], {"pass_fail_result": True}, hy)
+        await _put_grade(c, ex, rid, evid_y, sids["S3"], {"rubric_scores": scores}, hy)
         assert await _evaluation_grade(c, ex, rid, evid_y, hy) == "7.00"
 
-        # D3: one bump per published number — 8.00, 9.20 (S2 joins), 8.22 (S3 joins), 7.41 (Y joins).
-        assert await _report_grade(c, ex, rid, ah) == ("7.41", False, 4)
+        # Y finalizes: the gate closes and the final number publishes as version 2.
+        assert (await finalize(c, hy, ex, rid, evid_y))["finalize_gate_satisfied"] is True
+        assert await _report_grade(c, ex, rid, ah) == ("7.41", False, 2)
         listed = (await c.get(f"/api/v1/exercises/{ex}/reports", headers=ah)).json()["data"][0]
-    assert (listed["overall_grade"], listed["grade_version"]) == ("7.41", 4)
+    assert (listed["overall_grade"], listed["grade_version"]) == ("7.41", 2)
