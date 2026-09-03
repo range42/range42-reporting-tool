@@ -33,13 +33,20 @@ def _s(grade: str | None, **kw) -> SectionGradeInput:
     return SectionGradeInput(**{**base, **kw})
 
 
-def _ev(*sections: SectionGradeInput, weight: str = "1", eid: str = "e", completed=LATER) -> EvaluationInput:
+def _ev(
+    *sections: SectionGradeInput,
+    weight: str = "1",
+    eid: str = "e",
+    completed=LATER,
+    contributes: bool = True,
+) -> EvaluationInput:
     return EvaluationInput(
         evaluation_id=eid,
         evaluator_id=f"u-{eid}",
         aggregated_weight=Decimal(weight),
         sections=sections,
         completed_at=completed,
+        contributes=contributes,
     )
 
 
@@ -162,3 +169,62 @@ def test_grade_timeline_name_is_still_importable_from_rollup() -> None:
     timeline = GradeTimeline(report_id="r1", overall_grade=Decimal("8.00"), grade_version=2)
     assert timeline.report_id == "r1"
     assert timeline.entry is None
+
+
+# --- L7: section grades and overall_grade must describe the SAME evaluators -------------
+#
+# One entry, two numbers, previously two different populations: ``overall_grade`` arrives
+# pre-computed by rollup over the L7 contributing set, while ``section_grades`` was averaged
+# over every row handed in — unassigned and unfinished evaluators included. An entry could
+# therefore report an overall 9.00 above a section 7.00 with no way for a consumer to tell
+# which one to believe.
+#
+# ``evaluated_at`` and ``evaluator_count`` still count EVERYONE on purpose (M16), which is why
+# the fix is a per-evaluation flag rather than a filtered input list: pre-filtering would make
+# ``evaluated_at`` report a completion date for a report still being graded.
+
+
+def test_timeline_section_grades_exclude_a_non_contributing_evaluation() -> None:
+    # 9 from a contributor, 5 from someone unassigned or still working -> 9.00, not 7.00.
+    entry = _entry(
+        _ev(_s("9"), eid="counts"),
+        _ev(_s("5"), eid="dropped", contributes=False),
+        grade="9.00",
+    )
+    assert entry.section_grades[0].grade == Decimal("9.00")
+
+
+def test_timeline_section_grades_reconcile_with_overall_grade_on_one_section() -> None:
+    """With a single gradeable section the two numbers are the same aggregate, so any
+    divergence is arithmetic proof that they read different evaluator sets."""
+    entry = _entry(
+        _ev(_s("9"), weight="3", eid="lead"),
+        _ev(_s("5"), weight="1", eid="dropped", contributes=False),
+        grade="9.00",
+    )
+    assert entry.section_grades[0].grade == entry.overall_grade
+
+
+def test_timeline_evaluated_at_still_counts_non_contributing_evaluations() -> None:
+    """M16 is unchanged: an outstanding evaluator keeps ``evaluated_at`` null even though they
+    contribute nothing to the grade. This is the field a filtered input list would have broken."""
+    entry = _entry(
+        _ev(_s("9"), eid="done", completed=LATER),
+        _ev(_s("5"), eid="working", completed=None, contributes=False),
+    )
+    assert entry.evaluated_at is None
+
+
+def test_timeline_evaluator_count_still_counts_non_contributing_evaluations() -> None:
+    entry = _entry(
+        _ev(_s("9"), eid="done"),
+        _ev(_s("5"), eid="dropped", contributes=False),
+    )
+    assert entry.evaluator_count == 2
+
+
+def test_timeline_section_is_listed_with_a_null_grade_when_only_non_contributors_marked_it() -> None:
+    """The row must survive so a client can render it as outstanding, rather than the section
+    vanishing because the only evaluator who marked it was removed."""
+    entry = _entry(_ev(_s("5"), eid="dropped", contributes=False), grade=None)
+    assert [(g.section_def_id, g.grade) for g in entry.section_grades] == [("s1", None)]

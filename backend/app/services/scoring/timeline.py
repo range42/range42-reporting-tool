@@ -94,6 +94,12 @@ def aggregate_section_grades(evaluations: Sequence[EvaluationInput]) -> list[Sec
 
     Values are the SCALED contributions (pass/fail already stretched onto its range, rubric
     pre-rolled), never the raw stored 0/1.
+
+    L7 — only evaluations with ``contributes`` set feed a value, so these numbers describe the
+    SAME evaluator set as ``report.overall_grade``. Averaging over every row instead produced an
+    entry whose section grades contradicted its own overall grade (9.00 overall above a 7.00
+    section, with an unassigned evaluator dragging the section down). ``evaluated_at`` and
+    ``evaluator_count`` deliberately still count everyone — see ``EvaluationInput.contributes``.
     """
     definitions: dict[str, SectionGradeInput] = {}
     contributions: dict[str, list[tuple[Decimal, Decimal]]] = {}
@@ -101,7 +107,11 @@ def aggregate_section_grades(evaluations: Sequence[EvaluationInput]) -> list[Sec
         for s in ev.sections:
             if s.grade_mode == "not_graded":
                 continue
+            # Registered even for a non-contributor: dropping the section entirely would make
+            # an unassigned evaluator's removal look like the section was never gradeable.
             definitions.setdefault(s.section_def_id, s)
+            if not ev.contributes:
+                continue
             value = compute_section_value(s)
             if value is not None:
                 contributions.setdefault(s.section_def_id, []).append((value, ev.aggregated_weight))

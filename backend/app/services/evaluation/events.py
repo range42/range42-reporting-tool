@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import record_audit
 from app.models import Report
-from app.services.scoring.rollup import load_contributing_inputs
+from app.services.scoring.rollup import load_evaluation_inputs
 from app.services.scoring.timeline import aggregate_section_grades
 
 logger = structlog.get_logger(__name__)
@@ -48,10 +48,11 @@ async def build_report_evaluated_payload(db: AsyncSession, report: Report) -> di
     consumer's only way to tell a reopened-and-regraded report from a duplicate delivery of the
     original. Without it, supersession detection is impossible.
 
-    Section values are aggregated over the CONTRIBUTING evaluations only — the same L7 set
-    behind ``overall_grade`` — so the two halves of one payload cannot disagree.
+    Section values cover the CONTRIBUTING evaluations only — the same L7 set behind
+    ``overall_grade`` — so the two halves of one payload cannot disagree.
+    ``aggregate_section_grades`` applies that filter from each input's own ``contributes`` flag.
     """
-    inputs = await load_contributing_inputs(db, report)
+    inputs = await load_evaluation_inputs(db, report)
     return {
         "exercise_id": str(report.exercise_id),
         "report_id": str(report.id),

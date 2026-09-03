@@ -73,6 +73,12 @@ class EvaluationInput:
     sections: tuple[SectionGradeInput, ...] = ()
     # M16 — feeds the derived ``evaluated_at``; None while this evaluator is still working.
     completed_at: datetime | None = None
+    # L7 — whether this evaluation feeds the GRADE. Carried as a resolved boolean rather than
+    # as ``status``/``unassigned_at`` so the pure layer stays free of the predicate's rules
+    # while still being able to obey it. The timeline needs both answers at once: section
+    # grades must exclude non-contributors, while ``evaluated_at`` and ``evaluator_count``
+    # must keep counting them (M16) — which a pre-filtered input list could not express.
+    contributes: bool = True
 
 
 def _dec(v: object) -> Decimal:
@@ -330,6 +336,7 @@ async def _load_evaluation_inputs(db: AsyncSession, report: Report) -> list[tupl
                     aggregated_weight=ev.aggregated_weight,
                     sections=inputs,
                     completed_at=ev.completed_at,
+                    contributes=contributes_grade(evaluation_facts(ev)),
                 ),
                 ev,
             )
@@ -403,17 +410,14 @@ async def _timeline_for(
     )
 
 
-async def load_contributing_inputs(db: AsyncSession, report: Report) -> list[EvaluationInput]:
-    """The evaluations that feed ``report.overall_grade`` — L7-filtered, ORM rows dropped.
+async def load_evaluation_inputs(db: AsyncSession, report: Report) -> list[EvaluationInput]:
+    """Every evaluation of ``report`` as a pure input, ORM rows dropped.
 
-    EXISTS SO A SECOND CONSUMER CANNOT DISAGREE WITH THE AGGREGATE. ``_load_evaluation_inputs``
-    deliberately filters nothing, and ``EvaluationInput`` carries neither ``status`` nor
-    ``unassigned_at``, so anything aggregating its output directly averages over unassigned and
-    unfinished evaluators alike. ``overall_grade`` does not. A caller that wants numbers
-    reconciling with the published grade must come through here.
+    Unfiltered on purpose — each input carries its own ``contributes`` verdict, so a consumer
+    gets the L7 rules applied per field rather than losing the non-contributors it still needs
+    to count. ``aggregate_section_grades`` is what honours the flag.
     """
-    paired = await _load_evaluation_inputs(db, report)
-    return [inp for inp, row in paired if contributes_grade(evaluation_facts(row))]
+    return [inp for inp, _row in await _load_evaluation_inputs(db, report)]
 
 
 async def recompute_report_grade(
