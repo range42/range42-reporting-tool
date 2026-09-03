@@ -349,3 +349,30 @@ async def test_unauthenticated_breakdown_is_401(migrated_db: async_sessionmaker)
 
     # Assert
     assert r.status_code == 401, r.text
+
+
+async def test_global_admin_breakdown_of_a_report_with_no_evaluators(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """A submitted report nobody has been assigned to yet.
+
+    The gate is CLOSED on an empty counted set rather than vacuously open, and the admin gets a
+    readable empty state instead of an error — this is the screen someone lands on right after
+    submission, before any evaluator exists.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid = await submitted_report(c, ah)
+
+        # Act
+        r = await c.get(_url(ex, rid), headers=ah)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    assert data["evaluations"] == []
+    assert data["report_status"] == "submitted"
+    assert data["finalize_gate_satisfied"] is False
+    assert data["aggregate"]["overall_grade"] is None
+    assert data["aggregate"]["counted_evaluator_count"] == 0
