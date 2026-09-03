@@ -14,6 +14,7 @@ Each is asserted separately below for exactly that reason.
 """
 
 import uuid
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select, text
@@ -21,7 +22,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models import AuditLog
 from app.services.evaluation.finalize_gate import ANY_CAN_FINALIZE
-from tests.routes._evaluations import assign, evaluator, ga_headers, submitted_report
+from tests.routes._evaluations import assign, evaluator, finalize, ga_headers, submitted_report
 from tests.routes._helpers import client
 
 pytestmark = pytest.mark.integration
@@ -323,3 +324,357 @@ async def test_any_can_finalize_combined_with_admin_override_transitions_and_rec
     assert is_override is True
     report_actions = [r.action for r in await _audit_rows(migrated_db, rid)]
     assert report_actions.count("report.evaluated") == 1
+
+
+# ======================================================================================
+# W5-3 Task 9 — POST .../unassign (D2, half two).
+#
+# THE OTHER HALF OF THE SAME DEADLOCK: half one finalizes IN the absent evaluator's name.
+# Half two removes them from the reckoning entirely — used when the admin has no grade to
+# publish on their behalf, only an empty seat to clear.
+#
+# L8 — UNASSIGN IS SOFT. The row and its section_grade rows survive; ``unassigned_at IS NULL``
+# is the whole L7 "counted" predicate. Nothing is deleted, ``status`` is not rewritten, and the
+# dispute trail stays readable. Several tests below exist only to hold that line.
+#
+# L5 — RENORMALIZATION, not rescaling: the dropped evaluator leaves the denominator, and the
+# survivors' weights are re-divided among themselves.
+# ======================================================================================
+
+
+REASON = "evaluator left the organisation mid-exercise"
+
+
+def _unassign_url(ex, rid, evid):
+    return f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/unassign"
+
+
+async def _unassign_row(migrated_db, evid):
+    async with migrated_db() as s:
+        return (
+            await s.execute(
+                text(
+                    "SELECT unassigned_at, unassigned_by, unassign_reason, status, completed_at, finalized_by "
+                    "FROM evaluation WHERE id = CAST(:i AS uuid)"
+                ),
+                {"i": evid},
+            )
+        ).one()
+
+
+async def _grade_state(migrated_db, rid):
+    """(status, overall_grade, grade_version) — the three fields L5/L9 move together."""
+    async with migrated_db() as s:
+        return (
+            await s.execute(
+                text("SELECT status, overall_grade, grade_version FROM report WHERE id = CAST(:i AS uuid)"),
+                {"i": rid},
+            )
+        ).one()
+
+
+async def _section_grade_count(migrated_db, evid):
+    async with migrated_db() as s:
+        return (
+            await s.execute(
+                text("SELECT count(*) FROM section_grade WHERE evaluation_id = CAST(:i AS uuid)"),
+                {"i": evid},
+            )
+        ).scalar_one()
+
+
+# --- the happy path -------------------------------------------------------------------
+
+
+async def test_global_admin_can_unassign_an_evaluator_with_a_reason(migrated_db: async_sessionmaker) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, ga_id = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid, _uid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        r = await c.post(_unassign_url(ex, rid, evid), json={"reason": REASON}, headers=ah)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    unassigned_at, unassigned_by, reason, _status, _completed_at, _finalized_by = await _unassign_row(migrated_db, evid)
+    assert unassigned_at is not None
+    assert str(unassigned_by) == ga_id
+    assert reason == REASON
+
+
+# --- the guards -----------------------------------------------------------------------
+
+
+async def test_unassign_requires_a_non_blank_reason(migrated_db: async_sessionmaker) -> None:
+    """A dropped evaluator is a dispute waiting to happen; the reason is the defence."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid, _uid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        missing = await c.post(_unassign_url(ex, rid, evid), json={}, headers=ah)
+        blank = await c.post(_unassign_url(ex, rid, evid), json={"reason": "   "}, headers=ah)
+
+    # Assert
+    assert missing.status_code == 422, missing.text
+    assert missing.json()["error"]["message"] == "reason_required"
+    assert blank.status_code == 422, blank.text
+    assert blank.json()["error"]["message"] == "reason_required"
+
+
+async def test_unassign_is_rejected_for_non_admin_callers(migrated_db: async_sessionmaker) -> None:
+    """Including the evaluation's OWN evaluator — self-removal is not a thing (§4.2)."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid, _uid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        r = await c.post(_unassign_url(ex, rid, evid), json={"reason": REASON}, headers=h)
+
+    # Assert
+    assert r.status_code == 403, r.text
+    assert (await _unassign_row(migrated_db, evid))[0] is None
+
+
+async def test_unassign_of_an_already_unassigned_evaluation_is_rejected(migrated_db: async_sessionmaker) -> None:
+    """A double-clicked button must not re-bump grade_version (L9)."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid, _uid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+        assert (await c.post(_unassign_url(ex, rid, evid), json={"reason": REASON}, headers=ah)).status_code == 200
+        _s, _g, version_after_first = await _grade_state(migrated_db, rid)
+
+        # Act
+        r = await c.post(_unassign_url(ex, rid, evid), json={"reason": "again"}, headers=ah)
+
+    # Assert
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["message"] == "already_unassigned"
+    assert (await _grade_state(migrated_db, rid))[2] == version_after_first
+
+
+# --- L5: renormalization --------------------------------------------------------------
+
+
+async def test_unassign_evaluator_renormalizes_aggregated_weight(migrated_db: async_sessionmaker) -> None:
+    """THE canonical D2 assertion.
+
+    Weights 1.0/1.5 over grades 8.0/6.0 average (8.0 + 9.0) / 2.5 == 6.80. Dropping the 1.5
+    leaves 8.00 — the survivor's own grade, NOT 6.80 rescaled by 1.0/2.5 (which would be 2.72).
+    The value is asserted, not merely that it moved.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid = await submitted_report(c, ah)
+        h_a, uid_a = await evaluator(migrated_db, c, ah, ex, "ev-a")
+        h_b, uid_b = await evaluator(migrated_db, c, ah, ex, "ev-b")
+        evid_a = await assign(c, ah, ex, rid, uid_a, aggregated_weight="1.0")
+        evid_b = await assign(c, ah, ex, rid, uid_b, aggregated_weight="1.5")
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "6", h_b)
+        await finalize(c, h_a, ex, rid, evid_a)
+        await finalize(c, h_b, ex, rid, evid_b)
+        _status, before, version_before = await _grade_state(migrated_db, rid)
+        assert before == Decimal("6.80")
+
+        # Act: drop the heavier, lower-scoring evaluator.
+        r = await c.post(_unassign_url(ex, rid, evid_b), json={"reason": REASON}, headers=ah)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    _status, after, version_after = await _grade_state(migrated_db, rid)
+    assert after == Decimal("8.00")
+    assert version_after > version_before
+
+
+async def test_unassign_does_not_delete_the_evaluation_or_its_section_grades(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """L8: soft. The row, its grades and its status all survive the removal."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid, _uid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+        assert await _section_grade_count(migrated_db, evid) == 1
+
+        # Act
+        assert (await c.post(_unassign_url(ex, rid, evid), json={"reason": REASON}, headers=ah)).status_code == 200
+
+    # Assert
+    row = await _unassign_row(migrated_db, evid)
+    assert row is not None
+    assert row.status == "in_progress"  # NOT rewritten to some 'unassigned' pseudo-status
+    assert await _section_grade_count(migrated_db, evid) == 1
+
+
+async def test_unassigning_an_evaluator_who_had_already_finalized_removes_their_grade_from_the_aggregate(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """EDGE CASE: they were completed and contributing.
+
+    Afterwards they contribute neither numerator nor denominator, yet ``completed_at`` and
+    ``finalized_by`` stay readable — that pair IS the dispute trail.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        (h_a, evid_a, _uid_a), (h_b, evid_b, _uid_b) = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "4", h_b)
+        await finalize(c, h_a, ex, rid, evid_a)
+        await finalize(c, h_b, ex, rid, evid_b)
+        assert (await _grade_state(migrated_db, rid))[1] == Decimal("6.00")
+
+        # Act
+        r = await c.post(_unassign_url(ex, rid, evid_b), json={"reason": REASON}, headers=ah)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    assert (await _grade_state(migrated_db, rid))[1] == Decimal("8.00")
+    row = await _unassign_row(migrated_db, evid_b)
+    assert row.status == "completed"
+    assert row.completed_at is not None
+    assert row.finalized_by is not None
+
+
+# --- L6: the gate settles on unassign too ---------------------------------------------
+
+
+async def test_unassigning_the_last_unfinalized_evaluator_auto_transitions_the_report_to_evaluated(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """EDGE CASE, L6 — the whole point of D2 half two.
+
+    ``all_must_finalize`` with one absent evaluator is the deadlock. Removing them leaves a
+    fully-finalized counted set, so the gate opens and the report crosses on the way out.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        (h_a, evid_a, _uid_a), (h_b, evid_b, _uid_b) = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "4", h_b)  # graded but never finalized
+        await finalize(c, h_a, ex, rid, evid_a)
+        status_before, _g, version_before = await _grade_state(migrated_db, rid)
+        assert status_before == "under_evaluation"  # blocked by the absent evaluator
+
+        # Act
+        r = await c.post(_unassign_url(ex, rid, evid_b), json={"reason": REASON}, headers=ah)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["finalize_gate_satisfied"] is True
+    status_after, grade_after, version_after = await _grade_state(migrated_db, rid)
+    assert status_after == "evaluated"
+    assert grade_after == Decimal("8.00")
+    # D3: the version identifies the PUBLISHED grade, and the removed evaluator never
+    # contributed a value — the gate opened without the number moving, so nothing was
+    # republished. Bumping here would invalidate a consumer's cache over a non-event.
+    assert version_after == version_before
+    evaluated = [row for row in await _audit_rows(migrated_db, rid) if row.action == "report.evaluated"]
+    assert len(evaluated) == 1
+    assert evaluated[0].details["trigger"] == "evaluator_unassigned"
+
+
+async def test_unassigning_the_only_evaluator_does_not_transition_the_report(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """THE COUNTERPART that stops L6 over-firing.
+
+    Zero counted evaluations is a CLOSED gate, not a vacuously open one — a report with nobody
+    left to grade it wants a human, so it stays ``under_evaluation`` with a NULL grade and the
+    response says so.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid, _uid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+
+        # Act
+        r = await c.post(_unassign_url(ex, rid, evid), json={"reason": REASON}, headers=ah)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["finalize_gate_satisfied"] is False
+    status_after, grade_after, _v = await _grade_state(migrated_db, rid)
+    assert status_after == "under_evaluation"
+    assert grade_after is None
+    assert [row for row in await _audit_rows(migrated_db, rid) if row.action == "report.evaluated"] == []
+
+
+# --- audit ----------------------------------------------------------------------------
+
+
+async def test_unassign_writes_an_audit_row_with_the_reason_and_the_new_aggregate(
+    migrated_db: async_sessionmaker,
+) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, ga_id = await ga_headers(migrated_db)
+        ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=2)
+        (h_a, evid_a, _uid_a), (h_b, evid_b, uid_b) = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "4", h_b)
+        await finalize(c, h_a, ex, rid, evid_a)
+        await finalize(c, h_b, ex, rid, evid_b)
+
+        # Act
+        assert (await c.post(_unassign_url(ex, rid, evid_b), json={"reason": REASON}, headers=ah)).status_code == 200
+
+    # Assert
+    rows = [row for row in await _audit_rows(migrated_db, evid_b) if row.action == "evaluation.unassigned"]
+    assert len(rows) == 1
+    details = rows[0].details
+    assert details["reason"] == REASON
+    assert details["evaluator_id"] == uid_b
+    assert details["is_admin_override"] is True
+    assert details["overall_grade"] == "8.00"
+    assert str(rows[0].user_id) == ga_id
+
+
+# --- L8: the row survives to be reused ------------------------------------------------
+
+
+async def test_reassigning_a_previously_unassigned_evaluator_reactivates_the_existing_row(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """L8 exists so ``UNIQUE(report_id, evaluator_id)`` survives a change of mind.
+
+    Re-assigning the same evaluator must revive their row — with their old section grades still
+    attached — not collide with it and not create a second one.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, [(h, evid, uid)] = await _world(migrated_db, c, ah)
+        await _grade(c, ex, rid, evid, sid, "8", h)
+        assert (await c.post(_unassign_url(ex, rid, evid), json={"reason": REASON}, headers=ah)).status_code == 200
+
+        # Act
+        r = await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/evaluations", json={"evaluator_id": uid}, headers=ah)
+
+    # Assert
+    assert r.status_code == 201, r.text
+    assert r.json()["data"]["id"] == evid
+    async with migrated_db() as s:
+        count = (
+            await s.execute(text("SELECT count(*) FROM evaluation WHERE report_id = CAST(:i AS uuid)"), {"i": rid})
+        ).scalar_one()
+    assert count == 1
+    assert (await _unassign_row(migrated_db, evid))[0] is None
+    assert await _section_grade_count(migrated_db, evid) == 1
+    actions = [row.action for row in await _audit_rows(migrated_db, evid)]
+    assert actions.count("evaluation.reassigned") == 1

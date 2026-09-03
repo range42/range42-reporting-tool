@@ -38,6 +38,7 @@ from app.schemas.evaluation import (
     ReportGradeOut,
     SectionGradeOut,
     SectionGradeUpsert,
+    UnassignRequest,
 )
 from app.services.evaluation.finalize_gate import is_gate_open, resolve_finalize_policy
 from app.services.scoring import grade_validation, rollup
@@ -227,6 +228,47 @@ async def _begin_evaluation(
         )
 
 
+async def _reactivate_evaluation(
+    db: AsyncSession,
+    ev: Evaluation,
+    report: Report,
+    body: EvaluationCreate,
+    *,
+    actor: User,
+    ip: str | None,
+) -> EvaluationOut:
+    """Undo a soft unassign, restoring the evaluator to the gate and the denominator.
+
+    ``status`` is left exactly as unassign found it — the evaluator resumes where they stopped,
+    and a ``completed`` one is contributing again the moment the row counts.
+
+    The recompute is not optional: re-entering the counted set changes the denominator, so
+    skipping it would leave ``overall_grade`` describing a set of evaluators that no longer
+    matches the report's.
+    """
+    ev.unassigned_at = None
+    ev.unassigned_by = None
+    ev.unassign_reason = None
+    ev.aggregated_weight = body.aggregated_weight
+    await db.flush()
+    await rollup.recompute_report_grade(db, report, actor_id=actor.id, trigger="evaluation.reassigned", ip=ip)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="evaluation.reassigned",
+        resource_type="evaluation",
+        resource_id=ev.id,
+        details={
+            "report_id": str(report.id),
+            "evaluator_id": str(ev.evaluator_id),
+            "aggregated_weight": str(ev.aggregated_weight),
+            "grade_version": report.grade_version,
+        },
+        ip=ip,
+    )
+    return await _evaluation_out(db, ev)
+
+
 @router.post(_BASE, status_code=201)
 async def assign_evaluator(
     request: Request,
@@ -247,8 +289,16 @@ async def assign_evaluator(
     target = await _get_user(db, body.evaluator_id)
     if not await _has_permission(db, exercise_id, target, EVALUATIONS_WRITE):
         raise HTTPException(status_code=422, detail={"error": "user_is_not_an_evaluator"})
-    if await _existing_evaluation(db, report.id, target.id) is not None:
-        raise HTTPException(status_code=409, detail={"error": "evaluator_already_assigned"})
+    existing = await _existing_evaluation(db, report.id, target.id)
+    if existing is not None:
+        if existing.unassigned_at is None:
+            raise HTTPException(status_code=409, detail={"error": "evaluator_already_assigned"})
+        # L8: the unassign was soft, so UNIQUE(report_id, evaluator_id) still holds their seat.
+        # Reviving it keeps their section_grade rows attached; inserting a second row is
+        # impossible, and deleting the first would destroy the dispute trail unassign preserved.
+        return DataEnvelope(
+            data=await _reactivate_evaluation(db, existing, report, body, actor=user, ip=client_ip(request))
+        )
     ev = Evaluation(
         report_id=report.id,
         evaluator_id=target.id,
@@ -644,6 +694,7 @@ async def _settle_finalize_gate(
     exercise_id: uuid.UUID,
     evaluation_id: uuid.UUID,
     actor_id: uuid.UUID,
+    trigger: str,
     ip: str | None,
 ) -> tuple[bool, str]:
     """Ask the gate whether the report is finished, and transition it if so.
@@ -651,6 +702,10 @@ async def _settle_finalize_gate(
     Reads the facts back through ``rollup.load_evaluation_facts`` — the SAME query the
     aggregate used — so the report can never be declared evaluated over a different set of
     evaluations than the one its grade was computed from.
+
+    ``trigger`` names the cause of the crossing — ``evaluation_finalized`` when the last
+    evaluator pressed the button, ``evaluator_unassigned`` when an admin removed the one who
+    never would. Same edge, opposite stories, and a dispute needs to tell them apart.
 
     Returns ``(gate_satisfied, mode)``. The report.evaluated event seam (L11) is Task 11's.
     """
@@ -667,7 +722,7 @@ async def _settle_finalize_gate(
             target_status="evaluated",
             actor_id=actor_id,
             action="report.evaluated",
-            details={"finalize_policy": mode, "evaluation_id": str(evaluation_id)},
+            details={"finalize_policy": mode, "evaluation_id": str(evaluation_id), "trigger": trigger},
             ip=ip,
         )
     return satisfied, mode
@@ -718,6 +773,7 @@ async def finalize_evaluation(
         exercise_id=exercise_id,
         evaluation_id=ev.id,
         actor_id=user.id,
+        trigger="evaluation_finalized",
         ip=client_ip(request),
     )
     # One row per finalize, on the evaluation, whichever way the gate went — the override facts
@@ -734,6 +790,89 @@ async def finalize_evaluation(
             "is_admin_override": is_override,
             "credited_evaluator_id": str(credited_evaluator_id),
             "comment": ev.finalize_comment,
+            "grade_version": report.grade_version,
+        },
+        ip=client_ip(request),
+    )
+    return DataEnvelope(
+        data=EvaluationFinalizeOut(
+            evaluation=await _evaluation_out(db, ev),
+            report_status=report.status,
+            finalize_gate_satisfied=satisfied,
+            finalize_policy=mode,
+            overall_grade=report.overall_grade,
+            grade_version=report.grade_version,
+        )
+    )
+
+
+@router.post(_BASE + "/{evid}/unassign")
+async def unassign_evaluator(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    body: UnassignRequest,
+    user: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[EvaluationFinalizeOut]:
+    """Global-Admin deadlock exit (D2, half two): drop an unavailable evaluator.
+
+    Half one finalizes IN the absent evaluator's name; this half removes the seat entirely,
+    for when there is no grade to publish on their behalf. Mirrors the ARCHITECTURE §4.2
+    approval-chain override pattern.
+
+    SOFT, DELIBERATELY (L8). Nothing is deleted and ``status`` is not rewritten: the evaluation
+    and its section grades survive so a later dispute can still read what the removed evaluator
+    had done. ``unassigned_at IS NOT NULL`` alone takes them out of the L7 counted set.
+
+    ORDER IS LOAD-BEARING, exactly as in finalize: lock, guard, mutate, recompute, THEN settle
+    the gate — a gate settled first would announce a grade the same request goes on to change.
+    """
+    report: Report = await _get_report(db, exercise_id, rid)
+    await _lock_report(db, report.id)  # lock order: report, then evaluation
+    ev = await _get_evaluation(db, report.id, evid)
+    if ev.unassigned_at is not None:
+        # Not idempotent-by-silence: a second call must not re-run the recompute and bump
+        # grade_version (L9) for a change that already happened.
+        raise HTTPException(status_code=409, detail={"error": "already_unassigned"})
+    reason = body.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail={"error": "reason_required"})
+
+    ev.unassigned_at = datetime.now(UTC)
+    ev.unassigned_by = user.id
+    ev.unassign_reason = reason
+    await db.flush()
+
+    # A7: rollup stays the sole writer of overall_grade / grade_version. L5 renormalization —
+    # the dropped weight leaves the denominator, it does not rescale the survivors' grade.
+    await rollup.recompute_report_grade(
+        db, report, actor_id=user.id, trigger="evaluation.unassigned", ip=client_ip(request)
+    )
+    satisfied, mode = await _settle_finalize_gate(
+        db,
+        report,
+        exercise_id=exercise_id,
+        evaluation_id=ev.id,
+        actor_id=user.id,
+        trigger="evaluator_unassigned",
+        ip=client_ip(request),
+    )
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="evaluation.unassigned",
+        resource_type="evaluation",
+        resource_id=ev.id,
+        details={
+            "evaluator_id": str(ev.evaluator_id),
+            "reason": reason,
+            # Redundant with the action name, but it keeps the WP4 audit-details shape
+            # recognisable to a log consumer that greps for the flag.
+            "is_admin_override": True,
+            "finalize_gate_satisfied": satisfied,
+            "overall_grade": f"{report.overall_grade:.2f}" if report.overall_grade is not None else None,
             "grade_version": report.grade_version,
         },
         ip=client_ip(request),

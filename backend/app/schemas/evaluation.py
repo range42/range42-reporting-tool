@@ -230,6 +230,17 @@ class FinalizeRequest(BaseModel):
     comment: str | None = None
 
 
+class UnassignRequest(BaseModel):
+    """Body of ``POST .../evaluations/{evid}/unassign`` (D2, half two).
+
+    ``reason`` defaults to empty rather than being declared required so a missing body and a
+    whitespace-only one land on the SAME handler check and the same ``reason_required`` error,
+    instead of one of them escaping as a generic Pydantic 422. Mirrors ``FinalizeRequest``.
+    """
+
+    reason: str = ""
+
+
 class EvaluationFinalizeOut(BaseModel):
     """What ``POST .../evaluations/{evid}/finalize`` returns (W5-3).
 
