@@ -241,25 +241,64 @@ class UnassignRequest(BaseModel):
     reason: str = ""
 
 
-class EvaluationFinalizeOut(BaseModel):
-    """What ``POST .../evaluations/{evid}/finalize`` returns (W5-3).
+class EvaluationBreakdownRow(BaseModel):
+    """One evaluator's line in the breakdown (W5-3 Task 10).
 
-    A provisional shape: Task 10's ``EvaluationBreakdownOut`` adds the per-evaluator breakdown
-    with D1 scoping. What is settled here is the caller's immediate question — did my finalize
-    close the gate, and what is the report's grade now.
+    Distinct from ``EvaluationOut`` on purpose: this carries the dispute-trail columns
+    (``finalized_by``, ``finalize_is_admin_override``, ``unassigned_at``, ``unassign_reason``)
+    and ``aggregated_weight``, which W5-1's L11 deliberately kept OFF the evaluator-facing
+    ``EvaluationOut``. Sharing one model between the two audiences is how a weight leaks.
 
-    ``finalize_gate_satisfied`` is the gate's answer AFTER this finalize, so a first-of-two
-    evaluator sees ``false`` and knows the report is still waiting on a peer, without being
-    told who that peer is (D1).
+    ``evaluator_display_name`` is None for a non-admin caller: the evaluator path never joins
+    ``user`` at all, so there is no name for a future eager-load to expose.
     """
 
-    evaluation: EvaluationOut
-    report_status: str
-    finalize_gate_satisfied: bool
-    finalize_policy: str
+    id: str
+    evaluator_id: str
+    evaluator_display_name: str | None
+    status: str
+    overall_grade: Decimal | None
+    aggregated_weight: Decimal
+    completed_at: datetime | None
+    finalized_by: str | None
+    finalize_is_admin_override: bool
+    unassigned_at: datetime | None
+    unassign_reason: str | None
+    reopen_count: int
+
+
+class BreakdownAggregate(BaseModel):
+    """The report-level numbers, identical for every caller who may see the breakdown at all.
+
+    ``counted_evaluator_count`` is deliberately NOT suppressed for evaluators: a cardinality is
+    not an identity, and an evaluator who cannot tell whether their grade is one of one or one
+    of five cannot read ``overall_grade`` honestly. Names, ids, weights and timestamps of peers
+    are suppressed; the headcount is not.
+    """
+
     overall_grade: Decimal | None
     grade_version: int
+    counted_evaluator_count: int
+    completed_evaluator_count: int
+    aggregated_weight_total: Decimal
 
     @field_serializer("overall_grade")
     def _two_dp(self, v: Decimal | None) -> str | None:
         return None if v is None else f"{v:.2f}"
+
+
+class EvaluationBreakdownOut(BaseModel):
+    """``GET …/reports/{rid}/evaluations`` (W5-3 Task 10), replacing W5-1's plain list.
+
+    The aggregate is why this route gates rather than filters — see the route docstring and
+    #122. A caller who may not see the report's grade is refused outright; there is no
+    "authorized but nulled" variant, because ``aggregate.overall_grade is None`` already means
+    something else (nothing has been finalized yet) and one field cannot carry both meanings.
+    """
+
+    report_id: str
+    report_status: str
+    finalize_policy: str
+    finalize_gate_satisfied: bool
+    aggregate: BreakdownAggregate
+    evaluations: list[EvaluationBreakdownRow]

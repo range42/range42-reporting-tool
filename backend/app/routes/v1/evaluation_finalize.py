@@ -28,12 +28,12 @@ from app.models import Evaluation, Report, ReportSection, SectionGrade, Template
 from app.routes.v1.evaluations import (
     _BASE,
     _assert_evaluation_access,
-    _evaluation_out,
     _get_evaluation,
 )
 from app.routes.v1.reports import _get_report
 from app.schemas.common import DataEnvelope
-from app.schemas.evaluation import EvaluationFinalizeOut, FinalizeRequest, UnassignRequest
+from app.schemas.evaluation import EvaluationBreakdownOut, FinalizeRequest, UnassignRequest
+from app.services.evaluation import breakdown
 from app.services.evaluation.finalize_gate import is_gate_open, resolve_finalize_policy
 from app.services.scoring import rollup
 from app.services.workflow import state_machine
@@ -188,7 +188,7 @@ async def finalize_evaluation(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
-) -> DataEnvelope[EvaluationFinalizeOut]:
+) -> DataEnvelope[EvaluationBreakdownOut]:
     """Mark this evaluator's work done, then settle the report-level gate (§7.2).
 
     ORDER IS LOAD-BEARING: lock, guard, complete the evaluation, recompute the aggregate,
@@ -244,16 +244,7 @@ async def finalize_evaluation(
         },
         ip=client_ip(request),
     )
-    return DataEnvelope(
-        data=EvaluationFinalizeOut(
-            evaluation=await _evaluation_out(db, ev),
-            report_status=report.status,
-            finalize_gate_satisfied=satisfied,
-            finalize_policy=mode,
-            overall_grade=report.overall_grade,
-            grade_version=report.grade_version,
-        )
-    )
+    return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))
 
 
 @router.post(_BASE + "/{evid}/unassign")
@@ -265,7 +256,7 @@ async def unassign_evaluator(
     body: UnassignRequest,
     user: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
-) -> DataEnvelope[EvaluationFinalizeOut]:
+) -> DataEnvelope[EvaluationBreakdownOut]:
     """Global-Admin deadlock exit (D2, half two): drop an unavailable evaluator.
 
     Half one finalizes IN the absent evaluator's name; this half removes the seat entirely,
@@ -327,13 +318,4 @@ async def unassign_evaluator(
         },
         ip=client_ip(request),
     )
-    return DataEnvelope(
-        data=EvaluationFinalizeOut(
-            evaluation=await _evaluation_out(db, ev),
-            report_status=report.status,
-            finalize_gate_satisfied=satisfied,
-            finalize_policy=mode,
-            overall_grade=report.overall_grade,
-            grade_version=report.grade_version,
-        )
-    )
+    return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))

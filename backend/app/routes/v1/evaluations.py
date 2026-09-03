@@ -26,6 +26,7 @@ from app.models import Evaluation, Report, ReportSection, SectionGrade, Template
 from app.routes.v1.reports import _get_report, _has_permission
 from app.schemas.common import DataEnvelope
 from app.schemas.evaluation import (
+    EvaluationBreakdownOut,
     EvaluationCreate,
     EvaluationDetailOut,
     EvaluationOut,
@@ -36,6 +37,7 @@ from app.schemas.evaluation import (
     SectionGradeOut,
     SectionGradeUpsert,
 )
+from app.services.evaluation import breakdown
 from app.services.scoring import grade_validation, rollup
 from app.services.workflow import state_machine
 
@@ -321,25 +323,38 @@ async def assign_evaluator(
 
 
 @router.get(_BASE)
-async def list_evaluations(
+async def report_evaluation_breakdown(
     exercise_id: uuid.UUID,
     rid: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
-) -> DataEnvelope[list[EvaluationOut]]:
-    """List the report's evaluations, D1-scoped.
+) -> DataEnvelope[EvaluationBreakdownOut]:
+    """The report's per-evaluator breakdown, D1-scoped (W5-3 Task 10).
 
-    Scoping here is a *filter*, not a gate: an evaluator holding EVALUATIONS_WRITE in the
-    exercise but assigned to no evaluation on this report gets ``200 []``, not a 403. The
-    detail route below is the gate. The asymmetry is deliberate — see #95's error contract.
+    THIS ROUTE GATES; IT DOES NOT MERELY FILTER — superseding #95. W5-1 shipped it as a list
+    that filtered to the caller's rows, so a non-participating evaluator got ``200 []``. That
+    was safe only because an empty list disclosed nothing. Task 10 adds ``aggregate`` — the
+    report's grade, its ``grade_version`` and its evaluator headcount — to the SAME body, so an
+    empty ``evaluations[]`` would now hand all three to someone with no evaluation on this
+    report. The premise of #95's asymmetry expired with the old response shape; the rule did
+    not survive it. See #122.
+
+    THE GATE IS ROW EXISTENCE, NOT THE L7 COUNTED PREDICATE. A soft-unassigned evaluator keeps
+    their row (L8) so their dispute trail outlives their removal — gating on ``counts()`` would
+    lock them out of it precisely when a dispute needs reading. Do not "tidy" this into
+    ``counts()``; that is the regression
+    ``test_unassigned_evaluator_can_still_read_the_breakdown_for_their_dispute_trail`` exists
+    to catch.
+
+    The 403 body is the generic denial every other route uses, so this cannot be turned into an
+    oracle for enumerating which reports a caller is assigned to.
     """
     report: Report = await _get_report(db, exercise_id, rid)
-    q = select(Evaluation).where(Evaluation.report_id == report.id)
-    if not user.is_global_admin:
-        q = q.where(Evaluation.evaluator_id == user.id)
-    rows = (await db.execute(q.order_by(Evaluation.created_at))).scalars().all()
-    return DataEnvelope(data=[await _evaluation_out(db, ev) for ev in rows])
+    rows = await breakdown._rows_for(db, report.id)
+    if not breakdown.caller_owns_a_row(rows, user):
+        raise HTTPException(status_code=403, detail={"error": "forbidden"})
+    return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))
 
 
 @router.get(_BASE + "/{evid}")

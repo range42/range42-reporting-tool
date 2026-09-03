@@ -28,7 +28,7 @@ async def test_global_admin_lists_all_evaluations_for_a_report(migrated_db: asyn
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
         await _two_evaluators(migrated_db, c, ah, ex, rid)
-        rows = (await c.get(_list_url(ex, rid), headers=ah)).json()["data"]
+        rows = (await c.get(_list_url(ex, rid), headers=ah)).json()["data"]["evaluations"]
         assert len(rows) == 2
 
 
@@ -37,7 +37,7 @@ async def test_evaluator_list_returns_only_their_own_evaluation(migrated_db: asy
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
         h1, evid1, _, _ = await _two_evaluators(migrated_db, c, ah, ex, rid)
-        rows = (await c.get(_list_url(ex, rid), headers=h1)).json()["data"]
+        rows = (await c.get(_list_url(ex, rid), headers=h1)).json()["data"]["evaluations"]
         assert [r["id"] for r in rows] == [evid1]
 
 
@@ -55,20 +55,24 @@ async def test_evaluator_list_omits_peer_evaluations_even_when_report_is_evaluat
                 text("UPDATE evaluation SET status = 'completed' WHERE report_id = CAST(:i AS uuid)"), {"i": rid}
             )
             await s.commit()
-        rows = (await c.get(_list_url(ex, rid), headers=h1)).json()["data"]
+        rows = (await c.get(_list_url(ex, rid), headers=h1)).json()["data"]["evaluations"]
         assert [r["id"] for r in rows] == [evid1]
 
 
-async def test_evaluator_not_assigned_to_this_report_gets_an_empty_list(migrated_db: async_sessionmaker) -> None:
-    # 200 + [], not 403: the route permission is satisfied, the scoping is a filter.
+async def test_evaluator_not_assigned_to_this_report_is_refused(migrated_db: async_sessionmaker) -> None:
+    """403, NOT the ``200 []`` W5-1 shipped — the route gates now (W5-3 Task 10, #122).
+
+    The response carries the report's aggregate, so an empty ``evaluations[]`` would still hand
+    a non-participant the grade, the grade_version and the evaluator headcount. #95's "scoping
+    is a filter, not a gate" held only while the body was nothing but the caller's own rows.
+    """
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
         await _two_evaluators(migrated_db, c, ah, ex, rid)
         hc, _ = await evaluator(migrated_db, c, ah, ex, "evc")
         r = await c.get(_list_url(ex, rid), headers=hc)
-        assert r.status_code == 200
-        assert r.json()["data"] == []
+        assert r.status_code == 403
 
 
 async def test_evaluator_gets_own_evaluation_detail(migrated_db: async_sessionmaker) -> None:

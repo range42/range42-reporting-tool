@@ -102,7 +102,7 @@ async def test_permission_matrix_global_admin_reads_every_row(migrated_db: async
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         f = await _fixture(migrated_db, c, ah)
-        assert len((await c.get(_base(f), headers=ah)).json()["data"]) == 2
+        assert len((await c.get(_base(f), headers=ah)).json()["data"]["evaluations"]) == 2
         assert (await c.get(f"{_base(f)}/{f.evid_a}", headers=ah)).status_code == 200
         assert (await c.get(f"{_base(f)}/{f.evid_b}", headers=ah)).status_code == 200
 
@@ -141,10 +141,8 @@ async def test_evaluator_c_unassigned_to_this_report_gets_403_on_every_detail_ro
     async with client(migrated_db) as c:
         f = await _fixture(migrated_db, c, ah)
         b = _base(f)
-        # …but the LIST route is 200 + [] for them — filter, not gate.
-        listed = await c.get(b, headers=f.hc)
-        assert listed.status_code == 200
-        assert listed.json()["data"] == []
+        # …and since W5-3 Task 10 the breakdown route gates too: 403, not 200 + [] (#122).
+        assert (await c.get(b, headers=f.hc)).status_code == 403
         assert (await c.get(f"{b}/{f.evid_a}", headers=f.hc)).status_code == 403
         assert (await c.patch(f"{b}/{f.evid_a}", json={"overall_feedback": "x"}, headers=f.hc)).status_code == 403
         assert (await c.put(f"{b}/{f.evid_a}/grades/{f.sid}", json={"grade": "5"}, headers=f.hc)).status_code == 403
@@ -170,8 +168,8 @@ async def test_evaluations_list_for_an_evaluator_never_exceeds_one_row(migrated_
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         f = await _fixture(migrated_db, c, ah)
-        assert len((await c.get(_base(f), headers=f.ha)).json()["data"]) == 1
-        assert len((await c.get(_base(f), headers=f.hb)).json()["data"]) == 1
+        assert len((await c.get(_base(f), headers=f.ha)).json()["data"]["evaluations"]) == 1
+        assert len((await c.get(_base(f), headers=f.hb)).json()["data"]["evaluations"]) == 1
 
 
 async def test_no_evaluation_route_exposes_a_peer_evaluator_id(migrated_db: async_sessionmaker) -> None:
