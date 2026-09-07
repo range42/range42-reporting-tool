@@ -12,14 +12,12 @@ import pytest
 
 from app.services.scoring.rollup import (
     EvaluationInput,
-    RollupOverflow,
     SectionGradeInput,
     compute_evaluation_grade,
     compute_rubric_rollup,
-    compute_weighted_average,
     has_mixed_grade_max,
-    quantize_grade,
 )
+from app.services.scoring.weighting import RollupOverflow, compute_weighted_average, quantize_grade
 
 
 def _s(**kw) -> SectionGradeInput:

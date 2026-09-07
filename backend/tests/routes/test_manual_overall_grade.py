@@ -14,7 +14,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models import AuditLog
-from tests.routes._evaluations import assign, evaluator, ga_headers, role_holder, submitted_report
+from tests.routes._evaluations import assign, evaluator, finalize, ga_headers, role_holder, submitted_report
 from tests.routes._helpers import client, make_user_token
 
 pytestmark = pytest.mark.integration
@@ -49,6 +49,12 @@ async def _grade_section(c, ex, rid, evid, sid, value, headers):
         headers=headers,
     )
     assert r.status_code == 200, r.text
+
+
+async def _publish_grade(c, ex, rid, evid, sid, value, headers):
+    """Grade a section AND finalize, which is what publishes report.overall_grade under W5-3."""
+    await _grade_section(c, ex, rid, evid, sid, value, headers)
+    await finalize(c, headers, ex, rid, evid)
 
 
 async def _report_row(migrated_db, rid):
@@ -110,7 +116,7 @@ async def test_manual_grade_increments_grade_version(migrated_db: async_sessionm
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _world(migrated_db, c, ah)
-        await _grade_section(c, ex, rid, evid, sid, "9", h)  # computed grade -> version 1
+        await _publish_grade(c, ex, rid, evid, sid, "9", h)  # computed grade -> version 1
         r = await c.put(_grade_url(ex, rid), json={"overall_grade": "3", "reason": "moderated"}, headers=ah)
     assert r.status_code == 200, r.text
     assert r.json()["data"]["grade_version"] == 2
@@ -181,7 +187,7 @@ async def test_clearing_the_manual_flag_restores_the_computed_grade(migrated_db:
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _world(migrated_db, c, ah)
-        await _grade_section(c, ex, rid, evid, sid, "9", h)
+        await _publish_grade(c, ex, rid, evid, sid, "9", h)
         await c.put(_grade_url(ex, rid), json={"overall_grade": "3", "reason": "moderated"}, headers=ah)
         r = await c.put(_grade_url(ex, rid), json={"overall_grade": None, "reason": "reverted"}, headers=ah)
     assert r.status_code == 200, r.text
@@ -196,7 +202,7 @@ async def test_clearing_the_manual_flag_increments_grade_version(migrated_db: as
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _world(migrated_db, c, ah)
-        await _grade_section(c, ex, rid, evid, sid, "9", h)  # v1
+        await _publish_grade(c, ex, rid, evid, sid, "9", h)  # v1
         await c.put(_grade_url(ex, rid), json={"overall_grade": "3", "reason": "moderated"}, headers=ah)  # v2
         r = await c.put(_grade_url(ex, rid), json={"overall_grade": None, "reason": "reverted"}, headers=ah)
     assert r.status_code == 200, r.text
@@ -249,9 +255,15 @@ async def test_manual_grade_route_rejects_an_outsider(migrated_db: async_session
 
 
 async def _graded_world(migrated_db, c, ah):
-    """A report with a computed 9.00 grade, still under_evaluation."""
+    """A report with a computed 9.00 grade, still under_evaluation.
+
+    Two evaluators, one finalized: that publishes 9.00 while leaving the finalize gate closed,
+    so the report stays ``under_evaluation`` and the M17 status branches below stay meaningful.
+    """
     ex, rid, sid, h, evid = await _world(migrated_db, c, ah)
-    await _grade_section(c, ex, rid, evid, sid, "9", h)
+    _h2, uid2 = await evaluator(migrated_db, c, ah, ex, "ev-b")
+    await assign(c, ah, ex, rid, uid2)
+    await _publish_grade(c, ex, rid, evid, sid, "9", h)
     return ex, rid
 
 

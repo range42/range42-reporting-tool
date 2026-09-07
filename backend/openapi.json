@@ -467,6 +467,50 @@
         }
       }
     },
+    "/api/v1/exercises/{exercise_id}/me": {
+      "get": {
+        "tags": [
+          "exercises"
+        ],
+        "summary": "Get My Capabilities",
+        "description": "The caller's own capabilities in this exercise \u2014 powers the FE requiresApprover guard.",
+        "operationId": "get_my_capabilities_api_v1_exercises__exercise_id__me_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_MeCapabilitiesOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/exercises/{exercise_id}/team-types": {
       "get": {
         "tags": [
@@ -1061,6 +1105,58 @@
       }
     },
     "/api/v1/exercises/{exercise_id}/teams/{team_id}/members": {
+      "get": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "List Team Members",
+        "description": "Members of a team \u2014 powers the assigned-writer selector (L7).",
+        "operationId": "list_team_members_api_v1_exercises__exercise_id__teams__team_id__members_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_TeamMemberOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "teams"
@@ -2023,6 +2119,194 @@
         }
       }
     },
+    "/api/v1/templates/{template_id}/sections/{section_id}/choice-values/{code}/deprecate": {
+      "post": {
+        "tags": [
+          "templates"
+        ],
+        "summary": "Deprecate Choice Value",
+        "operationId": "deprecate_choice_value_api_v1_templates__template_id__sections__section_id__choice_values__code__deprecate_post",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Section Id"
+            }
+          },
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_SectionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/{template_id}/sections/{section_id}/choice-values/{code}": {
+      "delete": {
+        "tags": [
+          "templates"
+        ],
+        "summary": "Delete Choice Value",
+        "operationId": "delete_choice_value_api_v1_templates__template_id__sections__section_id__choice_values__code__delete",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Section Id"
+            }
+          },
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_SectionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/templates/{template_id}/sections/{section_id}/choice-values/import": {
+      "post": {
+        "tags": [
+          "templates"
+        ],
+        "summary": "Import Choice Values",
+        "description": "Populate a choice section's values from a ``code,label`` CSV (WP3 S12, G-4).\n\nMerge is strictly additive: new codes are appended in file order; an\nexisting code keeps its position and ``deprecated_at`` and only refreshes\nits label. Nothing is removed or un-deprecated, so the S4 immutability\nrules hold even on published templates whose codes are already referenced.\n``choice_config.catalog_binding`` passes through untouched (opaque in v1).",
+        "operationId": "import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post",
+        "parameters": [
+          {
+            "name": "template_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Template Id"
+            }
+          },
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Section Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_SectionOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/templates/{template_id}/export": {
       "get": {
         "tags": [
@@ -2540,10 +2824,2066 @@
           }
         }
       }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/approve": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Approve Report",
+        "operationId": "approve_report_api_v1_exercises__exercise_id__reports__rid__approve_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ApproveRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_ReportDetailOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/reject": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Reject Report",
+        "operationId": "reject_report_api_v1_exercises__exercise_id__reports__rid__reject_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_ReportDetailOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/recall": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Recall Report",
+        "operationId": "recall_report_api_v1_exercises__exercise_id__reports__rid__recall_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RecallRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_ReportDetailOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/campaigns": {
+      "post": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Create Campaign",
+        "operationId": "create_campaign_api_v1_exercises__exercise_id__campaigns_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_CampaignOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "List Campaigns",
+        "operationId": "list_campaigns_api_v1_exercises__exercise_id__campaigns_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_CampaignOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}": {
+      "get": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Get Campaign",
+        "operationId": "get_campaign_api_v1_exercises__exercise_id__campaigns__cid__get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_CampaignOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Update Campaign",
+        "operationId": "update_campaign_api_v1_exercises__exercise_id__campaigns__cid__patch",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_CampaignOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Delete Campaign",
+        "operationId": "delete_campaign_api_v1_exercises__exercise_id__campaigns__cid__delete",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/reports": {
+      "post": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Add Campaign Report",
+        "operationId": "add_campaign_report_api_v1_exercises__exercise_id__campaigns__cid__reports_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignReportAdd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_CampaignOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/reports/{rid}": {
+      "delete": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Remove Campaign Report",
+        "operationId": "remove_campaign_report_api_v1_exercises__exercise_id__campaigns__cid__reports__rid__delete",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/timeline": {
+      "get": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Campaign Timeline",
+        "operationId": "campaign_timeline_api_v1_exercises__exercise_id__campaigns__cid__timeline_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_TimelineEntryOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/compare": {
+      "get": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Campaign Compare",
+        "operationId": "campaign_compare_api_v1_exercises__exercise_id__campaigns__cid__compare_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          },
+          {
+            "name": "report_ids",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "minItems": 1,
+              "maxItems": 8,
+              "title": "Report Ids"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_ReportDetailOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/sections/{sid}/attachments": {
+      "post": {
+        "tags": [
+          "attachments"
+        ],
+        "summary": "Upload Attachment",
+        "operationId": "upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_AttachmentOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/attachments": {
+      "get": {
+        "tags": [
+          "attachments"
+        ],
+        "summary": "List Attachments",
+        "operationId": "list_attachments_api_v1_exercises__exercise_id__reports__rid__attachments_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_AttachmentOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/attachments/{aid}/download": {
+      "get": {
+        "tags": [
+          "attachments"
+        ],
+        "summary": "Download Attachment",
+        "operationId": "download_attachment_api_v1_exercises__exercise_id__reports__rid__attachments__aid__download_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "aid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Aid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/attachments/{aid}": {
+      "delete": {
+        "tags": [
+          "attachments"
+        ],
+        "summary": "Delete Attachment",
+        "operationId": "delete_attachment_api_v1_exercises__exercise_id__reports__rid__attachments__aid__delete",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "aid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Aid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations": {
+      "post": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Assign Evaluator",
+        "description": "Assign an evaluator to a submitted report (Global Admin only).\n\nL5: assignment does NOT begin evaluation \u2014 ``report.status`` is untouched here. The\n``submitted -> under_evaluation`` transition fires on the evaluator's first write (Task 7).",
+        "operationId": "assign_evaluator_api_v1_exercises__exercise_id__reports__rid__evaluations_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_EvaluationOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Report Evaluation Breakdown",
+        "description": "The report's per-evaluator breakdown, D1-scoped (W5-3 Task 10).\n\nTHIS ROUTE GATES; IT DOES NOT MERELY FILTER \u2014 superseding #95. W5-1 shipped it as a list\nthat filtered to the caller's rows, so a non-participating evaluator got ``200 []``. That\nwas safe only because an empty list disclosed nothing. Task 10 adds ``aggregate`` \u2014 the\nreport's grade, its ``grade_version`` and its evaluator headcount \u2014 to the SAME body, so an\nempty ``evaluations[]`` would now hand all three to someone with no evaluation on this\nreport. The premise of #95's asymmetry expired with the old response shape; the rule did\nnot survive it. See #122.\n\nTHE GATE IS ROW EXISTENCE, NOT THE L7 COUNTED PREDICATE. A soft-unassigned evaluator keeps\ntheir row (L8) so their dispute trail outlives their removal \u2014 gating on ``counts()`` would\nlock them out of it precisely when a dispute needs reading. Do not \"tidy\" this into\n``counts()``; that is the regression\n``test_unassigned_evaluator_can_still_read_the_breakdown_for_their_dispute_trail`` exists\nto catch.\n\nThe 403 body is the generic denial every other route uses, so this cannot be turned into an\noracle for enumerating which reports a caller is assigned to.",
+        "operationId": "report_evaluation_breakdown_api_v1_exercises__exercise_id__reports__rid__evaluations_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_EvaluationBreakdownOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Get Evaluation",
+        "description": "One evaluation with the sections to grade (D1-gated).\n\nL12: ``GradableSectionOut`` is the only place the evaluator-only template fields\n(grade_mode/min/max, weight, rubric and evaluation criteria) are exposed. They must never\nmigrate onto ``ReportSectionOut``.",
+        "operationId": "get_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "evid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_EvaluationDetailOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Update Evaluation",
+        "description": "Update the evaluation's overall feedback; the first write begins evaluation (L5).\n\nAuthorize before mutating: the D1 gate runs ahead of every write and audit call, so a\nrejected caller leaves no trace behind (Task 11 pins that).\n\nA7 / D3 sole-writer guards: this handler never touches ``report.overall_grade``,\n``evaluation.overall_grade`` or ``report.grade_version`` \u2014 the W5-2 rollup owns those.",
+        "operationId": "update_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__patch",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "evid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_EvaluationOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/grades/{section_id}": {
+      "put": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Upsert Section Grade",
+        "description": "Create or replace the caller's grade for one section (L8).\n\nEvery rejection \u2014 403, 404, 409, 422 \u2014 is raised before the first mutation and before\n``record_audit``, so a refused write leaves no row and no audit trail (Task 11 asserts it).",
+        "operationId": "upsert_section_grade_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades__section_id__put",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "evid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evid"
+            }
+          },
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Section Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SectionGradeUpsert"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_SectionGradeOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Delete Section Grade",
+        "description": "Remove the caller's grade for one section and recompute (edge case 3).\n\nNOT IN \u00a76.8 \u2014 see ambiguity B6. It exists because a grade has to be retractable and PUT\ncannot express it: L8's numeric branch REQUIRES ``grade``, so there is no payload meaning\n\"un-grade this\". Overloading PUT with null semantics would collide with the mode table, so\nthe retraction gets its own verb.\n\nDeleting the last grade returns the report to an ungraded state \u2014 overall_grade goes back\nto NULL, not 0, and grade_version still advances because the published number changed.",
+        "operationId": "delete_section_grade_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades__section_id__delete",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "evid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evid"
+            }
+          },
+          {
+            "name": "section_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Section Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/grades": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "List Section Grades",
+        "description": "The evaluation's own grades, ordered by section position.\n\nNo separate filter: \"own grades\" falls out of the D1 gate on \"own evaluation\". A Global\nAdmin reads any evaluation's grades, one evaluation at a time.",
+        "operationId": "list_section_grades_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "evid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_SectionGradeOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/overall-grade": {
+      "put": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Set Overall Grade",
+        "description": "Set ``report.overall_grade`` by hand, or clear the override (M9, \u00a74.2).\n\nAuthorization: Global Admin, or an evaluator ASSIGNED TO THIS REPORT. Holding\n``evaluations:write`` in the exercise is not enough \u2014 D1 (E1) applies to the report-level\nnumber exactly as it does to a peer's evaluation, so an unassigned evaluator 403s. Every\nrejection precedes the first write, so a refused call leaves no row and no audit trail.\n\n``overall_grade=None`` clears the flag and recomputes at once, so the report never sits on a\nstale hand-set number. Both branches go through ``rollup.set_manual_grade`` (M2) and both\nbump ``grade_version`` (D3) because either way a new number is published.",
+        "operationId": "set_overall_grade_api_v1_exercises__exercise_id__reports__rid__overall_grade_put",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualGradeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_ReportGradeOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/finalize": {
+      "post": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Finalize Evaluation",
+        "description": "Mark this evaluator's work done, then settle the report-level gate (\u00a77.2).\n\nORDER IS LOAD-BEARING: lock, guard, complete the evaluation, recompute the aggregate,\nTHEN ask the gate. A gate settled before the recompute would fire ``report.evaluated``\ncarrying the previous grade \u2014 announcing a number that the same request then changes.\n\nAn evaluator finalizing their own work sends no body. A Global Admin may send\n``on_behalf_of`` + ``comment`` to break a deadlock (D2) \u2014 see ``_resolve_finalize_actor``.",
+        "operationId": "finalize_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__finalize_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "evid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/FinalizeRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_EvaluationBreakdownOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/unassign": {
+      "post": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Unassign Evaluator",
+        "description": "Global-Admin deadlock exit (D2, half two): drop an unavailable evaluator.\n\nHalf one finalizes IN the absent evaluator's name; this half removes the seat entirely,\nfor when there is no grade to publish on their behalf. Mirrors the ARCHITECTURE \u00a74.2\napproval-chain override pattern.\n\nSOFT, DELIBERATELY (L8). Nothing is deleted and ``status`` is not rewritten: the evaluation\nand its section grades survive so a later dispute can still read what the removed evaluator\nhad done. ``unassigned_at IS NOT NULL`` alone takes them out of the L7 counted set.\n\nORDER IS LOAD-BEARING, exactly as in finalize: lock, guard, mutate, recompute, THEN settle\nthe gate \u2014 a gate settled first would announce a grade the same request goes on to change.",
+        "operationId": "unassign_evaluator_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__unassign_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          },
+          {
+            "name": "evid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnassignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_EvaluationBreakdownOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ApprovalChainEntry": {
+        "properties": {
+          "role_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Key"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "ApprovalChainEntry",
+        "description": "One ordered step of a multi-step approval chain (ARCHITECTURE \u00a77).\n\nExactly one of ``role_key``/``user_id`` identifies who may approve the step.\n``required`` steps must all be approved before the report leaves\n``pending_approval``; optional steps do not gate finalization."
+      },
+      "ApprovalRecordOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "approver_id": {
+            "type": "string",
+            "title": "Approver Id"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "is_admin_override": {
+            "type": "boolean",
+            "title": "Is Admin Override"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "report_id",
+          "approver_id",
+          "step",
+          "action",
+          "is_admin_override",
+          "comment",
+          "created_at"
+        ],
+        "title": "ApprovalRecordOut"
+      },
+      "ApproveRequest": {
+        "properties": {
+          "step": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "on_behalf_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Behalf Of"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "title": "ApproveRequest"
+      },
+      "AttachmentOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "section_id": {
+            "type": "string",
+            "title": "Section Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "uploaded_by": {
+            "type": "string",
+            "title": "Uploaded By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "report_id",
+          "section_id",
+          "filename",
+          "content_type",
+          "size_bytes",
+          "classification",
+          "uploaded_by",
+          "created_at"
+        ],
+        "title": "AttachmentOut"
+      },
+      "Body_import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post"
+      },
+      "Body_upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post"
+      },
+      "BreakdownAggregate": {
+        "properties": {
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "grade_version": {
+            "type": "integer",
+            "title": "Grade Version"
+          },
+          "counted_evaluator_count": {
+            "type": "integer",
+            "title": "Counted Evaluator Count"
+          },
+          "completed_evaluator_count": {
+            "type": "integer",
+            "title": "Completed Evaluator Count"
+          },
+          "aggregated_weight_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Aggregated Weight Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "overall_grade",
+          "grade_version",
+          "counted_evaluator_count",
+          "completed_evaluator_count",
+          "aggregated_weight_total"
+        ],
+        "title": "BreakdownAggregate",
+        "description": "The report-level numbers, identical for every caller who may see the breakdown at all.\n\n``counted_evaluator_count`` is deliberately NOT suppressed for evaluators: a cardinality is\nnot an identity, and an evaluator who cannot tell whether their grade is one of one or one\nof five cannot read ``overall_grade`` honestly. Names, ids, weights and timestamps of peers\nare suppressed; the headcount is not."
+      },
+      "CampaignCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CampaignCreate"
+      },
+      "CampaignOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "exercise_id": {
+            "type": "string",
+            "title": "Exercise Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "report_count": {
+            "type": "integer",
+            "title": "Report Count"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "exercise_id",
+          "name",
+          "description",
+          "report_count",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CampaignOut"
+      },
+      "CampaignReportAdd": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id"
+        ],
+        "title": "CampaignReportAdd"
+      },
+      "CampaignUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "title": "CampaignUpdate"
+      },
       "ChoiceBody": {
         "properties": {
           "kind": {
@@ -2565,6 +4905,116 @@
           "choice_values"
         ],
         "title": "ChoiceBody"
+      },
+      "DataEnvelope_AttachmentOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AttachmentOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[AttachmentOut]"
+      },
+      "DataEnvelope_CampaignOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CampaignOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[CampaignOut]"
+      },
+      "DataEnvelope_EvaluationBreakdownOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EvaluationBreakdownOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[EvaluationBreakdownOut]"
+      },
+      "DataEnvelope_EvaluationDetailOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EvaluationDetailOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[EvaluationDetailOut]"
+      },
+      "DataEnvelope_EvaluationOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EvaluationOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[EvaluationOut]"
       },
       "DataEnvelope_ExerciseOut_": {
         "properties": {
@@ -2610,6 +5060,28 @@
         ],
         "title": "DataEnvelope[ExerciseRoleOut]"
       },
+      "DataEnvelope_MeCapabilitiesOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MeCapabilitiesOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[MeCapabilitiesOut]"
+      },
       "DataEnvelope_ReportDetailOut_": {
         "properties": {
           "data": {
@@ -2631,6 +5103,28 @@
           "data"
         ],
         "title": "DataEnvelope[ReportDetailOut]"
+      },
+      "DataEnvelope_ReportGradeOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReportGradeOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[ReportGradeOut]"
       },
       "DataEnvelope_ReportOut_": {
         "properties": {
@@ -2697,6 +5191,28 @@
           "data"
         ],
         "title": "DataEnvelope[RoleOut]"
+      },
+      "DataEnvelope_SectionGradeOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SectionGradeOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[SectionGradeOut]"
       },
       "DataEnvelope_SectionOut_": {
         "properties": {
@@ -2972,6 +5488,58 @@
         ],
         "title": "DataEnvelope[dict[str, str]]"
       },
+      "DataEnvelope_list_AttachmentOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[AttachmentOut]]"
+      },
+      "DataEnvelope_list_CampaignOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CampaignOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[CampaignOut]]"
+      },
       "DataEnvelope_list_ExerciseOut__": {
         "properties": {
           "data": {
@@ -3023,6 +5591,32 @@
           "data"
         ],
         "title": "DataEnvelope[list[ExerciseRoleOut]]"
+      },
+      "DataEnvelope_list_ReportDetailOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ReportDetailOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[ReportDetailOut]]"
       },
       "DataEnvelope_list_ReportOut__": {
         "properties": {
@@ -3076,6 +5670,32 @@
         ],
         "title": "DataEnvelope[list[RoleOut]]"
       },
+      "DataEnvelope_list_SectionGradeOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SectionGradeOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[SectionGradeOut]]"
+      },
       "DataEnvelope_list_SectionOut__": {
         "properties": {
           "data": {
@@ -3101,6 +5721,32 @@
           "data"
         ],
         "title": "DataEnvelope[list[SectionOut]]"
+      },
+      "DataEnvelope_list_TeamMemberOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[TeamMemberOut]]"
       },
       "DataEnvelope_list_TeamOut__": {
         "properties": {
@@ -3206,6 +5852,32 @@
         ],
         "title": "DataEnvelope[list[TemplateVersionOut]]"
       },
+      "DataEnvelope_list_TimelineEntryOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEntryOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[TimelineEntryOut]]"
+      },
       "DataEnvelope_list_str__": {
         "properties": {
           "data": {
@@ -3244,6 +5916,416 @@
           "password"
         ],
         "title": "EmergencyLoginIn"
+      },
+      "EvaluationBreakdownOut": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "report_status": {
+            "type": "string",
+            "title": "Report Status"
+          },
+          "finalize_policy": {
+            "type": "string",
+            "title": "Finalize Policy"
+          },
+          "finalize_gate_satisfied": {
+            "type": "boolean",
+            "title": "Finalize Gate Satisfied"
+          },
+          "aggregate": {
+            "$ref": "#/components/schemas/BreakdownAggregate"
+          },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationBreakdownRow"
+            },
+            "type": "array",
+            "title": "Evaluations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "report_status",
+          "finalize_policy",
+          "finalize_gate_satisfied",
+          "aggregate",
+          "evaluations"
+        ],
+        "title": "EvaluationBreakdownOut",
+        "description": "``GET \u2026/reports/{rid}/evaluations`` (W5-3 Task 10), replacing W5-1's plain list.\n\nThe aggregate is why this route gates rather than filters \u2014 see the route docstring and\n#122. A caller who may not see the report's grade is refused outright; there is no\n\"authorized but nulled\" variant, because ``aggregate.overall_grade is None`` already means\nsomething else (nothing has been finalized yet) and one field cannot carry both meanings."
+      },
+      "EvaluationBreakdownRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "evaluator_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluator Display Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "aggregated_weight": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Aggregated Weight"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "finalized_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finalized By"
+          },
+          "finalize_is_admin_override": {
+            "type": "boolean",
+            "title": "Finalize Is Admin Override"
+          },
+          "unassigned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unassigned At"
+          },
+          "unassign_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unassign Reason"
+          },
+          "reopen_count": {
+            "type": "integer",
+            "title": "Reopen Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "evaluator_id",
+          "evaluator_display_name",
+          "status",
+          "overall_grade",
+          "aggregated_weight",
+          "completed_at",
+          "finalized_by",
+          "finalize_is_admin_override",
+          "unassigned_at",
+          "unassign_reason",
+          "reopen_count"
+        ],
+        "title": "EvaluationBreakdownRow",
+        "description": "One evaluator's line in the breakdown (W5-3 Task 10).\n\nDistinct from ``EvaluationOut`` on purpose: this carries the dispute-trail columns\n(``finalized_by``, ``finalize_is_admin_override``, ``unassigned_at``, ``unassign_reason``)\nand ``aggregated_weight``, which W5-1's L11 deliberately kept OFF the evaluator-facing\n``EvaluationOut``. Sharing one model between the two audiences is how a weight leaks.\n\n``evaluator_display_name`` is None for a non-admin caller: the evaluator path never joins\n``user`` at all, so there is no name for a future eager-load to expose."
+      },
+      "EvaluationCreate": {
+        "properties": {
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "aggregated_weight": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 9.99,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Aggregated Weight",
+            "default": "1.0"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluator_id"
+        ],
+        "title": "EvaluationCreate"
+      },
+      "EvaluationDetailOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "overall_feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Feedback"
+          },
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "reopen_count": {
+            "type": "integer",
+            "title": "Reopen Count"
+          },
+          "graded_section_count": {
+            "type": "integer",
+            "title": "Graded Section Count"
+          },
+          "gradable_section_count": {
+            "type": "integer",
+            "title": "Gradable Section Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "report_name": {
+            "type": "string",
+            "title": "Report Name"
+          },
+          "report_status": {
+            "type": "string",
+            "title": "Report Status"
+          },
+          "grade_version": {
+            "type": "integer",
+            "title": "Grade Version"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/GradableSectionOut"
+            },
+            "type": "array",
+            "title": "Sections"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "report_id",
+          "evaluator_id",
+          "status",
+          "overall_feedback",
+          "overall_grade",
+          "completed_at",
+          "reopen_count",
+          "graded_section_count",
+          "gradable_section_count",
+          "created_at",
+          "updated_at",
+          "report_name",
+          "report_status",
+          "grade_version",
+          "sections"
+        ],
+        "title": "EvaluationDetailOut"
+      },
+      "EvaluationOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "overall_feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Feedback"
+          },
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "reopen_count": {
+            "type": "integer",
+            "title": "Reopen Count"
+          },
+          "graded_section_count": {
+            "type": "integer",
+            "title": "Graded Section Count"
+          },
+          "gradable_section_count": {
+            "type": "integer",
+            "title": "Gradable Section Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "report_id",
+          "evaluator_id",
+          "status",
+          "overall_feedback",
+          "overall_grade",
+          "completed_at",
+          "reopen_count",
+          "graded_section_count",
+          "gradable_section_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EvaluationOut"
+      },
+      "EvaluationUpdate": {
+        "properties": {
+          "overall_feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Feedback"
+          }
+        },
+        "type": "object",
+        "title": "EvaluationUpdate"
       },
       "ExerciseCreate": {
         "properties": {
@@ -3643,6 +6725,196 @@
         "type": "object",
         "title": "ExerciseUpdate"
       },
+      "FinalizeRequest": {
+        "properties": {
+          "on_behalf_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Behalf Of"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "title": "FinalizeRequest",
+        "description": "Body of ``POST .../evaluations/{evid}/finalize``. Both fields are optional.\n\nAn evaluator finalizing their own work sends nothing. ``on_behalf_of`` is D2's deadlock\nexit: a Global Admin finalizes in an absent evaluator's name, and ``comment`` \u2014 mandatory\nin that case, enforced in the handler rather than here so the error is\n``comment_required`` instead of a generic 422 shape \u2014 records why."
+      },
+      "GradableSectionOut": {
+        "properties": {
+          "report_section_id": {
+            "type": "string",
+            "title": "Report Section Id"
+          },
+          "section_def_id": {
+            "type": "string",
+            "title": "Section Def Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "field_type": {
+            "type": "string",
+            "title": "Field Type"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "content_plain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Plain"
+          },
+          "choice_values": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice Values"
+          },
+          "grade_mode": {
+            "type": "string",
+            "title": "Grade Mode"
+          },
+          "grade_min": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade Min"
+          },
+          "grade_max": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade Max"
+          },
+          "grade_weight": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Grade Weight"
+          },
+          "rubric_criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric Criteria"
+          },
+          "evaluation_criteria": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluation Criteria"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SectionGradeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_section_id",
+          "section_def_id",
+          "name",
+          "description",
+          "position",
+          "field_type",
+          "content",
+          "content_plain",
+          "choice_values",
+          "grade_mode",
+          "grade_min",
+          "grade_max",
+          "grade_weight",
+          "rubric_criteria",
+          "evaluation_criteria",
+          "grade"
+        ],
+        "title": "GradableSectionOut",
+        "description": "Evaluator-facing section view \u2014 the ONLY place the evaluator-only template fields are\nexposed (L12). Never merge these into ``ReportSectionOut``."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3655,6 +6927,59 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ManualGradeRequest": {
+        "properties": {
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,3}|(?=[\\d.]{1,6}0*$)\\d{0,3}\\.\\d{0,2}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "ManualGradeRequest",
+        "description": "Body of ``PUT .../reports/{rid}/overall-grade`` (M9).\n\n``overall_grade=None`` clears the override and hands the number back to the rollup.\n``reason`` is mandatory and lands in the audit row \u2014 the \u00a76.8 reopen precedent.\nThe bounds mirror ``report.overall_grade``'s NUMERIC(5,2): anything the column could not\nstore is refused here, with the caller's own digits, instead of surfacing as a DB error."
+      },
+      "MeCapabilitiesOut": {
+        "properties": {
+          "is_global_admin": {
+            "type": "boolean",
+            "title": "Is Global Admin"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_global_admin",
+          "capabilities"
+        ],
+        "title": "MeCapabilitiesOut",
+        "description": "The caller's own capabilities within an exercise \u2014 drives coarse FE route guards."
       },
       "Page": {
         "properties": {
@@ -3676,6 +7001,49 @@
         },
         "type": "object",
         "title": "Page"
+      },
+      "RecallRequest": {
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "title": "RecallRequest"
+      },
+      "RejectRequest": {
+        "properties": {
+          "comment": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Comment"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "comment"
+        ],
+        "title": "RejectRequest"
       },
       "ReorderBody": {
         "properties": {
@@ -3737,6 +7105,20 @@
             "title": "Approval Required",
             "default": false
           },
+          "approval_chain": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ApprovalChainEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Chain"
+          },
           "assigned_writer_id": {
             "anyOf": [
               {
@@ -3759,6 +7141,39 @@
       },
       "ReportDetailOut": {
         "properties": {
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "overall_grade_is_manual": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade Is Manual"
+          },
+          "grade_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade Version"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -3848,6 +7263,28 @@
             ],
             "title": "Writer Notes"
           },
+          "approval_chain": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Chain"
+          },
+          "approval_records": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalRecordOut"
+            },
+            "type": "array",
+            "title": "Approval Records"
+          },
           "metadata": {
             "anyOf": [
               {
@@ -3866,6 +7303,10 @@
             },
             "type": "array",
             "title": "Sections"
+          },
+          "can_approve": {
+            "type": "boolean",
+            "title": "Can Approve"
           },
           "created_at": {
             "type": "string",
@@ -3893,15 +7334,87 @@
           "submitted_at",
           "assigned_writer_id",
           "writer_notes",
+          "approval_chain",
+          "approval_records",
           "metadata",
           "sections",
+          "can_approve",
           "created_at",
           "updated_at"
         ],
         "title": "ReportDetailOut"
       },
+      "ReportGradeOut": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "overall_grade_is_manual": {
+            "type": "boolean",
+            "title": "Overall Grade Is Manual"
+          },
+          "grade_version": {
+            "type": "integer",
+            "title": "Grade Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "overall_grade",
+          "overall_grade_is_manual",
+          "grade_version"
+        ],
+        "title": "ReportGradeOut",
+        "description": "The report-level grade state after a manual set/clear \u2014 what the M9 route returns."
+      },
       "ReportOut": {
         "properties": {
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "overall_grade_is_manual": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade Is Manual"
+          },
+          "grade_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade Version"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -3980,9 +7493,28 @@
             ],
             "title": "Assigned Writer Id"
           },
+          "approval_chain": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Chain"
+          },
           "section_count": {
             "type": "integer",
             "title": "Section Count"
+          },
+          "can_approve": {
+            "type": "boolean",
+            "title": "Can Approve"
           },
           "created_at": {
             "type": "string",
@@ -4009,7 +7541,9 @@
           "due_at",
           "submitted_at",
           "assigned_writer_id",
+          "approval_chain",
           "section_count",
+          "can_approve",
           "created_at",
           "updated_at"
         ],
@@ -4230,6 +7764,20 @@
             ],
             "title": "Approval Required"
           },
+          "approval_chain": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ApprovalChainEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Chain"
+          },
           "assigned_writer_id": {
             "anyOf": [
               {
@@ -4403,6 +7951,44 @@
         "type": "object",
         "title": "RoleUpdate"
       },
+      "RubricScoreEntry": {
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Criterion"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Score"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "criterion",
+          "score"
+        ],
+        "title": "RubricScoreEntry"
+      },
       "SectionAnswerUpdate": {
         "properties": {
           "version": {
@@ -4573,6 +8159,151 @@
           "name"
         ],
         "title": "SectionCreate"
+      },
+      "SectionGradeOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "evaluation_id": {
+            "type": "string",
+            "title": "Evaluation Id"
+          },
+          "report_section_id": {
+            "type": "string",
+            "title": "Report Section Id"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "pass_fail_result": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Fail Result"
+          },
+          "rubric_scores": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric Scores"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "evaluation_id",
+          "report_section_id",
+          "grade",
+          "pass_fail_result",
+          "rubric_scores",
+          "feedback",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SectionGradeOut"
+      },
+      "SectionGradeUpsert": {
+        "properties": {
+          "grade": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "pass_fail_result": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pass Fail Result"
+          },
+          "rubric_scores": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RubricScoreEntry"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rubric Scores"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          }
+        },
+        "type": "object",
+        "title": "SectionGradeUpsert",
+        "description": "One grading channel per row (\u00a74.2).\n\nWHICH channel is legal depends on the source section's ``grade_mode``; that check needs\nthe DB and therefore lives at the route layer (L8). Here we only forbid the combination\nthe DB backstop ``ck_section_grade_shape`` also refuses."
       },
       "SectionOut": {
         "properties": {
@@ -5625,6 +9356,72 @@
         ],
         "title": "TemplateVersionOut"
       },
+      "TimelineEntryOut": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "team_id": {
+            "type": "string",
+            "title": "Team Id"
+          },
+          "team_name": {
+            "type": "string",
+            "title": "Team Name"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "name",
+          "status",
+          "team_id",
+          "team_name",
+          "submitted_at",
+          "due_at",
+          "created_at"
+        ],
+        "title": "TimelineEntryOut",
+        "description": "One campaign report on the evaluator timeline (WP5 two-pane/N-pane feed)."
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -5646,6 +9443,18 @@
           "user"
         ],
         "title": "TokenResponse"
+      },
+      "UnassignRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "UnassignRequest",
+        "description": "Body of ``POST .../evaluations/{evid}/unassign`` (D2, half two).\n\n``reason`` defaults to empty rather than being declared required so a missing body and a\nwhitespace-only one land on the SAME handler check and the same ``reason_required`` error,\ninstead of one of them escaping as a generic Pydantic 422. Mirrors ``FinalizeRequest``."
       },
       "UserOut": {
         "properties": {

@@ -6,6 +6,11 @@ grade-save handler, so nothing calls it implicitly yet.
 
 Two sole-writer contracts must not collide: ``state_machine`` owns ``report.status``,
 ``rollup`` owns ``report.overall_grade`` / ``evaluation.overall_grade`` / ``grade_version``.
+
+W5-3 L7: only a COMPLETED evaluation feeds ``report.overall_grade``, so grading alone no longer
+publishes anything. These tests drive ``rollup`` directly rather than through a request, so they
+complete their evaluations with :func:`mark_completed` — the route-level equivalent is the
+finalize endpoint, covered in ``test_evaluations_finalize.py``.
 """
 
 import uuid
@@ -17,7 +22,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models import AuditLog, Report
 from app.services.scoring.rollup import recompute_report_grade, set_manual_grade
-from tests.routes._evaluations import assign, evaluator, ga_headers
+from tests.routes._evaluations import assign, evaluator, ga_headers, mark_completed
 from tests.routes._helpers import client
 
 pytestmark = pytest.mark.integration
@@ -73,6 +78,11 @@ async def _grade(c, ex, rid, evid, sid, value, headers):
     assert r.status_code == 200, r.text
 
 
+async def _complete(migrated_db, *evids):
+    """Complete these evaluations so their grades count toward the report (L7)."""
+    await mark_completed(migrated_db, *evids)
+
+
 async def _recompute(migrated_db, rid, **kw):
     """Load the report in a fresh session, recompute, commit. Returns the GradeTimeline."""
     async with migrated_db() as s:
@@ -102,14 +112,14 @@ async def test_recompute_persists_report_overall_grade(migrated_db: async_sessio
         h, evid = graders[0]
         await _grade(c, ex, rid, evid, sids[0], "8", h)
         await _grade(c, ex, rid, evid, sids[1], "6", h)
-    # Task 8 wired the rollup into the save handler, so the grade is already published by the
-    # time we get here: 8 then (8+6)/2 = 7, two changes, two versions. The explicit recompute
-    # below must therefore be a no-op.
-    grade, version = await _report_row(migrated_db, rid)
-    assert grade == Decimal("7.00")
-    assert version == 2
+    # The saves published nothing: the evaluation is still in progress (L7).
+    assert await _report_row(migrated_db, rid) == (None, 0)
+    await _complete(migrated_db, evid)
     await _recompute(migrated_db, rid)
-    assert await _report_row(migrated_db, rid) == (Decimal("7.00"), 2)
+    # (8 + 6) / 2 = 7, published once.
+    assert await _report_row(migrated_db, rid) == (Decimal("7.00"), 1)
+    await _recompute(migrated_db, rid)
+    assert await _report_row(migrated_db, rid) == (Decimal("7.00"), 1)
 
 
 async def test_recompute_persists_each_evaluation_overall_grade(migrated_db: async_sessionmaker) -> None:
@@ -173,6 +183,7 @@ async def test_recompute_is_idempotent_when_called_twice_with_no_change(migrated
     async with client(migrated_db) as c:
         ex, rid, sids, graders = await _world(migrated_db, c, ah)
         await _grade(c, ex, rid, graders[0][1], sids[0], "8", graders[0][0])
+    await _complete(migrated_db, graders[0][1])
     await _recompute(migrated_db, rid)
     await _recompute(migrated_db, rid)
     grade, version = await _report_row(migrated_db, rid)
@@ -183,14 +194,22 @@ async def test_recompute_is_idempotent_when_called_twice_with_no_change(migrated
 async def test_recompute_bumps_grade_version_only_when_the_grade_changes(migrated_db: async_sessionmaker) -> None:
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        ex, rid, sids, graders = await _world(migrated_db, c, ah)
-        h, evid = graders[0]
-        await _grade(c, ex, rid, evid, sids[0], "8", h)
+        ex, rid, sids, graders = await _world(migrated_db, c, ah, evaluators=2)
+        (h1, evid1), (h2, evid2) = graders
+        await _grade(c, ex, rid, evid1, sids[0], "8", h1)
+        await _grade(c, ex, rid, evid2, sids[0], "9", h2)
+        # Only the first evaluation counts yet, so the recompute publishes 8.00.
+        await _complete(migrated_db, evid1)
         await _recompute(migrated_db, rid)
-        await _grade(c, ex, rid, evid, sids[0], "9", h)
+        assert await _report_row(migrated_db, rid) == (Decimal("8.00"), 1)
+        # A recompute that changes nothing costs no version.
+        await _recompute(migrated_db, rid)
+        assert await _report_row(migrated_db, rid) == (Decimal("8.00"), 1)
+    # The second evaluation joins the numerator: (8 + 9) / 2 = 8.50, one more version.
+    await _complete(migrated_db, evid2)
     await _recompute(migrated_db, rid)
     grade, version = await _report_row(migrated_db, rid)
-    assert grade == Decimal("9.00")
+    assert grade == Decimal("8.50")
     assert version == 2
 
 
@@ -202,6 +221,7 @@ async def test_recompute_emits_report_grade_recomputed_audit_row(migrated_db: as
     async with client(migrated_db) as c:
         ex, rid, sids, graders = await _world(migrated_db, c, ah)
         await _grade(c, ex, rid, graders[0][1], sids[0], "8", graders[0][0])
+    await _complete(migrated_db, graders[0][1])
     await _recompute(migrated_db, rid)
     async with migrated_db() as s:
         row = (await s.execute(select(AuditLog).where(AuditLog.action == "report.grade_recomputed"))).scalars().one()
@@ -216,6 +236,7 @@ async def test_recompute_emits_no_audit_row_when_the_grade_is_unchanged(migrated
     async with client(migrated_db) as c:
         ex, rid, sids, graders = await _world(migrated_db, c, ah)
         await _grade(c, ex, rid, graders[0][1], sids[0], "8", graders[0][0])
+    await _complete(migrated_db, graders[0][1])
     await _recompute(migrated_db, rid)
     await _recompute(migrated_db, rid)
     async with migrated_db() as s:
@@ -236,8 +257,10 @@ async def test_recompute_does_not_commit_the_session(migrated_db: async_sessionm
     async with client(migrated_db) as c:
         ex, rid, sids, graders = await _world(migrated_db, c, ah)
         await _grade(c, ex, rid, graders[0][1], sids[0], "8", graders[0][0])
-    # The save handler already published 8.00 / version 1. Change the underlying grade inside
-    # an uncommitted session, recompute, then roll back: nothing may survive.
+    await _complete(migrated_db, graders[0][1])
+    await _recompute(migrated_db, rid)
+    # 8.00 / version 1 is now published. Change the underlying grade inside an uncommitted
+    # session, recompute, then roll back: nothing may survive.
     assert await _report_row(migrated_db, rid) == (Decimal("8.00"), 1)
     async with migrated_db() as s:
         await s.execute(text("UPDATE section_grade SET grade = 2"))
@@ -331,6 +354,7 @@ async def test_clearing_a_manual_override_restores_the_computed_grade(migrated_d
     async with client(migrated_db) as c:
         ex, rid, sids, graders = await _world(migrated_db, c, ah)
         await _grade(c, ex, rid, graders[0][1], sids[0], "8", graders[0][0])
+    await _complete(migrated_db, graders[0][1])
     async with migrated_db() as s:
         report = (await s.execute(select(Report).where(Report.id == uuid.UUID(rid)))).scalar_one()
         await set_manual_grade(s, report, Decimal("3.00"), actor_id=None, reason="moderated")
@@ -351,6 +375,7 @@ async def test_recompute_returns_the_timeline_entry_for_the_report(migrated_db: 
     async with client(migrated_db) as c:
         ex, rid, sids, graders = await _world(migrated_db, c, ah)
         await _grade(c, ex, rid, graders[0][1], sids[0], "8", graders[0][0])
+    await _complete(migrated_db, graders[0][1])
     timeline = await _recompute(migrated_db, rid)
     assert timeline.report_id == rid
     assert timeline.overall_grade == Decimal("8.00")

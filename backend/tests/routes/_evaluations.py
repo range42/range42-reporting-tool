@@ -1,5 +1,7 @@
 """Arrange helpers shared by the W5-1 evaluation route tests (Tasks 5-11)."""
 
+from sqlalchemy import text
+
 from app.seed import seed_system_roles
 from tests.routes._helpers import make_user_token
 
@@ -83,3 +85,30 @@ async def assign(c, ah, ex, rid, uid, **body):
     )
     assert r.status_code == 201, r.text
     return r.json()["data"]["id"]
+
+
+async def finalize(c, headers, ex, rid, evid):
+    """Press the real W5-3 Finalize button, returning the response payload.
+
+    Grades only reach ``report.overall_grade`` once an evaluation is ``completed`` (L7), so any
+    test that wants a published grade has to come through here. Grading after this point is a
+    409 — finalize last.
+    """
+    r = await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/finalize", headers=headers)
+    assert r.status_code == 200, r.text
+    return r.json()["data"]
+
+
+async def mark_completed(migrated_db, *evaluation_ids):
+    """Complete evaluations without the endpoint, for tests that drive ``rollup`` directly.
+
+    The route-level path is :func:`finalize`; this exists only for the unit-ish rollup tests
+    that never build a request, and it deliberately sets the same two columns the route does.
+    """
+    async with migrated_db() as s:
+        for evid in evaluation_ids:
+            await s.execute(
+                text("UPDATE evaluation SET status = 'completed', completed_at = now() WHERE id = CAST(:i AS uuid)"),
+                {"i": str(evid)},
+            )
+        await s.commit()

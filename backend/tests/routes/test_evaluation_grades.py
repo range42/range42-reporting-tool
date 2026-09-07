@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from tests.routes._evaluations import assign, evaluator, ga_headers
+from tests.routes._evaluations import assign, evaluator, finalize, ga_headers
 from tests.routes._helpers import client
 
 pytestmark = pytest.mark.integration
@@ -160,6 +160,8 @@ async def test_rubric_grade_participates_in_the_report_rollup(migrated_db: async
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **RUBRIC_SECTION)
         body = {"rubric_scores": [{"criterion": "Clarity", "score": "4"}, {"criterion": "Depth", "score": "8"}]}
         await c.put(_grade_url(ex, rid, evid, sid), json=body, headers=h)
+        # W5-3 L7: a grade reaches the report only once its evaluation is finalized.
+        await finalize(c, h, ex, rid, evid)
     async with migrated_db() as s:
         og = (
             await s.execute(text("SELECT overall_grade FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid})
@@ -238,12 +240,14 @@ async def test_first_grade_write_moves_report_to_under_evaluation(migrated_db: a
 
 
 async def test_grade_write_recomputes_report_overall_grade(migrated_db: async_sessionmaker) -> None:
-    # FLIPPED from W5-1, which asserted both stayed null/zero. Task 8 wired the A7 rollup into
-    # this handler, so a grade save now publishes the report grade in the same transaction.
+    # FLIPPED TWICE. W5-1 asserted both stayed null/zero; W5-2's Task 8 wired the A7 rollup in
+    # so a grade save published immediately; W5-3's L7 now requires the evaluation to be
+    # finalized first, so the publication happens on finalize and inside that transaction.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **NUMERIC)
         await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "5"}, headers=h)
+        await finalize(c, h, ex, rid, evid)
     async with migrated_db() as s:
         gv, og = (
             await s.execute(
@@ -263,18 +267,31 @@ async def test_grade_write_recomputes_the_callers_evaluation_overall_grade(migra
     assert d["overall_grade"] == "5.00"
 
 
-async def test_grade_write_increments_grade_version_on_each_change(migrated_db: async_sessionmaker) -> None:
+async def test_grade_edits_before_finalize_publish_one_version(migrated_db: async_sessionmaker) -> None:
+    """W5-3: re-grading while still in progress publishes nothing, so it costs no versions.
+
+    W5-2 asserted one bump per changed save. Under L7 an in-progress evaluation contributes
+    nothing to the report, so all three saves below leave ``overall_grade`` NULL and the single
+    version comes from the finalize.
+    """
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **NUMERIC)
         await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "5"}, headers=h)
         await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "7"}, headers=h)
         await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "7"}, headers=h)  # no change
+        async with migrated_db() as s:
+            assert (
+                await s.execute(text("SELECT grade_version FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid})
+            ).scalar_one() == 0
+        await finalize(c, h, ex, rid, evid)
     async with migrated_db() as s:
-        gv = (
-            await s.execute(text("SELECT grade_version FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid})
-        ).scalar_one()
-    assert gv == 2
+        gv, og = (
+            await s.execute(
+                text("SELECT grade_version, overall_grade FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid}
+            )
+        ).one()
+    assert (gv, og) == (1, Decimal("7.00"))
 
 
 async def test_second_evaluators_grade_changes_the_aggregate(migrated_db: async_sessionmaker) -> None:
@@ -285,6 +302,9 @@ async def test_second_evaluators_grade_changes_the_aggregate(migrated_db: async_
         h2, uid2 = await evaluator(migrated_db, c, ah, ex, "ev2")
         evid2 = await assign(c, ah, ex, rid, uid2)
         await c.put(_grade_url(ex, rid, evid2, sid), json={"grade": "5"}, headers=h2)
+        # Both must finalize: under all_must_finalize the first one alone publishes nothing.
+        await finalize(c, h1, ex, rid, evid1)
+        await finalize(c, h2, ex, rid, evid2)
     async with migrated_db() as s:
         og = (
             await s.execute(text("SELECT overall_grade FROM report WHERE id = CAST(:i AS uuid)"), {"i": rid})

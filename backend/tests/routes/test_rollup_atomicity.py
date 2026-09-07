@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.services.scoring import rollup
-from tests.routes._evaluations import assign, evaluator, ga_headers
+from tests.routes._evaluations import assign, evaluator, finalize, ga_headers
 from tests.routes._helpers import client
 
 pytestmark = pytest.mark.integration
@@ -68,6 +68,8 @@ async def test_grade_save_and_rollup_commit_atomically(migrated_db: async_sessio
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah)
         assert (await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "8"}, headers=h)).status_code == 200
+        # W5-3 L7: the grade is published by the finalize, in that request's transaction.
+        await finalize(c, h, ex, rid, evid)
     assert await _scalar(migrated_db, "SELECT count(*) FROM section_grade") == 1
     assert await _overall(migrated_db, rid) == Decimal("8.00")
 
@@ -83,7 +85,7 @@ async def test_rollup_failure_rolls_back_the_section_grade_write(
         def _boom(*a, **kw):
             raise RuntimeError("rollup exploded")
 
-        monkeypatch.setattr(rollup, "compute_report_grade", _boom)
+        monkeypatch.setattr(rollup, "aggregate_overall_grade", _boom)
         with pytest.raises(RuntimeError):
             await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "8"}, headers=h)
     assert await _scalar(migrated_db, "SELECT count(*) FROM section_grade") == 0
@@ -112,7 +114,19 @@ async def test_delete_grade_recomputes_the_report_grade(migrated_db: async_sessi
         evid2 = await assign(c, ah, ex, rid, uid2)
         await c.put(_grade_url(ex, rid, evid1, sid), json={"grade": "9"}, headers=h1)
         await c.put(_grade_url(ex, rid, evid2, sid), json={"grade": "5"}, headers=h2)
+        await finalize(c, h1, ex, rid, evid1)
+        await finalize(c, h2, ex, rid, evid2)
         assert await _overall(migrated_db, rid) == Decimal("7.00")
+        # A finalized evaluation refuses grade edits, so ev2 is reopened by hand (W5-4 owns
+        # the real route) to prove the delete still drives a recompute.
+        async with migrated_db() as s2:
+            await s2.execute(
+                text("UPDATE evaluation SET status = 'in_progress' WHERE id = CAST(:i AS uuid)"), {"i": evid2}
+            )
+            await s2.execute(
+                text("UPDATE report SET status = 'under_evaluation' WHERE id = CAST(:i AS uuid)"), {"i": rid}
+            )
+            await s2.commit()
         assert (await c.delete(_grade_url(ex, rid, evid2, sid), headers=h2)).status_code == 204
     assert await _overall(migrated_db, rid) == Decimal("9.00")
 

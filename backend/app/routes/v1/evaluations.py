@@ -26,6 +26,7 @@ from app.models import Evaluation, Report, ReportSection, SectionGrade, Template
 from app.routes.v1.reports import _get_report, _has_permission
 from app.schemas.common import DataEnvelope
 from app.schemas.evaluation import (
+    EvaluationBreakdownOut,
     EvaluationCreate,
     EvaluationDetailOut,
     EvaluationOut,
@@ -36,6 +37,7 @@ from app.schemas.evaluation import (
     SectionGradeOut,
     SectionGradeUpsert,
 )
+from app.services.evaluation import breakdown
 from app.services.scoring import grade_validation, rollup
 from app.services.workflow import state_machine
 
@@ -223,6 +225,47 @@ async def _begin_evaluation(
         )
 
 
+async def _reactivate_evaluation(
+    db: AsyncSession,
+    ev: Evaluation,
+    report: Report,
+    body: EvaluationCreate,
+    *,
+    actor: User,
+    ip: str | None,
+) -> EvaluationOut:
+    """Undo a soft unassign, restoring the evaluator to the gate and the denominator.
+
+    ``status`` is left exactly as unassign found it — the evaluator resumes where they stopped,
+    and a ``completed`` one is contributing again the moment the row counts.
+
+    The recompute is not optional: re-entering the counted set changes the denominator, so
+    skipping it would leave ``overall_grade`` describing a set of evaluators that no longer
+    matches the report's.
+    """
+    ev.unassigned_at = None
+    ev.unassigned_by = None
+    ev.unassign_reason = None
+    ev.aggregated_weight = body.aggregated_weight
+    await db.flush()
+    await rollup.recompute_report_grade(db, report, actor_id=actor.id, trigger="evaluation.reassigned", ip=ip)
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="evaluation.reassigned",
+        resource_type="evaluation",
+        resource_id=ev.id,
+        details={
+            "report_id": str(report.id),
+            "evaluator_id": str(ev.evaluator_id),
+            "aggregated_weight": str(ev.aggregated_weight),
+            "grade_version": report.grade_version,
+        },
+        ip=ip,
+    )
+    return await _evaluation_out(db, ev)
+
+
 @router.post(_BASE, status_code=201)
 async def assign_evaluator(
     request: Request,
@@ -243,8 +286,16 @@ async def assign_evaluator(
     target = await _get_user(db, body.evaluator_id)
     if not await _has_permission(db, exercise_id, target, EVALUATIONS_WRITE):
         raise HTTPException(status_code=422, detail={"error": "user_is_not_an_evaluator"})
-    if await _existing_evaluation(db, report.id, target.id) is not None:
-        raise HTTPException(status_code=409, detail={"error": "evaluator_already_assigned"})
+    existing = await _existing_evaluation(db, report.id, target.id)
+    if existing is not None:
+        if existing.unassigned_at is None:
+            raise HTTPException(status_code=409, detail={"error": "evaluator_already_assigned"})
+        # L8: the unassign was soft, so UNIQUE(report_id, evaluator_id) still holds their seat.
+        # Reviving it keeps their section_grade rows attached; inserting a second row is
+        # impossible, and deleting the first would destroy the dispute trail unassign preserved.
+        return DataEnvelope(
+            data=await _reactivate_evaluation(db, existing, report, body, actor=user, ip=client_ip(request))
+        )
     ev = Evaluation(
         report_id=report.id,
         evaluator_id=target.id,
@@ -272,25 +323,38 @@ async def assign_evaluator(
 
 
 @router.get(_BASE)
-async def list_evaluations(
+async def report_evaluation_breakdown(
     exercise_id: uuid.UUID,
     rid: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
-) -> DataEnvelope[list[EvaluationOut]]:
-    """List the report's evaluations, D1-scoped.
+) -> DataEnvelope[EvaluationBreakdownOut]:
+    """The report's per-evaluator breakdown, D1-scoped (W5-3 Task 10).
 
-    Scoping here is a *filter*, not a gate: an evaluator holding EVALUATIONS_WRITE in the
-    exercise but assigned to no evaluation on this report gets ``200 []``, not a 403. The
-    detail route below is the gate. The asymmetry is deliberate — see #95's error contract.
+    THIS ROUTE GATES; IT DOES NOT MERELY FILTER — superseding #95. W5-1 shipped it as a list
+    that filtered to the caller's rows, so a non-participating evaluator got ``200 []``. That
+    was safe only because an empty list disclosed nothing. Task 10 adds ``aggregate`` — the
+    report's grade, its ``grade_version`` and its evaluator headcount — to the SAME body, so an
+    empty ``evaluations[]`` would now hand all three to someone with no evaluation on this
+    report. The premise of #95's asymmetry expired with the old response shape; the rule did
+    not survive it. See #122.
+
+    THE GATE IS ROW EXISTENCE, NOT THE L7 COUNTED PREDICATE. A soft-unassigned evaluator keeps
+    their row (L8) so their dispute trail outlives their removal — gating on ``counts()`` would
+    lock them out of it precisely when a dispute needs reading. Do not "tidy" this into
+    ``counts()``; that is the regression
+    ``test_unassigned_evaluator_can_still_read_the_breakdown_for_their_dispute_trail`` exists
+    to catch.
+
+    The 403 body is the generic denial every other route uses, so this cannot be turned into an
+    oracle for enumerating which reports a caller is assigned to.
     """
     report: Report = await _get_report(db, exercise_id, rid)
-    q = select(Evaluation).where(Evaluation.report_id == report.id)
-    if not user.is_global_admin:
-        q = q.where(Evaluation.evaluator_id == user.id)
-    rows = (await db.execute(q.order_by(Evaluation.created_at))).scalars().all()
-    return DataEnvelope(data=[await _evaluation_out(db, ev) for ev in rows])
+    rows = await breakdown._rows_for(db, report.id)
+    if not breakdown.caller_owns_a_row(rows, user):
+        raise HTTPException(status_code=403, detail={"error": "forbidden"})
+    return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))
 
 
 @router.get(_BASE + "/{evid}")
