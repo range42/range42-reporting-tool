@@ -617,16 +617,28 @@ async def test_a_reopen_and_a_peer_finalize_leave_a_coherent_end_state(
             c.post(_finalize_url(ex, rid, evid_b), headers=h_b),
         )
 
-    # Assert
+    # Assert — ORDER-AGNOSTIC, deliberately. Which request lands first is not deterministic
+    # under load, and both orders are legitimate: if the finalize wins, the gate opens, the
+    # report crosses to ``evaluated`` and the reopen then pulls it back; if the reopen wins,
+    # the gate never opens and the report never leaves ``under_evaluation``. Asserting either
+    # specific order made this test pass in isolation and fail in a full run.
     assert reopened.status_code == 200, reopened.text
     assert finalized.status_code == 200, finalized.text
     assert (await _evaluation_row(migrated_db, evid_a)).status == "in_progress"
     assert (await _evaluation_row(migrated_db, evid_b)).status == "completed"
+
+    # Whatever the order: A is counted and unfinished, so the gate is shut at the end.
     status, _version = await _report_status_and_version(migrated_db, rid)
-    # A is unfinished and still counted, so the gate cannot be satisfied.
     assert status == "under_evaluation"
-    assert await _count(migrated_db, "report.reopened") == 0  # it never reached evaluated
-    assert await _count(migrated_db, "event.report_evaluated") == 0
+
+    # And the two counts move together. ``report.reopened`` is written only when the reopen
+    # found the report already ``evaluated`` — which is exactly when the crossing fired its
+    # event. One without the other means a crossing went unannounced, or a report was pulled
+    # back from a state it never reached.
+    crossings = await _count(migrated_db, "event.report_evaluated")
+    reopen_transitions = await _count(migrated_db, "report.reopened")
+    assert crossings == reopen_transitions
+    assert crossings in (0, 1)
 
 
 # --- the lock, where it can actually be driven: two transactions ---------------------
