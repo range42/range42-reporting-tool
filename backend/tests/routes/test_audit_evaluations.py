@@ -10,11 +10,16 @@ Actions introduced by this slice: ``evaluation.assigned`` (Task 5),
 ``report.under_evaluation`` (Task 7/8, via ``state_machine.transition``).
 """
 
+import asyncio
+import inspect
+import uuid
+
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models import AuditLog
+from app.routes.v1.evaluation_finalize import reopen_evaluation
 from tests.routes._evaluations import assign, evaluator, ga_headers, submitted_report
 from tests.routes._helpers import client
 
@@ -398,3 +403,320 @@ async def test_report_evaluated_and_its_event_are_written_once_each_per_crossing
     # Assert
     assert await _count(migrated_db, "report.evaluated") == 1
     assert await _count(migrated_db, "event.report_evaluated") == 1
+
+
+# ======================================================================================
+# W5-4 Task 8 — the reopen path's audit coverage and its concurrency.
+#
+# The reopen writes THREE rows where a finalize writes two: one on the evaluation
+# (``evaluation.reopened``, carrying the reason), one on the report if it actually left
+# ``evaluated`` (``report.reopened``), and the supersession event. The reason lives only on the
+# first — it is deliberately kept out of the event payload, which leaves the deployment.
+# ======================================================================================
+
+_REOPEN_ACTIONS = ("evaluation.reopened", "report.reopened", "event.report_evaluation_reopened")
+
+
+def _reopen_url(ex, rid, evid) -> str:
+    return f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/reopen"
+
+
+def _finalize_url(ex, rid, evid) -> str:
+    return f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/finalize"
+
+
+async def _reopen_counts(migrated_db) -> dict[str, int]:
+    return {a: await _count(migrated_db, a) for a in _REOPEN_ACTIONS}
+
+
+async def _evaluation_row(migrated_db, evid):
+    async with migrated_db() as s:
+        return (
+            await s.execute(
+                text("SELECT status, reopen_count FROM evaluation WHERE id = CAST(:i AS uuid)"),
+                {"i": evid},
+            )
+        ).one()
+
+
+async def _report_status_and_version(migrated_db, rid):
+    async with migrated_db() as s:
+        return (
+            await s.execute(
+                text("SELECT status, grade_version FROM report WHERE id = CAST(:i AS uuid)"),
+                {"i": rid},
+            )
+        ).one()
+
+
+async def test_full_reopen_round_trip_writes_the_expected_audit_action_set(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """assign -> grade -> finalize -> reopen -> re-finalize, as one exact set.
+
+    An EXACT set, not a subset: a superset is how a duplicate transition or a stray second
+    event slips in unnoticed. ``event.report_evaluated`` is the one action that must appear
+    TWICE — once per crossing — and the count is asserted separately because a set cannot say so.
+    """
+    # Arrange
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, graders, before = await _report_and_evaluators(migrated_db, c, ah, evaluators=1)
+        [(h_a, evid_a, _uid_a)] = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+        # Act
+        assert (await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "recount"}, headers=ah)).status_code == 200
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+    # Assert
+    added = sorted(set(await _all_actions(migrated_db)) - before)
+    assert added == [
+        "evaluation.assigned",
+        "evaluation.completed",
+        "evaluation.reopened",
+        "event.report_evaluated",
+        "event.report_evaluation_reopened",
+        "report.evaluated",
+        "report.grade_recomputed",
+        "report.reopened",
+        "report.under_evaluation",
+        "section_grade.saved",
+    ]
+    assert await _count(migrated_db, "event.report_evaluated") == 2
+    assert await _count(migrated_db, "event.report_evaluation_reopened") == 1
+    assert await _count(migrated_db, "report.reopened") == 1
+
+
+async def test_reopen_audit_details_record_the_reason_and_the_superseded_version(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """The reason is recoverable from the audit trail and from nowhere else.
+
+    It is kept off the event payload on purpose, so if this row did not carry it the reason
+    would be unrecoverable the moment the request ended.
+    """
+    # Arrange
+    ah, ga_uid = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, graders, _before = await _report_and_evaluators(migrated_db, c, ah, evaluators=1)
+        [(h_a, evid_a, uid_a)] = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+        # Act
+        r = await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "grade disputed by the team"}, headers=ah)
+        assert r.status_code == 200, r.text
+
+    # Assert
+    [row] = await _rows(migrated_db, "evaluation.reopened")
+    assert row.resource_type == "evaluation"
+    assert str(row.user_id) == ga_uid  # the admin who acted, not the evaluator
+    assert row.details["reason"] == "grade disputed by the team"
+    assert row.details["evaluator_id"] == uid_a
+    assert row.details["reopen_count"] == 1
+    assert row.details["report_status_before"] == "evaluated"
+    assert row.details["superseded_grade_version"] == 1
+    assert row.details["grade_version"] == 2
+    assert row.details["overall_grade"] is None  # nothing contributes while it is reopened
+
+    # ...and the report-level row carries the supersession pointer too.
+    [report_row] = await _rows(migrated_db, "report.reopened")
+    assert report_row.details["superseded_grade_version"] == 1
+    assert report_row.details["evaluation_id"] == evid_a
+
+
+async def test_rejected_reopen_writes_no_audit_row(migrated_db: async_sessionmaker) -> None:
+    """403 / 404 / 409 / 422 each leave every reopen action untouched.
+
+    The guards precede the mutation and ``record_audit`` sits after the last raise. If this
+    fails, move the audit call — never relax the assertion.
+    """
+    # Arrange
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, graders, _before = await _report_and_evaluators(migrated_db, c, ah, evaluators=1)
+        [(h_a, evid_a, _uid_a)] = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        # 409 first, while the evaluation is still in_progress and nothing is finalized.
+        rejections = [await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "early"}, headers=ah)]
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+        before = await _reopen_counts(migrated_db)
+
+        # Act
+        rejections += [
+            await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "nope"}, headers=h_a),  # 403
+            await c.post(_reopen_url(ex, rid, str(uuid.uuid4())), json={"reason": "nope"}, headers=ah),  # 404
+            await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "   "}, headers=ah),  # 422
+        ]
+
+    # Assert
+    assert [r.status_code for r in rejections] == [409, 403, 404, 422], [r.text for r in rejections]
+    assert await _reopen_counts(migrated_db) == before
+    assert before == dict.fromkeys(_REOPEN_ACTIONS, 0)
+    assert (await _evaluation_row(migrated_db, evid_a)).reopen_count == 0
+
+
+async def test_back_to_back_double_reopen_increments_the_counter_exactly_once(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """A SEQUENTIAL DOUBLE-CALL PROVES NOTHING ABOUT LOCKING — read this before trusting it.
+
+    ``httpx.ASGITransport`` does not overlap requests in this harness, so these two calls run
+    back-to-back: the first has committed before the second is admitted, and the second would
+    see ``in_progress`` and 409 whether or not any row lock existed. What this test pins is the
+    IDEMPOTENCE of the outcome — one counter increment, one event, one report transition from a
+    doubled admin action.
+
+    The lock itself is exercised at the session level, in
+    ``test_a_held_report_lock_blocks_the_reopen_before_it_mutates``.
+    """
+    # Arrange
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, graders, _before = await _report_and_evaluators(migrated_db, c, ah, evaluators=1)
+        [(h_a, evid_a, _uid_a)] = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+        # Act
+        first, second = await asyncio.gather(
+            c.post(_reopen_url(ex, rid, evid_a), json={"reason": "recount"}, headers=ah),
+            c.post(_reopen_url(ex, rid, evid_a), json={"reason": "recount again"}, headers=ah),
+        )
+
+    # Assert
+    assert {first.status_code, second.status_code} == {200, 409}, (first.text, second.text)
+    assert (await _evaluation_row(migrated_db, evid_a)).reopen_count == 1
+    assert await _count(migrated_db, "report.reopened") == 1
+    assert await _count(migrated_db, "event.report_evaluation_reopened") == 1
+
+
+async def test_a_reopen_and_a_peer_finalize_leave_a_coherent_end_state(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Two admin/evaluator actions on one report, back-to-back (see the note above).
+
+    Evaluator A is reopened while evaluator B finalizes. Whatever the order, the end state must
+    be internally consistent: A is back in grading, B is complete, the gate is therefore not
+    satisfied, and the report is under evaluation with exactly one reopen recorded.
+    """
+    # Arrange: both graded, only A finalized, so the report is still under evaluation.
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, graders, _before = await _report_and_evaluators(migrated_db, c, ah, evaluators=2)
+        (h_a, evid_a, _uid_a), (h_b, evid_b, _uid_b) = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        await _grade(c, ex, rid, evid_b, sid, "6", h_b)
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+        # Act
+        reopened, finalized = await asyncio.gather(
+            c.post(_reopen_url(ex, rid, evid_a), json={"reason": "recount"}, headers=ah),
+            c.post(_finalize_url(ex, rid, evid_b), headers=h_b),
+        )
+
+    # Assert — ORDER-AGNOSTIC, deliberately. Which request lands first is not deterministic
+    # under load, and both orders are legitimate: if the finalize wins, the gate opens, the
+    # report crosses to ``evaluated`` and the reopen then pulls it back; if the reopen wins,
+    # the gate never opens and the report never leaves ``under_evaluation``. Asserting either
+    # specific order made this test pass in isolation and fail in a full run.
+    assert reopened.status_code == 200, reopened.text
+    assert finalized.status_code == 200, finalized.text
+    assert (await _evaluation_row(migrated_db, evid_a)).status == "in_progress"
+    assert (await _evaluation_row(migrated_db, evid_b)).status == "completed"
+
+    # Whatever the order: A is counted and unfinished, so the gate is shut at the end.
+    status, _version = await _report_status_and_version(migrated_db, rid)
+    assert status == "under_evaluation"
+
+    # And the two counts move together. ``report.reopened`` is written only when the reopen
+    # found the report already ``evaluated`` — which is exactly when the crossing fired its
+    # event. One without the other means a crossing went unannounced, or a report was pulled
+    # back from a state it never reached.
+    crossings = await _count(migrated_db, "event.report_evaluated")
+    reopen_transitions = await _count(migrated_db, "report.reopened")
+    assert crossings == reopen_transitions
+    assert crossings in (0, 1)
+
+
+# --- the lock, where it can actually be driven: two transactions ---------------------
+
+
+async def test_a_held_report_lock_stalls_the_reopen_until_it_is_released(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """The reopen participates in the report's serialization — asserted, not assumed.
+
+    An outside session takes ``SELECT ... FOR UPDATE`` on the report and does not commit; the
+    reopen is then launched as a task and given a full second to produce a committed change.
+    It must not, and once the lock is released the very same in-flight request completes —
+    which is what shows it was waiting on the lock rather than failing for some other reason.
+
+    WHAT THIS DOES NOT PROVE, and do not let the name suggest otherwise: that the handler takes
+    the lock BEFORE mutating. It cannot. ``rollup.recompute_report_grade`` takes the same row
+    lock internally, so a handler that mutated first and locked later would stall here just the
+    same, and its mutation would be flushed-but-uncommitted and therefore invisible to the
+    observing session either way. Measured: with the handler's own
+    ``_get_report_for_update`` swapped for an unlocked read, this test still passes.
+
+    Lock ORDER — report before evaluation — is what prevents a production deadlock against
+    finalize and unassign, and it is guarded structurally by the test below instead.
+    """
+    # Arrange: a finalized evaluation, so the reopen is otherwise permitted.
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid, graders, _before = await _report_and_evaluators(migrated_db, c, ah, evaluators=1)
+        [(h_a, evid_a, _uid_a)] = graders
+        await _grade(c, ex, rid, evid_a, sid, "8", h_a)
+        assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+
+        async with migrated_db() as holder:
+            await holder.execute(
+                text("SELECT id FROM report WHERE id = CAST(:i AS uuid) FOR UPDATE"),
+                {"i": rid},
+            )
+
+            # Act: launch the reopen against the locked row.
+            task = asyncio.create_task(c.post(_reopen_url(ex, rid, evid_a), json={"reason": "recount"}, headers=ah))
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(task), timeout=1.0)
+
+            # Assert: a full second in, nothing is committed.
+            assert (await _evaluation_row(migrated_db, evid_a)).reopen_count == 0
+            assert await _count(migrated_db, "evaluation.reopened") == 0
+
+            # Act: release the lock; the SAME in-flight request finishes.
+            await holder.commit()
+
+        r = await task
+
+    # Assert
+    assert r.status_code == 200, r.text
+    assert (await _evaluation_row(migrated_db, evid_a)).reopen_count == 1
+    assert await _count(migrated_db, "evaluation.reopened") == 1
+
+
+def test_reopen_takes_the_report_lock_before_touching_the_evaluation() -> None:
+    """LOCK ORDER, guarded structurally because it cannot be observed behaviourally.
+
+    Every handler on this surface must take the parent report's lock as its first act and only
+    then load the evaluation. Two paths acquiring these two locks in opposite orders deadlock
+    in production, and a deadlock surfaces as hung requests — never as a failing test.
+
+    A source assertion is a blunt instrument, but it is the only one available here, and it
+    fails loudly the moment someone reorders the handler or swaps the locking read for a plain
+    one. Behavioural tests cannot see the difference: see the docstring above.
+    """
+    # Arrange
+    src = inspect.getsource(reopen_evaluation)
+
+    # Act / Assert — presence first, so a swapped-out lock fails as a message, not a ValueError.
+    assert "_get_report_for_update" in src, "reopen no longer takes the report row lock"
+    assert src.index("_get_report_for_update") < src.index("_get_evaluation("), (
+        "reopen loads the evaluation before locking the report — the lock order is inverted"
+    )
+    assert src.index("_get_evaluation(") < src.index("ev.status ="), (
+        "reopen mutates the evaluation before loading it under the report lock"
+    )

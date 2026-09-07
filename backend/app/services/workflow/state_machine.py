@@ -1,10 +1,26 @@
-"""Report workflow state machine (WP4).
+"""Report workflow state machine (WP4, extended by WP5).
 
 SOLE-WRITER CONTRACT: this module is the *only* writer of ``report.status`` and
 the *only* place that emits an ``audit_log`` row per status transition. Every
-transition (draft -> pending_approval -> submitted, plus reject/recall -> draft)
-flows through ``transition`` so it is validated and audited atomically. No other
-code path may mutate ``report.status`` directly.
+transition flows through ``transition`` so it is validated and audited
+atomically. No other code path may mutate ``report.status`` directly.
+
+THE FULL EDGE INVENTORY — keep this list and ``ALLOWED_TRANSITIONS`` in step; a
+stale inventory beside a live dict is how the next change guesses wrong.
+
+    draft            -> pending_approval, submitted
+    pending_approval -> submitted, draft            (approve / reject)
+    submitted        -> draft, under_evaluation     (recall / grading begins)
+    under_evaluation -> evaluated                   (the finalize gate closes)
+    evaluated        -> under_evaluation            (a Global-Admin reopen)
+
+Two properties the edges alone do not express:
+
+* ``submitted_at`` is set on the way to ``submitted`` and cleared on the way back
+  to ``draft``, and is untouched by every other edge. A report may be graded,
+  reopened and graded again; its submission time survives all of it.
+* ``evaluated`` has exactly one way out, and it is the reopen. A graded report is
+  never recallable to ``draft`` or ``submitted`` — it is re-graded instead.
 
 G-5: the ``approved`` enum value is intentionally NOT a ``report.status`` — it
 lives only in ``approval_record.action``. A multi-step chain stays in

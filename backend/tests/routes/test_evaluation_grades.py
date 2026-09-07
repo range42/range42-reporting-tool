@@ -321,7 +321,9 @@ async def test_grade_write_on_completed_evaluation_returns_409(migrated_db: asyn
             await s.commit()
         r = await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "5"}, headers=h)
         assert r.status_code == 409
-        assert r.json()["error"]["message"] == "evaluation_completed"
+        # Renamed from "evaluation_completed" in W5-4: one guard now answers for grades,
+        # feedback and grade deletion, and its sibling code is "evaluation_unassigned".
+        assert r.json()["error"]["message"] == "evaluation_finalized"
 
 
 async def test_evaluator_grading_a_peer_evaluation_returns_403(migrated_db: async_sessionmaker) -> None:

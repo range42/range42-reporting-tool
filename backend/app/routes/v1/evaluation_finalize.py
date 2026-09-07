@@ -38,7 +38,12 @@ from app.routes.v1.evaluations import (
 )
 from app.routes.v1.reports import _get_report
 from app.schemas.common import DataEnvelope
-from app.schemas.evaluation import EvaluationBreakdownOut, FinalizeRequest, UnassignRequest
+from app.schemas.evaluation import (
+    EvaluationBreakdownOut,
+    FinalizeRequest,
+    ReopenRequest,
+    UnassignRequest,
+)
 from app.services.evaluation import breakdown, events
 from app.services.evaluation.finalize_gate import is_gate_open, resolve_finalize_policy
 from app.services.scoring import rollup
@@ -129,6 +134,24 @@ async def _assert_finalizable(db: AsyncSession, ev: Evaluation, report: Report, 
     missing = await _ungraded_section_def_ids(db, report.id, ev.id)
     if missing:
         raise HTTPException(status_code=409, detail={"error": "section_grade_missing", "section_def_ids": missing})
+
+
+def _assert_reopenable(ev: Evaluation) -> None:
+    """Every rejection a reopen can raise, before the first mutation.
+
+    Sits beside ``_assert_finalizable`` deliberately: the two are a pair — one closes an
+    evaluation, the other re-opens it — and a guard that drifts from its opposite is how a
+    state becomes reachable in one direction only.
+
+    ORDER MATTERS. Unassigned is checked FIRST. A dropped evaluator's seat is already out of
+    the counted set and its weight renormalized away, so answering ``not_finalized`` for a
+    completed-then-unassigned evaluation would describe the wrong problem and invite a caller
+    to "fix" it by finalizing again.
+    """
+    if ev.unassigned_at is not None:
+        raise HTTPException(status_code=409, detail={"error": "evaluation_unassigned"})
+    if ev.status != "completed":
+        raise HTTPException(status_code=409, detail={"error": "not_finalized", "status": ev.status})
 
 
 async def _resolve_finalize_actor(
@@ -344,4 +367,123 @@ async def unassign_evaluator(
         },
         ip=client_ip(request),
     )
+    return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))
+
+
+# --- W5-4: reopen ---------------------------------------------------------------------
+
+
+@router.post(_BASE + "/{evid}/reopen")
+async def reopen_evaluation(
+    request: Request,
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    evid: uuid.UUID,
+    body: ReopenRequest | None = None,
+    user: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[EvaluationBreakdownOut]:
+    """Return a finalized evaluation to grading. Global Admin only.
+
+    THE ONLY un-finalize path. There is no evaluator self-revert and no edit-after-finalize:
+    evaluator isolation removes the reconciliation window that would justify either, so the
+    single admin entrance here is the whole surface.
+
+    A reopen produces a NEW grade version rather than an in-place edit — the original
+    ``report.evaluated`` is not retractable, so supersession is the only mechanism available.
+
+    LOCK ORDER — report, THEN evaluation, exactly as finalize and unassign take it. Reopen
+    reads every sibling evaluation and writes the parent report, so it must serialize against
+    both; taking these two locks in the opposite order is a production deadlock rather than a
+    failing test.
+
+    The evaluator's WORK SURVIVES. Section grades and overall feedback are untouched: this is
+    the whole difference between a reopen and an unassign-then-reassign, and the evaluator
+    resumes from what they already entered.
+
+    A reopened evaluation still COUNTS — it is not unassigned, so it stays in the gate and
+    holds the report shut — but it no longer CONTRIBUTES a grade. The aggregate therefore falls
+    back to the evaluations still completed, and to NULL when none remain.
+    """
+    body = body or ReopenRequest()
+    report: Report = await _get_report_for_update(db, exercise_id, rid)  # report, then evaluation
+    ev = await _get_evaluation(db, report.id, evid)
+    reason = body.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail={"error": "reason_required"})
+    _assert_reopenable(ev)
+
+    # CAPTURED BEFORE the recompute below, which is the sole writer of grade_version: read
+    # afterwards, both of these would already describe the new state and the supersession
+    # event would announce that version 2 supersedes version 2.
+    superseded_version = report.grade_version
+    status_before = report.status
+
+    ev.status = "in_progress"
+    # Cleared, not preserved. A completion time on a non-complete row means two different
+    # things depending on ``status``; the dispute trail lives in ``audit_log`` instead.
+    ev.completed_at = None
+    # The override fields belong to the finalize that just went away. Left behind, they would
+    # misattribute the NEXT finalize — an evaluator's own re-finalize inheriting someone
+    # else's comment and an override flag it never earned.
+    ev.finalized_by = None
+    ev.finalize_is_admin_override = False
+    ev.finalize_comment = None
+    ev.reopen_count += 1
+    ev.reopened_at = datetime.now(UTC)
+    ev.reopened_by = user.id
+    await db.flush()
+
+    # A7: rollup stays the sole writer of overall_grade / grade_version.
+    #
+    # force_version_bump: a reopen is a publication even when the number does not move. Two
+    # evaluators who agreed exactly leave the aggregate untouched when one is reopened, and
+    # without the bump the supersession event below would announce that version N supersedes
+    # version N — true, and useless to a consumer.
+    timeline = await rollup.recompute_report_grade(
+        db,
+        report,
+        actor_id=user.id,
+        trigger="evaluation.reopened",
+        ip=client_ip(request),
+        force_version_bump=True,
+    )
+
+    # Only a report that actually reached ``evaluated`` has anywhere to go. One still under
+    # evaluation — a sibling evaluator holding the gate shut — has no edge to itself, and
+    # attempting one would raise rather than no-op.
+    if status_before == "evaluated":
+        await state_machine.transition(
+            db,
+            report,
+            target_status="under_evaluation",
+            actor_id=user.id,
+            action="report.reopened",
+            details={
+                "evaluation_id": str(ev.id),
+                "superseded_grade_version": superseded_version,
+            },
+            ip=client_ip(request),
+        )
+
+    # One row per reopen, on the evaluation, whichever way the report went. This is where the
+    # reason lives — it is deliberately kept off the event payload.
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="evaluation.reopened",
+        resource_type="evaluation",
+        resource_id=ev.id,
+        details={
+            "evaluator_id": str(ev.evaluator_id),
+            "reason": reason,
+            "reopen_count": ev.reopen_count,
+            "report_status_before": status_before,
+            "superseded_grade_version": superseded_version,
+            "grade_version": report.grade_version,
+            "overall_grade": None if timeline.overall_grade is None else str(timeline.overall_grade),
+        },
+        ip=client_ip(request),
+    )
+    await events.emit_report_evaluation_reopened(db, report, superseded_grade_version=superseded_version)
     return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))

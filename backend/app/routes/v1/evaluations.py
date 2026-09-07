@@ -122,6 +122,28 @@ def _assert_evaluation_access(ev: Evaluation, user: User) -> None:
         raise HTTPException(status_code=403, detail={"error": "not_your_evaluation"})
 
 
+def _assert_evaluation_writable(ev: Evaluation) -> None:
+    """Grades and feedback are immutable once finalized; only a Global-Admin reopen unlocks them.
+
+    THE NEGATIVE SURFACE. There is no evaluator self-revert and no edit-after-finalize:
+    evaluator isolation removes the reconciliation window that would justify either, so a
+    reopen is the only route back into grading. Relaxing this re-opens a surface that was
+    deliberately closed — reject in review.
+
+    An unassigned evaluation is never writable either. Its row survives so the dispute trail
+    does, but it is out of the reckoning, and a write that can never reach the aggregate should
+    fail loudly rather than be silently discarded.
+
+    Reads in the same order as its siblings in ``evaluation_finalize``: unassigned first, then
+    status. A completed-then-unassigned evaluation is reported as unassigned, because that is
+    the condition a caller can do something about.
+    """
+    if ev.unassigned_at is not None:
+        raise HTTPException(status_code=409, detail={"error": "evaluation_unassigned"})
+    if ev.status == "completed":
+        raise HTTPException(status_code=409, detail={"error": "evaluation_finalized"})
+
+
 async def _gradable_sections(
     db: AsyncSession, report_id: uuid.UUID, evaluation_id: uuid.UUID
 ) -> list[GradableSectionOut]:
@@ -409,6 +431,7 @@ async def update_evaluation(
     report: Report = await _get_report(db, exercise_id, rid)
     ev = await _get_evaluation(db, report.id, evid)
     _assert_evaluation_access(ev, user)
+    _assert_evaluation_writable(ev)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(ev, field, value)
     await _begin_evaluation(db, ev, report, actor_id=user.id, ip=client_ip(request))
@@ -446,8 +469,7 @@ async def upsert_section_grade(
     report: Report = await _get_report(db, exercise_id, rid)
     ev = await _get_evaluation(db, report.id, evid)
     _assert_evaluation_access(ev, user)
-    if ev.status == "completed":
-        raise HTTPException(status_code=409, detail={"error": "evaluation_completed"})
+    _assert_evaluation_writable(ev)
     section, defn = await _gradable_section(db, report.id, section_id)
     try:
         grade, pass_fail, rubric = grade_validation.validate_grade_payload(defn, body)
@@ -529,8 +551,7 @@ async def delete_section_grade(
     report: Report = await _get_report(db, exercise_id, rid)
     ev = await _get_evaluation(db, report.id, evid)
     _assert_evaluation_access(ev, user)
-    if ev.status == "completed":
-        raise HTTPException(status_code=409, detail={"error": "evaluation_completed"})
+    _assert_evaluation_writable(ev)
     section, _defn = await _gradable_section(db, report.id, section_id)
     sg = (
         await db.execute(

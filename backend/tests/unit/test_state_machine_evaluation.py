@@ -121,3 +121,66 @@ def test_evaluated_only_opens_the_reopen_edge() -> None:
     """
     # Arrange / Act / Assert
     assert ALLOWED_TRANSITIONS["evaluated"] == frozenset({"under_evaluation"})
+
+
+# --- W5-4 Task 1: the reopen edge, as behaviour ---------------------------------------
+#
+# The edge itself was opened early (see the test above). What was never asserted is what
+# ``transition()`` DOES when a report walks back to grading — which is the half that a reopen
+# actually depends on.
+
+
+async def test_transition_from_evaluated_to_under_evaluation_does_not_touch_submitted_at() -> None:
+    """A report can be graded, reopened and graded again. Its submission time is a fact about
+    the writer's work and must survive every one of those laps — ``transition()`` clears
+    ``submitted_at`` on the way back to draft, and a reopen must not be mistaken for that."""
+    # Arrange
+    report = _report("evaluated")
+
+    # Act
+    await _transition(report, "under_evaluation", "report.evaluation_reopened")
+
+    # Assert
+    assert report.status == "under_evaluation"
+    assert report.submitted_at == SUBMITTED_AT
+
+
+async def test_reopen_transition_records_exactly_one_audit_row() -> None:
+    """One row per crossing, on the new edge as on every other."""
+    # Arrange
+    report = _report("evaluated")
+
+    # Act
+    session = await _transition(report, "under_evaluation", "report.evaluation_reopened")
+
+    # Assert
+    assert len(session.audit_rows) == 1
+    assert session.audit_rows[0].action == "report.evaluation_reopened"
+
+
+async def test_a_reopened_report_can_be_evaluated_again() -> None:
+    """The round trip, which is the whole point of the edge: a reopened report is back in the
+    same state the finalize gate expects, so grading can close it a second time."""
+    # Arrange
+    report = _report("evaluated")
+
+    # Act
+    await _transition(report, "under_evaluation", "report.evaluation_reopened")
+    await _transition(report, "evaluated", "report.evaluated")
+
+    # Assert
+    assert report.status == "evaluated"
+    assert report.submitted_at == SUBMITTED_AT
+
+
+@pytest.mark.parametrize("target", ["draft", "submitted", "pending_approval"])
+async def test_transition_out_of_evaluated_is_rejected_for_every_other_target(target: str) -> None:
+    """Reopen is the only way out. A graded report is never recallable — it is re-graded."""
+    # Arrange
+    report = _report("evaluated")
+
+    # Act / Assert
+    with pytest.raises(InvalidTransition):
+        await _transition(report, target, "report.recalled")
+    assert report.status == "evaluated"
+    assert report.submitted_at == SUBMITTED_AT

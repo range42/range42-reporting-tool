@@ -427,6 +427,7 @@ async def recompute_report_grade(
     actor_id: uuid.UUID | None = None,
     trigger: str = "section_grade.saved",
     ip: str | None = None,
+    force_version_bump: bool = False,
 ) -> GradeTimeline:
     """Recompute and persist grades for ``report``, returning its §6.10 timeline.
 
@@ -437,6 +438,17 @@ async def recompute_report_grade(
     Per-evaluator grades are always recomputed. The report-level grade is skipped when
     ``report.overall_grade_is_manual`` is true (M9), and ``grade_version`` is then NOT
     incremented (D3) because nothing new was published.
+
+    ``force_version_bump`` PUBLISHES A NEW VERSION EVEN WHEN THE NUMBER IS UNCHANGED. The
+    default is right for a grade save, where bumping on an unchanged aggregate would tell
+    consumers the grade moved when it did not. It is wrong for a reopen: two evaluators who
+    agreed exactly leave the aggregate untouched when one is reopened, yet the report has left
+    ``evaluated`` and its grade now rests on fewer evaluations. Without the bump the
+    supersession event announces that version N supersedes version N, which tells a consumer
+    nothing at all.
+
+    The decision stays here rather than at the call site because this function is the sole
+    writer of the counter; the caller supplies the intent, never the increment.
     """
     await _lock_report_row(db, report.id)
     evaluations = await _load_evaluation_inputs(db, report)
@@ -453,7 +465,7 @@ async def recompute_report_grade(
     # Numeric comparison, never str(): NUMERIC(5,2) round-trips as Decimal("8.00") while the
     # fresh computation gives Decimal("8"). Those are ==; their str() forms are not, and
     # comparing strings would bump grade_version on every single save.
-    if new_grade != report.overall_grade:
+    if new_grade != report.overall_grade or force_version_bump:
         previous = report.overall_grade
         report.overall_grade = new_grade
         _bump_grade_version(report)
