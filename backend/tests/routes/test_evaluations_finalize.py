@@ -873,3 +873,135 @@ async def test_get_report_for_update_blocks_a_second_transaction_until_the_first
     async with migrated_db() as after:
         await after.execute(text("SET LOCAL lock_timeout = '250ms'"))
         assert (await _get_report_for_update(after, uuid.UUID(ex), uuid.UUID(rid))).id is not None
+
+
+# ======================================================================================
+# The admin-override rejection branches.
+#
+# FOUND UNCOVERED DURING THE W5-4 CLOSE-OUT, and they belong to W5-3's own surface rather
+# than to reopen — so they are tested here, beside the override they guard. Each is a state a
+# real admin reaches: a forgotten comment, a pasted id from the wrong row, a colleague's name
+# typed into the wrong seat. An error branch nothing exercises is an error branch nobody has
+# read since it was written.
+# ======================================================================================
+
+
+async def _one_graded_evaluator(migrated_db, c, ah):
+    """A submitted, fully graded, not-yet-finalized single-evaluator report."""
+    ex, rid, sid, graders = await _world(migrated_db, c, ah, evaluators=1)
+    [(h, evid)] = graders
+    await _grade(c, ex, rid, evid, sid, "8", h)
+    return ex, rid, evid, h
+
+
+async def test_finalize_on_behalf_of_by_a_non_admin_is_403(migrated_db: async_sessionmaker) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, evid, h = await _one_graded_evaluator(migrated_db, c, ah)
+
+        # Act — the evaluator tries to credit themselves through the override path
+        r = await c.post(_finalize_url(ex, rid, evid), json={"on_behalf_of": str(uuid.uuid4())}, headers=h)
+
+    # Assert
+    assert r.status_code == 403, r.text
+    assert r.json()["error"]["message"] == "not_global_admin"
+
+
+async def test_finalize_on_behalf_of_without_a_comment_is_422(migrated_db: async_sessionmaker) -> None:
+    """The comment is the whole justification for grading in someone else's name."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, evid, _h = await _one_graded_evaluator(migrated_db, c, ah)
+
+        # Act
+        r = await c.post(_finalize_url(ex, rid, evid), json={"on_behalf_of": str(uuid.uuid4())}, headers=ah)
+
+    # Assert
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["message"] == "comment_required"
+
+
+async def test_finalize_on_behalf_of_a_malformed_id_is_422(migrated_db: async_sessionmaker) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, evid, _h = await _one_graded_evaluator(migrated_db, c, ah)
+
+        # Act
+        r = await c.post(
+            _finalize_url(ex, rid, evid),
+            json={"on_behalf_of": "not-a-uuid", "comment": "unreachable"},
+            headers=ah,
+        )
+
+    # Assert
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["message"] == "invalid_on_behalf_of"
+
+
+async def test_finalize_on_behalf_of_an_unknown_user_is_404(migrated_db: async_sessionmaker) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, evid, _h = await _one_graded_evaluator(migrated_db, c, ah)
+        missing = str(uuid.uuid4())
+
+        # Act
+        r = await c.post(
+            _finalize_url(ex, rid, evid),
+            json={"on_behalf_of": missing, "comment": "unreachable"},
+            headers=ah,
+        )
+
+    # Assert
+    assert r.status_code == 404, r.text
+    assert r.json()["error"]["message"] == "user_not_found"
+
+
+async def test_finalize_on_behalf_of_the_wrong_evaluator_is_422(migrated_db: async_sessionmaker) -> None:
+    """An evaluation names exactly ONE evaluator, so the override must name them.
+
+    The stricter check the approval chain cannot make: an approval step names a role that many
+    users satisfy, but crediting a grade to someone who was never assigned it would put a
+    person's name on an assessment they did not make.
+    """
+    # Arrange: a real user who is simply not this evaluation's evaluator.
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, evid, _h = await _one_graded_evaluator(migrated_db, c, ah)
+        _bystander_h, bystander_uid = await evaluator(migrated_db, c, ah, ex, "bystander")
+
+        # Act
+        r = await c.post(
+            _finalize_url(ex, rid, evid),
+            json={"on_behalf_of": bystander_uid, "comment": "wrong seat"},
+            headers=ah,
+        )
+
+    # Assert
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["message"] == "on_behalf_of_mismatch"
+
+
+async def test_a_second_unassign_of_the_same_evaluator_is_409(migrated_db: async_sessionmaker) -> None:
+    """Not idempotent-by-silence, deliberately.
+
+    A silent second unassign would re-run the recompute and publish a fresh grade version for
+    a change that already happened — telling every consumer the grade moved when it did not.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, evid, _h = await _one_graded_evaluator(migrated_db, c, ah)
+        url = f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/unassign"
+        first = await c.post(url, json={"reason": "left the exercise"}, headers=ah)
+        assert first.status_code == 200, first.text
+
+        # Act
+        r = await c.post(url, json={"reason": "left again"}, headers=ah)
+
+    # Assert
+    assert r.status_code == 409, r.text
+    assert r.json()["error"]["message"] == "already_unassigned"
