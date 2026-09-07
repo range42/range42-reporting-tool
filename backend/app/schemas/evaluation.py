@@ -241,6 +241,19 @@ class UnassignRequest(BaseModel):
     reason: str = ""
 
 
+class ReopenRequest(BaseModel):
+    """Body of ``POST .../evaluations/{evid}/reopen`` (W5-4).
+
+    ``reason`` is mandatory and defaults to empty rather than being declared required, so an
+    absent body, an empty string and a whitespace-only one all land on the SAME handler check
+    and the same ``reason_required`` error. Mirrors ``UnassignRequest`` — a reopen is the other
+    Global-Admin intervention on a finalized evaluation, and the two should not answer the same
+    mistake with different payloads.
+    """
+
+    reason: str = ""
+
+
 class EvaluationBreakdownRow(BaseModel):
     """One evaluator's line in the breakdown (W5-3 Task 10).
 
