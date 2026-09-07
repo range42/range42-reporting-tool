@@ -30,6 +30,11 @@ logger = structlog.get_logger(__name__)
 #: The §11.3 action name. Audit-only in WP5; WP6's outbox reuses the same string.
 REPORT_EVALUATED = "event.report_evaluated"
 
+#: W5-4's supersession signal. NOT one of the four v1 events — it exists because a reopen
+#: cannot retract an already-delivered ``report.evaluated``, so the only honest option is to
+#: announce that a higher grade_version now supersedes it.
+REPORT_EVALUATION_REOPENED = "event.report_evaluation_reopened"
+
 
 def _grade_str(v: Decimal | None) -> str | None:
     """Two decimal places as a STRING, never a float.
@@ -38,6 +43,19 @@ def _grade_str(v: Decimal | None) -> str | None:
     7.70, and the payload is the external contract (§12.3) — it does not get to be lossy.
     """
     return None if v is None else f"{v:.2f}"
+
+
+def _report_identity(report: Report) -> dict[str, str]:
+    """The three ids every event payload leads with.
+
+    Shared so the two emitters cannot disagree about what identifies a report. WP6 (#54)
+    re-implements this module against an outbox; one identity helper is one thing to port.
+    """
+    return {
+        "exercise_id": str(report.exercise_id),
+        "report_id": str(report.id),
+        "team_id": str(report.team_id),
+    }
 
 
 async def build_report_evaluated_payload(db: AsyncSession, report: Report) -> dict[str, Any]:
@@ -54,9 +72,7 @@ async def build_report_evaluated_payload(db: AsyncSession, report: Report) -> di
     """
     inputs = await load_evaluation_inputs(db, report)
     return {
-        "exercise_id": str(report.exercise_id),
-        "report_id": str(report.id),
-        "team_id": str(report.team_id),
+        **_report_identity(report),
         "overall_grade": _grade_str(report.overall_grade),
         "grade_version": report.grade_version,
         "section_grades": [
@@ -97,4 +113,42 @@ async def emit_report_evaluated(db: AsyncSession, report: Report) -> dict[str, A
         ip=None,
     )
     logger.info(REPORT_EVALUATED, report_id=str(report.id), grade_version=report.grade_version)
+    return payload
+
+
+async def emit_report_evaluation_reopened(
+    db: AsyncSession, report: Report, *, superseded_grade_version: int
+) -> dict[str, Any]:
+    """Announce that a previously published grade has been superseded (W5-4).
+
+    NOT a retraction. The contract defines no such event and delivery is at-least-once, so a
+    consumer that already holds the original ``report.evaluated`` cannot be told to discard it.
+    Carrying both versions lets it work out for itself that what it has is stale.
+
+    THE ADMIN'S REASON IS DELIBERATELY ABSENT. A reopen reason may name a person's absence or
+    the quality of their work, and this payload leaves the deployment — it lands in an outbox,
+    a delivery log and someone else's HTTP endpoint. The reason stays on the evaluation's audit
+    row, which does not travel.
+
+    Per-evaluator rows are absent for the same reason they are absent from ``report.evaluated``:
+    evaluator isolation extends to machines.
+
+    Runs inside the CALLER'S transaction and never commits, so an event cannot outlive the
+    reopen that caused it.
+    """
+    payload = {
+        **_report_identity(report),
+        "grade_version": report.grade_version,
+        "superseded_grade_version": superseded_grade_version,
+    }
+    await record_audit(
+        db,
+        user_id=None,  # a system event: the actor is on the reopen's own audit row
+        action=REPORT_EVALUATION_REOPENED,
+        resource_type="report",
+        resource_id=report.id,
+        details=payload,
+        ip=None,
+    )
+    logger.info(REPORT_EVALUATION_REOPENED, **payload)
     return payload

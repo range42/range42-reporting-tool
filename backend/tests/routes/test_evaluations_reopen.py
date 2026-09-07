@@ -469,3 +469,259 @@ async def test_reopen_response_shows_the_updated_row_in_the_breakdown(
     assert row["completed_at"] is None
     assert row["finalized_by"] is None
     assert row["finalize_is_admin_override"] is False
+
+
+# --- W5-4 Task 4: grade version, report status, supersession --------------------------
+
+_REOPENED_EVENT = "event.report_evaluation_reopened"
+_EVALUATED_EVENT = "event.report_evaluated"
+
+
+async def _report_row(migrated_db, rid):
+    async with migrated_db() as s:
+        return (
+            await s.execute(
+                text("SELECT status, overall_grade, grade_version FROM report WHERE id = CAST(:i AS uuid)"),
+                {"i": rid},
+            )
+        ).one()
+
+
+async def _audit_details(migrated_db, action: str, resource_id: str) -> list[dict]:
+    """Every audit row for one action on one resource, oldest first."""
+    async with migrated_db() as s:
+        rows = (
+            await s.execute(
+                text(
+                    "SELECT details FROM audit_log WHERE action = :a AND resource_id = CAST(:i AS uuid) "
+                    "ORDER BY created_at, id"
+                ),
+                {"a": action, "i": resource_id},
+            )
+        ).scalars()
+        return list(rows)
+
+
+async def _multi_evaluator_world(migrated_db, c, ah, grades: tuple[int, ...]):
+    """Submitted report, one grader per entry in ``grades``, each finalized at that grade.
+
+    Returns (ex, rid, [(headers, evaluation_id), ...]) with the report ``evaluated``.
+    """
+    ex, rid, sid = await submitted_report(c, ah)
+    graders = []
+    for i, value in enumerate(grades):
+        eh, uid = await evaluator(migrated_db, c, ah, ex, f"ev-{i}")
+        evid = await assign(c, ah, ex, rid, uid)
+        await _grade(c, ex, rid, evid, sid, value, eh)
+        graders.append((eh, evid))
+    for eh, evid in graders:
+        await finalize(c, eh, ex, rid, evid)
+    return ex, rid, graders
+
+
+async def test_reopen_after_evaluated_returns_the_report_to_under_evaluation(
+    migrated_db: async_sessionmaker,
+) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+        assert (await _report_row(migrated_db, rid)).status == "evaluated"
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    assert (await _report_row(migrated_db, rid)).status == "under_evaluation"
+
+
+async def test_reopen_bumps_the_grade_version(migrated_db: async_sessionmaker) -> None:
+    """1 -> 2. The version is a consumer's only way to tell a regrade from a redelivery."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+        before = (await _report_row(migrated_db, rid)).grade_version
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    assert (before, (await _report_row(migrated_db, rid)).grade_version) == (1, 2)
+
+
+async def test_reopen_recomputes_the_aggregate_over_the_remaining_completed_evaluations(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """A reopened evaluation still COUNTS but no longer CONTRIBUTES a grade.
+
+    Three equal weights at 9 / 6 / 6 average 7.00. Reopening the 9 leaves the numerator to the
+    two sixes — 6.00, not 7.00. A result of 7.00 here would mean the contributing predicate is
+    filtering on unassignment alone and ignoring status.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, graders = await _multi_evaluator_world(migrated_db, c, ah, (9, 6, 6))
+        assert str((await _report_row(migrated_db, rid)).overall_grade) == "7.00"
+
+        # Act — reopen the outlier
+        await _reopen(c, ah, ex, rid, graders[0][1])
+
+    # Assert
+    assert str((await _report_row(migrated_db, rid)).overall_grade) == "6.00"
+
+
+async def test_reopen_of_the_only_evaluation_nulls_the_overall_grade(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Nothing contributes, so the report publishes no grade at all.
+
+    NULL rather than a stale number: the report is back under evaluation and there is currently
+    no completed evaluation standing behind any figure.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    row = await _report_row(migrated_db, rid)
+    assert row.overall_grade is None
+    assert row.grade_version == 2
+
+
+async def test_reopen_while_the_report_is_still_under_evaluation_does_not_transition(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """No transition to invent: the report never reached ``evaluated``.
+
+    Under the default policy a second, unfinished evaluator holds the gate shut. The reopen
+    still mutates and still bumps the version, but writes no report-level transition row —
+    ``under_evaluation -> under_evaluation`` is not an edge.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid = await submitted_report(c, ah)
+        eh0, uid0 = await evaluator(migrated_db, c, ah, ex, "ev-0")
+        eh1, uid1 = await evaluator(migrated_db, c, ah, ex, "ev-1")
+        evid0 = await assign(c, ah, ex, rid, uid0)
+        evid1 = await assign(c, ah, ex, rid, uid1)
+        await _grade(c, ex, rid, evid0, sid, 8, eh0)
+        await _grade(c, ex, rid, evid1, sid, 4, eh1)
+        await finalize(c, eh0, ex, rid, evid0)
+        assert (await _report_row(migrated_db, rid)).status == "under_evaluation"
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid0)
+
+    # Assert
+    assert (await _report_row(migrated_db, rid)).status == "under_evaluation"
+    assert await _audit_details(migrated_db, "report.reopened", rid) == []
+
+
+async def test_reopen_emits_the_supersession_event_with_the_superseded_version(
+    migrated_db: async_sessionmaker,
+) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    events = await _audit_details(migrated_db, _REOPENED_EVENT, rid)
+    assert len(events) == 1
+    assert events[0]["superseded_grade_version"] == 1
+    assert events[0]["grade_version"] == 2
+
+
+async def test_reopen_does_not_re_emit_report_evaluated(migrated_db: async_sessionmaker) -> None:
+    """The report is no longer evaluated. Emitting it here would state the opposite of fact."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+        before = len(await _audit_details(migrated_db, _EVALUATED_EVENT, rid))
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    assert (before, len(await _audit_details(migrated_db, _EVALUATED_EVENT, rid))) == (1, 1)
+
+
+async def test_the_original_report_evaluated_event_is_not_retracted(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """The already-emitted event stands, unmodified. This is INTENDED, not an oversight.
+
+    There is no retraction event in the contract and delivery is at-least-once, so a consumer
+    that already received the original cannot be told to forget it. Supersession — a higher
+    ``grade_version`` in a later event — is the only mechanism available.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+        original = (await _audit_details(migrated_db, _EVALUATED_EVENT, rid))[0]
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    after = await _audit_details(migrated_db, _EVALUATED_EVENT, rid)
+    assert len(after) == 1
+    assert after[0] == original
+    assert after[0]["grade_version"] == 1  # still describes the superseded grade
+
+
+async def test_the_supersession_payload_excludes_the_reason_text(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """A reason may name someone's absence or performance. Event payloads leave the
+    deployment; the reason is audit-only."""
+    # Arrange
+    secret = "evaluator was clearly asleep"
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid, reason=secret)
+
+    # Assert
+    payload = (await _audit_details(migrated_db, _REOPENED_EVENT, rid))[0]
+    assert "reason" not in payload
+    assert secret not in str(payload)
+    # ...but it IS recoverable from the evaluation's own audit row.
+    assert (await _audit_details(migrated_db, _REOPEN_ACTION, evid))[0]["reason"] == secret
+
+
+async def test_the_supersession_payload_excludes_per_evaluator_rows(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Evaluator isolation extends to machines. A payload outlives the request in an outbox,
+    a delivery log and someone else's endpoint — a breakdown shipped there is a durable
+    peer-visibility hole."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, graders = await _multi_evaluator_world(migrated_db, c, ah, (9, 6))
+
+        # Act
+        await _reopen(c, ah, ex, rid, graders[0][1])
+
+    # Assert
+    payload = (await _audit_details(migrated_db, _REOPENED_EVENT, rid))[0]
+    assert "evaluations" not in payload
+    assert "evaluator_id" not in payload
+    flat = str(payload)
+    for _eh, evid in graders:
+        assert evid not in flat

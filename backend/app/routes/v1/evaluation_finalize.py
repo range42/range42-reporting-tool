@@ -401,8 +401,9 @@ async def reopen_evaluation(
     the whole difference between a reopen and an unassign-then-reassign, and the evaluator
     resumes from what they already entered.
 
-    The report-status transition, the grade-version bump and the audit row land in the next
-    task, so for now the report itself is left where finalize put it.
+    A reopened evaluation still COUNTS — it is not unassigned, so it stays in the gate and
+    holds the report shut — but it no longer CONTRIBUTES a grade. The aggregate therefore falls
+    back to the evaluations still completed, and to NULL when none remain.
     """
     body = body or ReopenRequest()
     report: Report = await _get_report_for_update(db, exercise_id, rid)  # report, then evaluation
@@ -411,6 +412,12 @@ async def reopen_evaluation(
     if not reason:
         raise HTTPException(status_code=422, detail={"error": "reason_required"})
     _assert_reopenable(ev)
+
+    # CAPTURED BEFORE the recompute below, which is the sole writer of grade_version: read
+    # afterwards, both of these would already describe the new state and the supersession
+    # event would announce that version 2 supersedes version 2.
+    superseded_version = report.grade_version
+    status_before = report.status
 
     ev.status = "in_progress"
     # Cleared, not preserved. A completion time on a non-complete row means two different
@@ -427,4 +434,46 @@ async def reopen_evaluation(
     ev.reopened_by = user.id
     await db.flush()
 
+    # A7: rollup stays the sole writer of overall_grade / grade_version.
+    timeline = await rollup.recompute_report_grade(
+        db, report, actor_id=user.id, trigger="evaluation.reopened", ip=client_ip(request)
+    )
+
+    # Only a report that actually reached ``evaluated`` has anywhere to go. One still under
+    # evaluation — a sibling evaluator holding the gate shut — has no edge to itself, and
+    # attempting one would raise rather than no-op.
+    if status_before == "evaluated":
+        await state_machine.transition(
+            db,
+            report,
+            target_status="under_evaluation",
+            actor_id=user.id,
+            action="report.reopened",
+            details={
+                "evaluation_id": str(ev.id),
+                "superseded_grade_version": superseded_version,
+            },
+            ip=client_ip(request),
+        )
+
+    # One row per reopen, on the evaluation, whichever way the report went. This is where the
+    # reason lives — it is deliberately kept off the event payload.
+    await record_audit(
+        db,
+        user_id=user.id,
+        action="evaluation.reopened",
+        resource_type="evaluation",
+        resource_id=ev.id,
+        details={
+            "evaluator_id": str(ev.evaluator_id),
+            "reason": reason,
+            "reopen_count": ev.reopen_count,
+            "report_status_before": status_before,
+            "superseded_grade_version": superseded_version,
+            "grade_version": report.grade_version,
+            "overall_grade": None if timeline.overall_grade is None else str(timeline.overall_grade),
+        },
+        ip=client_ip(request),
+    )
+    await events.emit_report_evaluation_reopened(db, report, superseded_grade_version=superseded_version)
     return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))
