@@ -435,8 +435,18 @@ async def reopen_evaluation(
     await db.flush()
 
     # A7: rollup stays the sole writer of overall_grade / grade_version.
+    #
+    # force_version_bump: a reopen is a publication even when the number does not move. Two
+    # evaluators who agreed exactly leave the aggregate untouched when one is reopened, and
+    # without the bump the supersession event below would announce that version N supersedes
+    # version N — true, and useless to a consumer.
     timeline = await rollup.recompute_report_grade(
-        db, report, actor_id=user.id, trigger="evaluation.reopened", ip=client_ip(request)
+        db,
+        report,
+        actor_id=user.id,
+        trigger="evaluation.reopened",
+        ip=client_ip(request),
+        force_version_bump=True,
     )
 
     # Only a report that actually reached ``evaluated`` has anywhere to go. One still under

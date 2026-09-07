@@ -908,3 +908,42 @@ async def test_an_admin_can_finalize_on_behalf_of_after_a_reopen(
     assert row.status == "completed"
     assert row.finalize_is_admin_override is True
     assert row.finalize_comment == "evaluator on leave"
+
+
+# --- the unchanged-grade reopen ------------------------------------------------------
+
+
+async def test_a_reopen_that_does_not_move_the_grade_still_bumps_the_version(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """A supersession event must never claim that version N supersedes version N.
+
+    Two evaluators who agree exactly: both grade 8, the aggregate is 8.00. Reopening one
+    leaves the other contributing the same 8.00, so the published NUMBER is unchanged — but a
+    publication still happened, because the report left ``evaluated`` and its grade now rests
+    on one evaluation instead of two.
+
+    The recompute normally bumps only when the number moves, which is right for a grade save:
+    bumping on every keystroke would tell consumers the grade changed when it did not. A
+    reopen is the opposite case — the state changed even though the number did not — so the
+    reopen asks for the bump explicitly.
+
+    Identical grades are not an exotic case; two evaluators agreeing is the expected outcome.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, graders = await _multi_evaluator_world(migrated_db, c, ah, (8, 8))
+        before = await _report_row(migrated_db, rid)
+        assert str(before.overall_grade) == "8.00"
+        assert before.grade_version == 1
+
+        # Act — reopen one; the survivor still averages 8.00
+        await _reopen(c, ah, ex, rid, graders[0][1])
+
+    # Assert
+    after = await _report_row(migrated_db, rid)
+    assert str(after.overall_grade) == "8.00"  # the number genuinely did not move
+    assert after.grade_version == 2  # ...but the publication is a new one
+    event = (await _audit_details(migrated_db, _REOPENED_EVENT, rid))[0]
+    assert (event["superseded_grade_version"], event["grade_version"]) == (1, 2)
