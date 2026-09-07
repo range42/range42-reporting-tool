@@ -397,8 +397,12 @@ async def reopen_evaluation(
     both; taking these two locks in the opposite order is a production deadlock rather than a
     failing test.
 
-    GUARDS ONLY at this task. The mutation, the grade-version bump and the audit row land in
-    the next one, which is why a permitted call currently answers with an unchanged breakdown.
+    The evaluator's WORK SURVIVES. Section grades and overall feedback are untouched: this is
+    the whole difference between a reopen and an unassign-then-reassign, and the evaluator
+    resumes from what they already entered.
+
+    The report-status transition, the grade-version bump and the audit row land in the next
+    task, so for now the report itself is left where finalize put it.
     """
     body = body or ReopenRequest()
     report: Report = await _get_report_for_update(db, exercise_id, rid)  # report, then evaluation
@@ -407,4 +411,20 @@ async def reopen_evaluation(
     if not reason:
         raise HTTPException(status_code=422, detail={"error": "reason_required"})
     _assert_reopenable(ev)
+
+    ev.status = "in_progress"
+    # Cleared, not preserved. A completion time on a non-complete row means two different
+    # things depending on ``status``; the dispute trail lives in ``audit_log`` instead.
+    ev.completed_at = None
+    # The override fields belong to the finalize that just went away. Left behind, they would
+    # misattribute the NEXT finalize — an evaluator's own re-finalize inheriting someone
+    # else's comment and an override flag it never earned.
+    ev.finalized_by = None
+    ev.finalize_is_admin_override = False
+    ev.finalize_comment = None
+    ev.reopen_count += 1
+    ev.reopened_at = datetime.now(UTC)
+    ev.reopened_by = user.id
+    await db.flush()
+
     return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))

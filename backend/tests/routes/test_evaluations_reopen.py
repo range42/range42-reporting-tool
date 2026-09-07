@@ -278,3 +278,194 @@ async def test_rejected_reopen_never_mutates_or_audits(migrated_db: async_sessio
     assert reopened_at is None
     assert reopened_by is None
     assert await _reopen_audit_count(migrated_db, evid) == 0
+
+
+# --- W5-4 Task 3: the mutation -------------------------------------------------------
+
+
+async def _evaluation_finalize_columns(migrated_db, evid):
+    async with migrated_db() as s:
+        return (
+            await s.execute(
+                text(
+                    "SELECT status, completed_at, finalized_by, finalize_is_admin_override, "
+                    "finalize_comment, reopen_count, reopened_at, reopened_by, overall_feedback "
+                    "FROM evaluation WHERE id = CAST(:i AS uuid)"
+                ),
+                {"i": evid},
+            )
+        ).one()
+
+
+async def _reopen(c, ah, ex, rid, evid, *, reason: str = "recount after dispute"):
+    r = await c.post(_reopen_url(ex, rid, evid), json={"reason": reason}, headers=ah)
+    assert r.status_code == 200, r.text
+    return r.json()["data"]
+
+
+async def test_reopen_sets_the_evaluation_back_to_in_progress(migrated_db: async_sessionmaker) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    row = await _evaluation_finalize_columns(migrated_db, evid)
+    assert row.status == "in_progress"
+
+
+async def test_reopen_increments_reopen_count(migrated_db: async_sessionmaker) -> None:
+    """0 -> 1. The counter is how a later dispute knows a grade was revisited at all."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+        before = (await _evaluation_finalize_columns(migrated_db, evid)).reopen_count
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    after = (await _evaluation_finalize_columns(migrated_db, evid)).reopen_count
+    assert (before, after) == (0, 1)
+
+
+async def test_reopen_stamps_reopened_at_and_reopened_by(migrated_db: async_sessionmaker) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, ga_uid = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    row = await _evaluation_finalize_columns(migrated_db, evid)
+    assert row.reopened_at is not None
+    assert str(row.reopened_by) == ga_uid
+
+
+async def test_reopen_clears_completed_at(migrated_db: async_sessionmaker) -> None:
+    """A reopened evaluation is not complete, so it must not carry a completion time.
+
+    The previous value is deliberately not preserved on the row — ``audit_log`` is the
+    dispute trail, and a column that means two different things depending on ``status`` is
+    worse than one that is simply absent.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+        assert (await _evaluation_finalize_columns(migrated_db, evid)).completed_at is not None
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    assert (await _evaluation_finalize_columns(migrated_db, evid)).completed_at is None
+
+
+async def test_reopen_clears_the_finalize_and_admin_override_fields(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """A stale override flag would misattribute the NEXT finalize.
+
+    Set up the worst case on purpose: an admin finalize-on-behalf-of, which is the only path
+    that writes all three fields. If reopen leaves them behind, the evaluator's own later
+    finalize inherits someone else's comment and an override flag it never earned.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid = await submitted_report(c, ah)
+        eh, uid = await evaluator(migrated_db, c, ah, ex, "ev-0")
+        evid = await assign(c, ah, ex, rid, uid)
+        await _grade(c, ex, rid, evid, sid, 7, eh)
+        r = await c.post(
+            f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/finalize",
+            json={"on_behalf_of": uid, "comment": "evaluator unreachable"},
+            headers=ah,
+        )
+        assert r.status_code == 200, r.text
+        before = await _evaluation_finalize_columns(migrated_db, evid)
+        assert before.finalize_is_admin_override is True
+        assert before.finalize_comment == "evaluator unreachable"
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    row = await _evaluation_finalize_columns(migrated_db, evid)
+    assert row.finalized_by is None
+    assert row.finalize_is_admin_override is False
+    assert row.finalize_comment is None
+
+
+async def test_reopen_preserves_the_evaluators_section_grades(migrated_db: async_sessionmaker) -> None:
+    """Reopen un-finalizes; it does NOT erase work.
+
+    This is the whole difference between a reopen and an unassign-then-reassign. The evaluator
+    resumes from the grades they already entered.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, eh, evid = await _completed_world(migrated_db, c, ah)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+        r = await c.get(f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/grades", headers=eh)
+
+    # Assert
+    assert r.status_code == 200, r.text
+    grades = r.json()["data"]
+    assert len(grades) == 1
+    assert grades[0]["grade"] == "7.00"
+
+
+async def test_reopen_preserves_the_evaluators_overall_feedback(migrated_db: async_sessionmaker) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid = await submitted_report(c, ah)
+        eh, uid = await evaluator(migrated_db, c, ah, ex, "ev-0")
+        evid = await assign(c, ah, ex, rid, uid)
+        await _grade(c, ex, rid, evid, sid, 7, eh)
+        r = await c.patch(
+            f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}",
+            json={"overall_feedback": "solid analysis, thin on attribution"},
+            headers=eh,
+        )
+        assert r.status_code == 200, r.text
+        await finalize(c, eh, ex, rid, evid)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    row = await _evaluation_finalize_columns(migrated_db, evid)
+    assert row.overall_feedback == "solid analysis, thin on attribution"
+
+
+async def test_reopen_response_shows_the_updated_row_in_the_breakdown(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """The caller must not have to re-fetch to see what their own call did."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+
+        # Act
+        data = await _reopen(c, ah, ex, rid, evid)
+
+    # Assert
+    row = next(e for e in data["evaluations"] if e["id"] == evid)
+    assert row["status"] == "in_progress"
+    assert row["reopen_count"] == 1
+    assert row["completed_at"] is None
+    assert row["finalized_by"] is None
+    assert row["finalize_is_admin_override"] is False
