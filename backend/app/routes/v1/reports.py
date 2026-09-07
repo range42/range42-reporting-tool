@@ -836,6 +836,14 @@ async def _evaluation_started(db: AsyncSession, report: Report) -> bool:
 
     'Begun' means at least one evaluation is ``in_progress`` or ``completed``. A merely
     ``assigned`` evaluator does NOT block recall: assignment is not the start of work.
+
+    ``unassigned_at`` IS DELIBERATELY IGNORED, and this is NOT an oversight to tidy up. The
+    grade aggregate excludes unassigned evaluations because it is asking whose grade counts
+    toward the number; this guard is asking whether anyone has looked at the content yet, and
+    an unassigned evaluator's completed grades answer yes. Letting the team pull the report
+    back to ``draft`` would hand them content that has already been assessed.
+
+    A reopened evaluation is ``in_progress``, so a reopen is not a back door to recall either.
     """
     n = (
         await db.execute(
