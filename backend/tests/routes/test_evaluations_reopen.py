@@ -725,3 +725,186 @@ async def test_the_supersession_payload_excludes_per_evaluator_rows(
     flat = str(payload)
     for _eh, evid in graders:
         assert evid not in flat
+
+
+# --- W5-4 Task 6: the round trip -----------------------------------------------------
+#
+# Characterization only. Reopen re-enters W5-3's ordinary finalize path — there is no
+# reopen-specific finalize branch, and these tests exist to prove that staying true. A failure
+# here means the finalize path took a shortcut that assumed a first finalize, not that reopen
+# is broken.
+
+
+async def _finalize(c, headers, ex, rid, evid, **body):
+    r = await c.post(
+        f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/finalize",
+        json=body or None,
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["data"]
+
+
+async def _event_versions(migrated_db, rid) -> list[int]:
+    return [e["grade_version"] for e in await _audit_details(migrated_db, _EVALUATED_EVENT, rid)]
+
+
+async def test_a_reopened_evaluation_can_be_finalized_again(migrated_db: async_sessionmaker) -> None:
+    """Back to ``completed`` with a fresh completion time — and the reopen counter stands.
+
+    ``reopen_count`` records history, so re-finalizing must not reset it to zero.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, eh, evid = await _completed_world(migrated_db, c, ah)
+        await _reopen(c, ah, ex, rid, evid)
+        assert (await _evaluation_finalize_columns(migrated_db, evid)).completed_at is None
+
+        # Act
+        await _finalize(c, eh, ex, rid, evid)
+
+    # Assert
+    row = await _evaluation_finalize_columns(migrated_db, evid)
+    assert row.status == "completed"
+    assert row.completed_at is not None
+    assert row.reopen_count == 1
+
+
+async def test_re_finalize_after_reopen_returns_the_report_to_evaluated(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Through the ordinary gate, with no reopen-aware special case."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, eh, evid = await _completed_world(migrated_db, c, ah)
+        await _reopen(c, ah, ex, rid, evid)
+        assert (await _report_row(migrated_db, rid)).status == "under_evaluation"
+
+        # Act
+        await _finalize(c, eh, ex, rid, evid)
+
+    # Assert
+    assert (await _report_row(migrated_db, rid)).status == "evaluated"
+
+
+async def test_the_full_cycle_bumps_the_grade_version_three_times(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """1 on the first finalize, 2 on the reopen, 3 on the re-finalize.
+
+    Asserted as a sequence rather than an endpoint: the version is monotonic, and a consumer
+    orders supersessions by it. A cycle that landed back on 1 would make the second publication
+    indistinguishable from a redelivery of the first.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, eh, evid = await _completed_world(migrated_db, c, ah)
+        seen = [(await _report_row(migrated_db, rid)).grade_version]
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+        seen.append((await _report_row(migrated_db, rid)).grade_version)
+        await _finalize(c, eh, ex, rid, evid)
+        seen.append((await _report_row(migrated_db, rid)).grade_version)
+
+    # Assert
+    assert seen == [1, 2, 3]
+
+
+async def test_re_finalize_re_emits_report_evaluated_with_the_new_version(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Two publications now stand, at versions 1 and 3.
+
+    The first is not withdrawn — it cannot be — so the second must be distinguishable from it.
+    The version is the only thing that does that.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, eh, evid = await _completed_world(migrated_db, c, ah)
+        assert await _event_versions(migrated_db, rid) == [1]
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid)
+        await _finalize(c, eh, ex, rid, evid)
+
+    # Assert
+    assert await _event_versions(migrated_db, rid) == [1, 3]
+
+
+async def test_a_grade_changed_during_the_reopen_reaches_the_re_emitted_event(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Otherwise the whole reopen is theatre.
+
+    The point of returning an evaluation to grading is that the grade can change; if the
+    re-published aggregate still carried the old number, nothing would have been achieved.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid, eh, evid = await _completed_world(migrated_db, c, ah)
+        await _reopen(c, ah, ex, rid, evid)
+
+        # Act — the evaluator revises 7 up to 9, then finalizes again
+        await _grade(c, ex, rid, evid, sid, 9, eh)
+        await _finalize(c, eh, ex, rid, evid)
+
+    # Assert
+    assert str((await _report_row(migrated_db, rid)).overall_grade) == "9.00"
+    published = await _audit_details(migrated_db, _EVALUATED_EVENT, rid)
+    assert published[-1]["overall_grade"] == "9.00"
+    assert published[0]["overall_grade"] == "7.00"  # the superseded publication is untouched
+
+
+async def test_a_second_cycle_increments_the_reopen_count_to_two(
+    migrated_db: async_sessionmaker,
+) -> None:
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, eh, evid = await _completed_world(migrated_db, c, ah)
+        await _reopen(c, ah, ex, rid, evid)
+        await _finalize(c, eh, ex, rid, evid)
+
+        # Act
+        await _reopen(c, ah, ex, rid, evid, reason="second dispute")
+
+    # Assert
+    row = await _evaluation_finalize_columns(migrated_db, evid)
+    assert row.reopen_count == 2
+    assert row.status == "in_progress"
+
+
+async def test_an_admin_can_finalize_on_behalf_of_after_a_reopen(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """The override composes with reopen — and lands cleanly on a row whose first finalize
+    was NOT an override.
+
+    This is precisely why the reopen clears the override fields: the flag here must be True
+    because of THIS finalize, not left over from an earlier one.
+    """
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, sid = await submitted_report(c, ah)
+        eh, uid = await evaluator(migrated_db, c, ah, ex, "ev-0")
+        evid = await assign(c, ah, ex, rid, uid)
+        await _grade(c, ex, rid, evid, sid, 7, eh)
+        await _finalize(c, eh, ex, rid, evid)  # the evaluator's own, no override
+        assert (await _evaluation_finalize_columns(migrated_db, evid)).finalize_is_admin_override is False
+        await _reopen(c, ah, ex, rid, evid)
+
+        # Act — the evaluator has since become unreachable
+        await _finalize(c, ah, ex, rid, evid, on_behalf_of=uid, comment="evaluator on leave")
+
+    # Assert
+    row = await _evaluation_finalize_columns(migrated_db, evid)
+    assert row.status == "completed"
+    assert row.finalize_is_admin_override is True
+    assert row.finalize_comment == "evaluator on leave"
