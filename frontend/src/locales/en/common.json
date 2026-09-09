@@ -172,5 +172,9 @@
       "records": "Decisions so far",
       "overrideBadge": "admin override"
     }
+  },
+  "evaluations": {
+    "emptySection": "This section was left empty.",
+    "charCount": "{count} characters"
   }
 }
