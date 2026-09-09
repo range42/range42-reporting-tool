@@ -232,6 +232,24 @@
     "colAction": "Action",
     "queueOpen": "Grade",
     "queueCompare": "Compare across teams",
-    "queueProgress": "{graded}/{total}"
+    "queueProgress": "{graded}/{total}",
+    "title": "Evaluation",
+    "loading": "Loading the evaluation…",
+    "loadError": "The evaluation could not be loaded.",
+    "scopeDenied": "You are not assigned to evaluate this report.",
+    "submittedAt": "Submitted {when}",
+    "modeSingle": "Single",
+    "modeCampaign": "Campaign",
+    "modeCampaignUnavailable": "Campaign view is not available yet",
+    "draftRestore": "You have unsaved grades from an earlier session on this report.",
+    "draftRestoreAction": "Restore them",
+    "draftDiscardAction": "Discard",
+    "reopen": "Reopen evaluation",
+    "reopenReasonLabel": "Why is this evaluation being reopened?",
+    "reopenSubmit": "Reopen",
+    "reopenCancel": "Cancel",
+    "reopenFailed": "The reopen failed. Nothing was changed.",
+    "reloadNeeded": "This report was regraded elsewhere. Reload before editing.",
+    "aiPrecheck": "AI pre-check"
   }
 }
