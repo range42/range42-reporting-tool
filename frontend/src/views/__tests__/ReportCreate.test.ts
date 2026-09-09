@@ -59,7 +59,7 @@ describe('ReportCreate.vue', () => {
       'ex1',
       expect.objectContaining({ template_id: 't1', team_id: 'tm1', name: 'New R' }),
     )
-    expect(push).toHaveBeenCalledWith('/exercises/ex1/reports/r9')
+    expect(push).toHaveBeenCalledWith('/exercises/ex1/reports')
   })
 
   it('choosing a team fetches its members into the writer selector', async () => {

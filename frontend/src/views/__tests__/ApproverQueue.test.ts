@@ -13,6 +13,8 @@ const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { exerciseId: 'ex1' } }),
+  // AppShell renders the logout control and needs a router.
+  useRouter: () => ({ push: vi.fn() }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 

@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
-import { FileCheck2 } from '@lucide/vue'
+import { RouterLink, useRouter } from 'vue-router'
+import { FileCheck2, LogOut } from '@lucide/vue'
+import { useI18n } from 'vue-i18n'
 import { useBrandingStore } from '@/stores/branding'
 import { useAuthStore } from '@/stores/auth'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 
 defineProps<{ title?: string }>()
 
+const { t } = useI18n()
+const router = useRouter()
 const branding = useBrandingStore()
 const auth = useAuthStore()
+
+/** Lives here, not in a page: every authenticated view needs a way out. */
+async function logout(): Promise<void> {
+  await auth.logout()
+  await router.push('/login')
+}
 
 const initials = computed(() => {
   const name = (auth.user?.display_name || auth.user?.email || '').trim()
@@ -41,12 +50,23 @@ const initials = computed(() => {
       <div class="flex items-center gap-2">
         <slot name="actions" />
         <ThemeToggle />
-        <div
-          v-if="auth.user"
-          class="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-500/15 text-sm font-medium text-indigo-500"
-        >
-          {{ initials }}
-        </div>
+        <template v-if="auth.user">
+          <div
+            class="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-500/15 text-sm font-medium text-indigo-500"
+          >
+            {{ initials }}
+          </div>
+          <button
+            type="button"
+            data-test="app-logout"
+            :title="t('auth.logout')"
+            :aria-label="t('auth.logout')"
+            class="flex h-9 w-9 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+            @click="logout"
+          >
+            <LogOut class="h-4 w-4" />
+          </button>
+        </template>
       </div>
     </div>
   </header>
