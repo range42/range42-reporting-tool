@@ -10,7 +10,8 @@
     "emergencySubmit": "Break-glass sign in",
     "invalid": "Sign in failed. Check your credentials.",
     "completing": "Completing sign in…",
-    "callbackFailed": "Sign in could not be completed."
+    "callbackFailed": "Sign in could not be completed.",
+    "logout": "Sign out"
   },
   "exercises": {
     "title": "Exercises",
@@ -19,8 +20,11 @@
     "loadError": "Could not load exercises. Please try again.",
     "manageTemplates": "Manage templates",
     "manageRoles": "Manage roles",
-    "logout": "Sign out",
-    "status": { "draft": "Draft", "active": "Active", "archived": "Archived" }
+    "status": {
+      "draft": "Draft",
+      "active": "Active",
+      "archived": "Archived"
+    }
   },
   "roles": {
     "title": "Roles",

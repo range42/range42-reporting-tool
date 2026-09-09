@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref, type Component } from 'vue'
-import { useRouter, RouterLink } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Activity, Archive, ArrowRight, LogOut, Pencil, TriangleAlert } from '@lucide/vue'
+import { Activity, Archive, ArrowRight, Pencil, TriangleAlert } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { listExercises, type Exercise } from '@/services/exercises'
 import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
 
 const { t } = useI18n()
-const router = useRouter()
 const auth = useAuthStore()
 const exercises = ref<Exercise[]>([])
 const loading = ref(true)
@@ -48,11 +47,6 @@ onMounted(async () => {
     loading.value = false
   }
 })
-
-async function logout(): Promise<void> {
-  await auth.logout()
-  await router.push('/login')
-}
 </script>
 
 <template>
@@ -72,14 +66,6 @@ async function logout(): Promise<void> {
       >
         {{ t('exercises.manageRoles') }}
       </RouterLink>
-      <button
-        type="button"
-        class="flex h-9 items-center gap-1.5 rounded-md px-3 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-        @click="logout"
-      >
-        <LogOut class="h-4 w-4" />
-        {{ t('exercises.logout') }}
-      </button>
     </template>
 
     <div class="mb-6">
