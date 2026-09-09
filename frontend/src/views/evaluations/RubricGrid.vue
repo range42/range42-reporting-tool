@@ -18,6 +18,7 @@ const props = defineProps<{
   scores: RubricScoreEntry[] | null
   gradeMin: number | null
   gradeMax: number | null
+  disabled?: boolean
 }>()
 const emit = defineEmits<{ update: [RubricScoreEntry[]] }>()
 
@@ -83,6 +84,7 @@ function onScore(name: string, raw: string): void {
         min="0"
         :max="c.max_score"
         step="0.01"
+        :disabled="disabled"
         :value="scoreByCriterion.get(c.name)?.score ?? ''"
         class="h-8 w-16 rounded-md border border-[var(--rt-border)] bg-[var(--rt-bg-elev)] px-2 font-mono text-sm"
         @input="onScore(c.name, ($event.target as HTMLInputElement).value)"
@@ -95,6 +97,7 @@ function onScore(name: string, raw: string): void {
         :id="noteId(c.name)"
         :data-test="`rubric-note-${sectionId}-${c.name}`"
         type="text"
+        :disabled="disabled"
         :value="scoreByCriterion.get(c.name)?.note ?? ''"
         class="h-8 min-w-0 flex-1 rounded-md border border-[var(--rt-border)] bg-[var(--rt-bg-elev)] px-2 text-xs"
         @input="emitWith(c.name, { note: ($event.target as HTMLInputElement).value || null })"

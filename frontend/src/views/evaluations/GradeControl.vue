@@ -28,6 +28,9 @@ const props = defineProps<{
   rubricScores: RubricScoreEntry[] | null
   /** A server-side error for this section, shown in place of the local range message. */
   error?: string | null
+  /** Set once the evaluation is finalized: the server refuses writes, so the controls
+   *  must stop inviting them (D-W5-4 — there is no edit-after-finalize). */
+  disabled?: boolean
 }>()
 const emit = defineEmits<{ update: [GradeUpsertInput] }>()
 
@@ -102,6 +105,7 @@ function onNumeric(value: string): void {
           :min="min ?? undefined"
           :max="max ?? undefined"
           step="0.01"
+          :disabled="disabled"
           :value="raw"
           :aria-invalid="message !== null ? 'true' : 'false'"
           :aria-describedby="hintId"
@@ -131,6 +135,7 @@ function onNumeric(value: string): void {
         <button
           :data-test="`grade-pass-${sectionId}`"
           type="button"
+          :disabled="disabled"
           :aria-pressed="passFailResult === true"
           class="px-3 py-1 text-xs aria-pressed:bg-[var(--rt-accent)] aria-pressed:text-white"
           @click="push(true)"
@@ -140,6 +145,7 @@ function onNumeric(value: string): void {
         <button
           :data-test="`grade-fail-${sectionId}`"
           type="button"
+          :disabled="disabled"
           :aria-pressed="passFailResult === false"
           class="border-l border-[var(--rt-border)] px-3 py-1 text-xs aria-pressed:bg-[var(--rt-accent)] aria-pressed:text-white"
           @click="push(false)"
@@ -156,6 +162,7 @@ function onNumeric(value: string): void {
         :scores="rubricScores"
         :grade-min="min"
         :grade-max="max"
+        :disabled="disabled"
         @update="push"
       />
     </template>

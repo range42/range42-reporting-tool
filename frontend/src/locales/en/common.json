@@ -187,6 +187,15 @@
     "rubricScore": "Score for {criterion}",
     "rubricNote": "Note on {criterion}",
     "rubricRollup": "Section grade",
-    "rubricProvisional": "Provisional — the server recomputes on save."
+    "rubricProvisional": "Provisional — the server recomputes on save.",
+    "criteriaHeading": "Evaluation criteria",
+    "criteriaEvaluatorOnly": "Visible to evaluators only",
+    "modeNumeric": "graded {min}–{max}",
+    "modePassFail": "pass/fail",
+    "modeRubric": "rubric",
+    "modeNotGraded": "not graded",
+    "weight": "weight {weight}",
+    "feedbackLabel": "Feedback on this section",
+    "feedbackPlaceholder": "What did the team do well, and what would you change?"
   }
 }
