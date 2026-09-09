@@ -1,0 +1,34 @@
+# Dev-only overlay: the local OIDC provider plus the app wiring that points at
+# it. Kept out of docker-compose.yml deliberately — the prod overlay publishes
+# only Caddy's ports and must never run a static-password IdP.
+#
+# Never combine this file with docker-compose.prod.yml.
+#
+# `dex` has to resolve to the same name from both sides: discovery runs
+# server-side at boot, the login redirect is followed by the browser, and the
+# `iss` claim has to match either way. Compose DNS covers the in-network side.
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.45.1
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    volumes: ["./dex:/etc/dex:ro"]
+    ports: ["5556:5556"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5556/dex/healthz >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    # Merged with the base list, not replacing it. Discovery runs once at boot
+    # and a failure is only logged, so a backend that wins the race comes up
+    # permanently OIDC-less until restarted.
+    depends_on:
+      dex: { condition: service_healthy }
+    # Overrides the blank values in .env, which stays blank so the committed
+    # example keeps reporting oidc 'disabled'.
+    environment:
+      OIDC_ISSUER_URL: http://dex:5556/dex
+      OIDC_CLIENT_ID: reporting-tool
+      OIDC_CLIENT_SECRET: changeme
+      OIDC_REDIRECT_URI: http://localhost:5173/auth/callback
