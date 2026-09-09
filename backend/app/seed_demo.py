@@ -6,22 +6,26 @@ Run INSIDE the backend container (where ``deploy/.env`` is already loaded and th
     docker compose -f deploy/docker-compose.yml exec -T backend \
         uv run --no-sync python -m app.seed_demo
 
+Seeds the *world* only. Persona users are deliberately absent: their rows are
+created by their first SSO login, and ``app.seed_grants`` attaches roles and team
+membership afterwards, matched by email. Seeding a persona here would key it to a
+subject no login can ever match.
+
 Idempotent: every entity is looked up by its natural key before insert, so
 re-running never creates duplicates. It seeds:
 
 * the 5 built-in system roles (reuses ``app.seed.seed_system_roles``);
-* a global-admin user whose identity matches the emergency-login subject
-  (``emergency:admin``), so the account you log in with already owns the data;
-* four extra users (writer / approver / evaluator / observer personas);
+* a global-admin user matching the emergency-login subject (``emergency:admin``),
+  which also owns the seeded data as ``created_by``;
 * one active exercise with the default team-type set + scoring config
   (reuses ``app.seed.seed_exercise_defaults``);
-* two teams (Blue, Red) with members;
-* per-user exercise-role assignments;
+* two teams (Blue, Red), without members;
 * one *published* ``sitrep`` template with three sections
   (rich-text, single-choice, numeric-graded).
 
 Log in through the emergency admin using the password whose bcrypt hash is in
-``EMERGENCY_ADMIN_PASSWORD_HASH`` (``deploy/.env``).
+``EMERGENCY_ADMIN_PASSWORD_HASH`` (``deploy/.env``), or through the IdP and then
+run ``app.seed_grants``.
 """
 
 import asyncio
@@ -36,17 +40,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import build_engine, get_sessionmaker
 from app.models.exercise import Exercise
-from app.models.exercise_role import ExerciseRole
 from app.models.report_template import ReportTemplate
 from app.models.team import Team
-from app.models.team_member import TeamMember
 from app.models.template_section_def import TemplateSectionDef
 from app.models.user import User
 from app.seed import seed_exercise_defaults, seed_system_roles
 
-# --- user personas (external_id is namespaced "{provider}:{subject}") ---------
-# The admin mirrors emergency_claims() (provider="emergency", subject="admin")
-# so start_session()'s upsert on emergency-login reuses this very row.
+# --- the emergency admin (external_id is namespaced "{provider}:{subject}") ---
+# Mirrors emergency_claims() (provider="emergency", subject="admin") so
+# start_session()'s upsert on emergency-login reuses this very row. It needs no
+# exercise role: require_permission() lets global admins bypass.
 ADMIN_EXTERNAL_ID = "emergency:admin"
 
 
@@ -56,18 +59,13 @@ class _Persona:
     email: str
     display_name: str
     is_global_admin: bool
-    role_key: str  # exercise-scoped role assigned below
 
 
-PERSONAS: tuple[_Persona, ...] = (
-    _Persona(ADMIN_EXTERNAL_ID, "admin@localhost", "Emergency Admin", True, "team_admin"),
-    _Persona("seed:alice", "alice@range42.local", "Alice Writer", False, "team_writer"),
-    _Persona("seed:bob", "bob@range42.local", "Bob Approver", False, "team_approver"),
-    _Persona("seed:carol", "carol@range42.local", "Carol Evaluator", False, "evaluator"),
-    _Persona("seed:dave", "dave@range42.local", "Dave Observer", False, "observer"),
-)
+ADMIN = _Persona(ADMIN_EXTERNAL_ID, "admin@localhost", "Emergency Admin", True)
 
 EXERCISE_NAME = "Autumn Cyber Range 2026"
+BLUE_TEAM_NAME = "Blue Team Alpha"
+RED_TEAM_NAME = "Red Team Bravo"
 TEMPLATE_NAME = "Situation Report (SITREP)"
 
 # Section definitions for the demo template. Each dict is validated against the
@@ -161,30 +159,6 @@ async def _get_or_create_team(
     return team
 
 
-async def _ensure_team_member(session: AsyncSession, *, team_id: uuid.UUID, user_id: uuid.UUID) -> None:
-    exists = (
-        await session.execute(select(TeamMember.id).where(TeamMember.team_id == team_id, TeamMember.user_id == user_id))
-    ).first()
-    if exists is None:
-        session.add(TeamMember(team_id=team_id, user_id=user_id))
-
-
-async def _ensure_exercise_role(
-    session: AsyncSession, *, exercise_id: uuid.UUID, user_id: uuid.UUID, role_key: str
-) -> None:
-    exists = (
-        await session.execute(
-            select(ExerciseRole.id).where(
-                ExerciseRole.exercise_id == exercise_id,
-                ExerciseRole.user_id == user_id,
-                ExerciseRole.role_key == role_key,
-            )
-        )
-    ).first()
-    if exists is None:
-        session.add(ExerciseRole(exercise_id=exercise_id, user_id=user_id, role_key=role_key))
-
-
 async def _get_or_create_template(session: AsyncSession, *, created_by: uuid.UUID) -> tuple[ReportTemplate, bool]:
     template = (
         await session.execute(select(ReportTemplate).where(ReportTemplate.name == TEMPLATE_NAME))
@@ -232,35 +206,24 @@ async def seed_demo(session: AsyncSession) -> dict[str, Any]:
     """Seed the full demo dataset. Returns a summary dict for logging."""
     await seed_system_roles(session)
 
-    users = {p.external_id: await _get_or_create_user(session, p) for p in PERSONAS}
-    admin = users[ADMIN_EXTERNAL_ID]
+    admin = await _get_or_create_user(session, ADMIN)
 
     exercise = await _get_or_create_exercise(session, created_by=admin.id)
     await seed_exercise_defaults(session, exercise.id)
 
     blue = await _get_or_create_team(
-        session, exercise_id=exercise.id, name="Blue Team Alpha", team_type="blue", color="#3B82F6"
+        session, exercise_id=exercise.id, name=BLUE_TEAM_NAME, team_type="blue", color="#3B82F6"
     )
     red = await _get_or_create_team(
-        session, exercise_id=exercise.id, name="Red Team Bravo", team_type="red", color="#EF4444"
+        session, exercise_id=exercise.id, name=RED_TEAM_NAME, team_type="red", color="#EF4444"
     )
-
-    await _ensure_team_member(session, team_id=blue.id, user_id=users["seed:alice"].id)
-    await _ensure_team_member(session, team_id=blue.id, user_id=users["seed:bob"].id)
-    await _ensure_team_member(session, team_id=red.id, user_id=users["seed:dave"].id)
-
-    for p in PERSONAS:
-        await _ensure_exercise_role(
-            session, exercise_id=exercise.id, user_id=users[p.external_id].id, role_key=p.role_key
-        )
 
     template, template_created = await _get_or_create_template(session, created_by=admin.id)
 
     return {
-        "users": len(users),
+        "users": 1,
         "exercise": exercise.name,
         "teams": [blue.name, red.name],
-        "roles_assigned": len(PERSONAS),
         "template": template.name,
         "template_created": template_created,
         "admin_external_id": ADMIN_EXTERNAL_ID,
@@ -279,15 +242,15 @@ async def _main() -> None:
         await engine.dispose()
 
     print("demo seed complete:")
-    print(f"  users            : {summary['users']}")
+    print(f"  users            : {summary['users']} (emergency admin only)")
     print(f"  exercise         : {summary['exercise']} (+ default team-types & scoring)")
-    print(f"  teams            : {', '.join(summary['teams'])}")
-    print(f"  exercise roles   : {summary['roles_assigned']}")
+    print(f"  teams            : {', '.join(summary['teams'])} (no members yet)")
     print(
         f"  template         : {summary['template']} "
         f"({'created' if summary['template_created'] else 'already present'})"
     )
     print("  log in as        : emergency admin (POST /api/v1/auth/emergency-login)")
+    print("  next             : persona SSO logins, then `just seed-grants`")
 
 
 if __name__ == "__main__":
