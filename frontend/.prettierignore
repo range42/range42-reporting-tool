@@ -4,3 +4,4 @@ dist
 src/types/api.d.ts
 **/CLAUDE.md
 .claude
+coverage
