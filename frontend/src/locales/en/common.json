@@ -217,6 +217,21 @@
     "colReopens": "Reopens",
     "colWeight": "Weight",
     "notYet": "not yet",
-    "unnamedEvaluator": "Evaluator"
+    "unnamedEvaluator": "Evaluator",
+    "queueTitle": "Evaluations",
+    "queueEmpty": "Nothing is assigned to you for evaluation.",
+    "queueDue": "Due {when}",
+    "queueNoDeadline": "No deadline",
+    "queueUpcoming": "Upcoming · not yet submitted",
+    "colTeam": "Team",
+    "colReport": "Report",
+    "colTemplate": "Template",
+    "colSubmitted": "Submitted",
+    "colProgress": "Progress",
+    "colAi": "AI pre-check",
+    "colAction": "Action",
+    "queueOpen": "Grade",
+    "queueCompare": "Compare across teams",
+    "queueProgress": "{graded}/{total}"
   }
 }
