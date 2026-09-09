@@ -5,6 +5,7 @@ import {
   apiGet,
   apiPatch,
   apiPost,
+  apiPut,
   registerUnauthorizedHandler,
 } from '@/services/http'
 
@@ -114,5 +115,16 @@ describe('http write verbs', () => {
     )
     await expect(apiGet('/api/v1/auth/me', 'tok')).rejects.toBeInstanceOf(ApiError)
     expect(onUnauth).toHaveBeenCalledOnce()
+  })
+
+  it('apiPut sends a JSON body and unwraps the data envelope', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { id: 'g1' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const data = await apiPut<{ id: string }>('/api/v1/x', { grade: '7.50' }, 'tok')
+    expect(data).toEqual({ id: 'g1' })
+    const [, init] = fetchMock.mock.calls[0]!
+    expect(init.method).toBe('PUT')
+    expect(init.headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(init.body)).toEqual({ grade: '7.50' })
   })
 })
