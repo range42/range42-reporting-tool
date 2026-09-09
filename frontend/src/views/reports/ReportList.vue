@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, TriangleAlert, Clock, ShieldCheck } from '@lucide/vue'
+import { Plus, TriangleAlert, Clock, ShieldCheck, ClipboardCheck } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
@@ -23,6 +23,7 @@ const error = ref('')
 
 const token = computed(() => auth.token ?? '')
 const canApprove = computed(() => auth.isAdmin || caps.canApproveReports(exerciseId))
+const canEvaluate = computed(() => auth.isAdmin || caps.canEvaluate(exerciseId))
 
 onMounted(async () => {
   if (!auth.token) {
@@ -42,6 +43,10 @@ onMounted(async () => {
 
 function openApprovals(): void {
   void router.push(`/exercises/${exerciseId}/reports/approvals`)
+}
+
+function openEvaluations(): void {
+  void router.push({ name: 'evaluation-queue', params: { exerciseId } })
 }
 
 const statusBadge: Record<ReportStatus, string> = {
@@ -84,6 +89,16 @@ function createReport(): void {
       >
         <ShieldCheck class="h-4 w-4" />
         {{ t('reports.approvals.nav') }}
+      </button>
+      <button
+        v-if="canEvaluate"
+        type="button"
+        data-test="evaluations-link"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="openEvaluations"
+      >
+        <ClipboardCheck class="h-4 w-4" />
+        {{ t('evaluations.nav') }}
       </button>
       <button
         v-if="auth.isAdmin"

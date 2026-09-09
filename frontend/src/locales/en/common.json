@@ -184,7 +184,6 @@
     "fail": "Fail",
     "notGraded": "This section is not graded.",
     "rubricCriterion": "Criterion",
-    "rubricScore": "Score for {criterion}",
     "rubricNote": "Note on {criterion}",
     "rubricRollup": "Section grade",
     "rubricProvisional": "Provisional — the server recomputes on save.",
@@ -250,6 +249,18 @@
     "reopenCancel": "Cancel",
     "reopenFailed": "The reopen failed. Nothing was changed.",
     "reloadNeeded": "This report was regraded elsewhere. Reload before editing.",
-    "aiPrecheck": "AI pre-check"
+    "aiPrecheck": "AI pre-check",
+    "saveErrors": {
+      "evaluation_finalized": "This evaluation is finalized — grades can no longer be changed.",
+      "evaluation_unassigned": "You are no longer assigned to this evaluation.",
+      "not_your_evaluation": "This evaluation belongs to another evaluator.",
+      "not_assigned_to_report": "You are not assigned to evaluate this report.",
+      "section_not_found": "That section is no longer part of this report.",
+      "grade_not_found": "That grade no longer exists.",
+      "report_not_submitted": "The report has not been submitted yet.",
+      "invalid_state": "The evaluation changed state — reload before saving again.",
+      "forbidden": "You do not have permission to change this grade."
+    },
+    "nav": "Evaluations"
   }
 }

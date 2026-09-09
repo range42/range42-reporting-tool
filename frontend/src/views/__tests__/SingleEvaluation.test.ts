@@ -10,6 +10,7 @@ import * as svc from '@/services/evaluations'
 import * as reportsSvc from '@/services/reports'
 import * as teamsSvc from '@/services/teams'
 import { useGradeDraftCache } from '@/composables/useGradeDraftCache'
+import { useEvaluationStore } from '@/stores/evaluation'
 import type { EvaluationDetail, GradableSection, SectionGrade } from '@/services/evaluations'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
@@ -244,5 +245,91 @@ describe('SingleEvaluation', () => {
     const w = await setup()
     await w.setProps({ aiAvailable: true })
     expect(w.findAll('[data-test-kind="ai-precheck"]')).toHaveLength(2)
+  })
+
+  it('restores cached drafts into the store when the prompt is accepted', async () => {
+    useGradeDraftCache('ev1').save('s1', { grade: 9 }, '2026-09-08T12:00:00Z')
+    const w = await setup(EVALUATOR, detail({ sections: [section({ grade: grade() })] }))
+    const store = useEvaluationStore()
+
+    await w.get('[data-test="draft-restore-apply"]').trigger('click')
+
+    // Replayed through setGrade, so the restored value passed the same range validation.
+    expect(store.effectiveGrade('s1')).toBe(9)
+    expect(w.find('[data-test="draft-restore"]').exists()).toBe(false)
+  })
+
+  it('clears the cache when the restore prompt is discarded', async () => {
+    const cache = useGradeDraftCache('ev1')
+    cache.save('s1', { grade: 9 }, '2026-09-08T12:00:00Z')
+    const w = await setup(EVALUATOR, detail({ sections: [section({ grade: grade() })] }))
+
+    await w.get('[data-test="draft-restore-discard"]').trigger('click')
+
+    expect(cache.read('s1')).toBeNull()
+    expect(w.find('[data-test="draft-restore"]').exists()).toBe(false)
+    expect(useEvaluationStore().effectiveGrade('s1')).toBe(5)
+  })
+
+  it('submits a reopen with its reason and re-reads the evaluation afterwards', async () => {
+    const w = await setup(ADMIN, detail({ status: 'completed' }))
+    const reopen = vi.spyOn(svc, 'reopenEvaluation').mockResolvedValue({
+      report_id: 'r1',
+      report_status: 'under_evaluation',
+      finalize_policy: 'all_must_finalize',
+      finalize_gate_satisfied: false,
+      aggregate: {
+        overall_grade: null,
+        grade_version: 4,
+        counted_evaluator_count: 1,
+        completed_evaluator_count: 0,
+        aggregated_weight_total: '1.00',
+      },
+      evaluations: [],
+    })
+    const reread = vi.spyOn(svc, 'getEvaluation')
+
+    await w.get('[data-test="reopen-open"]').trigger('click')
+    await w.get('[data-test="reopen-reason"]').setValue('grade was wrong')
+    await w.get('[data-test="reopen-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(reopen).toHaveBeenCalledWith('tok', 'ex1', 'r1', 'ev1', 'grade was wrong')
+    // A reopen publishes a new grade version, so the view re-reads rather than guessing.
+    expect(reread).toHaveBeenCalled()
+    expect(w.find('[data-test="reopen-reason"]').exists()).toBe(false)
+  })
+
+  it('keeps the reopen form open and reports the failure when the reopen rejects', async () => {
+    const w = await setup(ADMIN, detail({ status: 'completed' }))
+    vi.spyOn(svc, 'reopenEvaluation').mockRejectedValue(
+      new ApiError('reason_required', 'no', [], undefined, 422),
+    )
+
+    await w.get('[data-test="reopen-open"]').trigger('click')
+    await w.get('[data-test="reopen-reason"]').setValue('typo')
+    await w.get('[data-test="reopen-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(w.get('[data-test="reopen-error"]').text()).toBe(en.evaluations.reopenFailed)
+    expect(w.find('[data-test="reopen-reason"]').exists()).toBe(true)
+  })
+
+  it('renders the header without team or submitted time when the report is out of scope', async () => {
+    // An evaluator who is not in the report's team gets 403 from GET /reports/{rid}.
+    useAuthStore().setSession({ access_token: 'tok', token_type: 'bearer', user: EVALUATOR })
+    vi.spyOn(svc, 'getEvaluation').mockResolvedValue(detail())
+    vi.spyOn(svc, 'listEvaluationsForReport').mockRejectedValue(
+      new ApiError('forbidden', 'no', [], undefined, 403),
+    )
+    vi.spyOn(reportsSvc, 'getReport').mockRejectedValue(
+      new ApiError('forbidden', 'no', [], undefined, 403),
+    )
+    const w = mount(SingleEvaluation, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(w.get('[data-test="evaluation-header"]').text()).toContain('SITREP #6')
+    expect(w.find('[data-test="evaluation-team"]').exists()).toBe(false)
+    expect(w.find('[data-test="evaluation-submitted"]').exists()).toBe(false)
   })
 })

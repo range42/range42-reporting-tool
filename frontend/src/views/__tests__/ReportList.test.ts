@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n'
 import en from '@/locales/en/common.json'
 import ReportList from '@/views/reports/ReportList.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 import * as svc from '@/services/reports'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
@@ -73,5 +74,29 @@ describe('ReportList.vue', () => {
     const w = mountList()
     await flushPromises()
     expect(w.find('[data-test="new-report"]').exists()).toBe(false)
+  })
+
+  it('shows the Evaluations entry only for a caller who can evaluate', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const without = mountList()
+    await flushPromises()
+    expect(without.find('[data-test="evaluations-link"]').exists()).toBe(false)
+
+    useCapabilitiesStore().set('ex1', ['evaluations:write'])
+    const withCap = mountList()
+    await flushPromises()
+    expect(withCap.find('[data-test="evaluations-link"]').exists()).toBe(true)
+  })
+
+  it('navigates to the evaluator queue route from the Evaluations entry', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const w = mountList()
+    await flushPromises()
+    await w.get('[data-test="evaluations-link"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({
+      name: 'evaluation-queue',
+      params: { exerciseId: 'ex1' },
+    })
   })
 })
