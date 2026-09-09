@@ -175,6 +175,18 @@
   },
   "evaluations": {
     "emptySection": "This section was left empty.",
-    "charCount": "{count} characters"
+    "charCount": "{count} characters",
+    "grade": "Grade",
+    "gradeRange": "Range {min}–{max}",
+    "outOfRange": "Outside the allowed range for this section.",
+    "badNumber": "Enter a number with at most two decimals.",
+    "pass": "Pass",
+    "fail": "Fail",
+    "notGraded": "This section is not graded.",
+    "rubricCriterion": "Criterion",
+    "rubricScore": "Score for {criterion}",
+    "rubricNote": "Note on {criterion}",
+    "rubricRollup": "Section grade",
+    "rubricProvisional": "Provisional — the server recomputes on save."
   }
 }

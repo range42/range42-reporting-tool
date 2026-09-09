@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { scoringPreview, type PreviewSection } from '@/lib/scoringPreview'
+import { rubricRollupPreview, scoringPreview, type PreviewSection } from '@/lib/scoringPreview'
+import type { RubricCriterion } from '@/services/templates'
 
 function section(over: Partial<PreviewSection> = {}): PreviewSection {
   return {
@@ -48,5 +49,60 @@ describe('scoringPreview (preview only — rollup.py is canonical, D6)', () => {
   it('returns null while any gradable section is ungraded', () => {
     expect(scoringPreview([section({ grade: 8 }), section({ grade: null })])).toBeNull()
     expect(scoringPreview([])).toBeNull()
+  })
+})
+
+describe('rubricRollupPreview (mirrors compute_rubric_rollup)', () => {
+  const criteria: RubricCriterion[] = [
+    { name: 'clarity', weight: 1, max_score: 5 },
+    { name: 'evidence', weight: 3, max_score: 10 },
+  ]
+
+  it('weights each criterion by weight, not by max_score', () => {
+    // (5/5·1 + 5/10·3) / 4 = 0.625 -> 0 + 0.625·10 = 6.25
+    expect(
+      rubricRollupPreview(
+        criteria,
+        [
+          { criterion: 'clarity', score: 5, note: null },
+          { criterion: 'evidence', score: 5, note: null },
+        ],
+        0,
+        10,
+      ),
+    ).toBe(6.25)
+  })
+
+  it('clamps a score above its criterion maximum and ignores a stale criterion name', () => {
+    expect(
+      rubricRollupPreview(
+        criteria,
+        [
+          { criterion: 'clarity', score: 99, note: null },
+          { criterion: 'removed-by-a-template-edit', score: 1, note: null },
+        ],
+        0,
+        10,
+      ),
+    ).toBe(10)
+  })
+
+  it('returns null when nothing can be computed', () => {
+    expect(rubricRollupPreview(null, [], 0, 10)).toBeNull()
+    expect(rubricRollupPreview(criteria, null, 0, 10)).toBeNull()
+    expect(
+      rubricRollupPreview(criteria, [{ criterion: 'nope', score: 1, note: null }], 0, 10),
+    ).toBeNull()
+  })
+
+  it('scales onto 0..1 when the section declares no bounds', () => {
+    expect(
+      rubricRollupPreview(
+        [{ name: 'clarity', weight: 1, max_score: 4 }],
+        [{ criterion: 'clarity', score: 2, note: null }],
+        null,
+        null,
+      ),
+    ).toBe(0.5)
   })
 })

@@ -1,4 +1,5 @@
-import type { GradeMode } from '@/services/evaluations'
+import type { GradeMode, RubricScoreEntry } from '@/services/evaluations'
+import type { RubricCriterion } from '@/services/templates'
 
 /**
  * PREVIEW ONLY — `backend/app/services/scoring/rollup.py` is canonical (D6).
@@ -67,4 +68,46 @@ export function scoringPreview(sections: readonly PreviewSection[]): number | nu
   if (weight === 0) return null
   // HALF_UP to the column's two places, matching `quantize_grade` (M11).
   return Math.round((weighted / weight) * CENTS) / CENTS
+}
+
+/**
+ * Pre-roll rubric criteria into one section grade — the preview twin of
+ * `compute_rubric_rollup` (D6 applies here too: the server's number is the one of record).
+ *
+ *     normalized = Σ((score / max_score) · weight) / Σ(weight)
+ *     grade      = grade_min + normalized · (grade_max - grade_min)
+ *
+ * `weight` alone controls influence; `max_score` only sets granularity. That split is an
+ * operator decision (2026-09-01) recorded in `rollup.py` — changing it silently re-grades
+ * every rubric section ever scored, so it is a data migration, not a tweak.
+ *
+ * Criteria with no submitted score are excluded from BOTH sums, scores naming a criterion
+ * the template no longer has are ignored, and a score above its criterion's maximum is
+ * clamped: a template edit must neither break nor inflate an already-graded report.
+ */
+export function rubricRollupPreview(
+  criteria: readonly RubricCriterion[] | null,
+  scores: readonly RubricScoreEntry[] | null,
+  gradeMin: number | null,
+  gradeMax: number | null,
+): number | null {
+  if (!criteria || criteria.length === 0 || !scores || scores.length === 0) return null
+  const byName = new Map(criteria.map((c) => [c.name, c]))
+
+  let weighted = 0
+  let weight = 0
+  for (const entry of scores) {
+    const criterion = byName.get(entry.criterion)
+    if (!criterion) continue // stale name from a template edit
+    const ceiling = criterion.max_score
+    const w = criterion.weight ?? 1
+    if (ceiling <= 0 || w <= 0) continue
+    weighted += Math.min(entry.score / ceiling, 1) * w
+    weight += w
+  }
+  if (weight === 0) return null
+
+  const low = gradeMin ?? 0
+  const high = gradeMax ?? 1
+  return Math.round((low + (weighted / weight) * (high - low)) * CENTS) / CENTS
 }

@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPut } from '@/services/http'
+import type { RubricCriterion } from '@/services/templates'
 import { formatGrade } from '@/lib/decimal'
 
 export type EvaluationStatus = 'assigned' | 'in_progress' | 'completed'
@@ -43,7 +44,7 @@ export interface GradableSection {
   grade_min: string | null
   grade_max: string | null
   grade_weight: string
-  rubric_criteria: Record<string, unknown>[] | null
+  rubric_criteria: RubricCriterion[] | null
   evaluation_criteria: string | null
   grade: SectionGrade | null
 }
