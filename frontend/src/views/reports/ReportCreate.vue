@@ -68,7 +68,7 @@ async function submit(): Promise<void> {
   error.value = ''
   saving.value = true
   try {
-    const created = await createReport(token.value, exerciseId, {
+    await createReport(token.value, exerciseId, {
       template_id: templateId.value,
       team_id: teamId.value,
       name: name.value.trim(),
@@ -76,7 +76,10 @@ async function submit(): Promise<void> {
       approval_required: approvalRequired.value,
       assigned_writer_id: assignedWriterId.value || null,
     })
-    await router.push(`/exercises/${exerciseId}/reports/${created.id}`)
+    // Creating a report IS the assignment: it lands in draft, owned by the
+    // assigned writer. Land on the list, not the editor — an admin dropped
+    // into the editor reads it as "now fill this in", which is the writer's job.
+    await router.push(`/exercises/${exerciseId}/reports`)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('reports.createError')
   } finally {
