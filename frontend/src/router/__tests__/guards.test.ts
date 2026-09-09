@@ -78,4 +78,47 @@ describe('resolveNavigation', () => {
       ),
     ).toBe('/exercises')
   })
+
+  it('redirects to the exercise picker when requiresEvaluator and the caller cannot evaluate', () => {
+    const s = useAuthStore()
+    s.setSession({ access_token: 't', token_type: 'bearer', user: MEMBER })
+    expect(
+      resolveNavigation(
+        { requiresAuth: true, requiresEvaluator: true },
+        '/exercises/ex1/evaluations',
+      ),
+    ).toBe('/exercises')
+
+    // The approver capability is not the evaluator one.
+    useCapabilitiesStore().set('ex1', ['reports:approve'])
+    expect(
+      resolveNavigation(
+        { requiresAuth: true, requiresEvaluator: true },
+        '/exercises/ex1/evaluations',
+      ),
+    ).toBe('/exercises')
+  })
+
+  it('allows a global admin through requiresEvaluator', () => {
+    const s = useAuthStore()
+    s.setSession({ access_token: 't', token_type: 'bearer', user: ADMIN })
+    expect(
+      resolveNavigation(
+        { requiresAuth: true, requiresEvaluator: true },
+        '/exercises/ex1/evaluations',
+      ),
+    ).toBeNull()
+  })
+
+  it('lets an evaluator with the cached capability into an evaluator route', () => {
+    const s = useAuthStore()
+    s.setSession({ access_token: 't', token_type: 'bearer', user: MEMBER })
+    useCapabilitiesStore().set('ex1', ['evaluations:write'])
+    expect(
+      resolveNavigation(
+        { requiresAuth: true, requiresEvaluator: true },
+        '/exercises/ex1/reports/r1/evaluations/ev1',
+      ),
+    ).toBeNull()
+  })
 })
