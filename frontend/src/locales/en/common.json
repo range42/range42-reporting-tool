@@ -196,6 +196,27 @@
     "modeNotGraded": "not graded",
     "weight": "weight {weight}",
     "feedbackLabel": "Feedback on this section",
-    "feedbackPlaceholder": "What did the team do well, and what would you change?"
+    "feedbackPlaceholder": "What did the team do well, and what would you change?",
+    "overallGrade": "Overall grade",
+    "provisional": "Provisional",
+    "remaining": "{count} of {total} sections still need a grade",
+    "allGraded": "All sections graded",
+    "overallFeedbackLabel": "Overall feedback",
+    "overallFeedbackPlaceholder": "Summarize the evaluation for this report.",
+    "finalize": "Finalize evaluation",
+    "finalizing": "Finalizing…",
+    "finalized": "Finalized.",
+    "waitingOthers": "Finalized. The report grade publishes once the remaining evaluators finalize.",
+    "finalizeFailed": "Finalizing failed. Your grades are saved — try again.",
+    "breakdownHeading": "Evaluations",
+    "breakdownYours": "Your evaluation",
+    "breakdownAggregate": "Report grade",
+    "colEvaluator": "Evaluator",
+    "colGrade": "Grade",
+    "colCompleted": "Finalized",
+    "colReopens": "Reopens",
+    "colWeight": "Weight",
+    "notYet": "not yet",
+    "unnamedEvaluator": "Evaluator"
   }
 }

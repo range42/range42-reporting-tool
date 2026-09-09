@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from '@/services/http'
+import { apiGet, apiPatch, apiPost, apiPut } from '@/services/http'
 import type { RubricCriterion } from '@/services/templates'
 import { formatGrade } from '@/lib/decimal'
 
@@ -156,6 +156,16 @@ export const putGrade = (
   if ('feedback' in input) body.feedback = input.feedback
   return apiPut<SectionGrade>(`${base(exerciseId, rid)}/${evid}/grades/${sectionId}`, body, token)
 }
+
+/** `PATCH .../evaluations/{evid}` — overall feedback only; the grade is never set here
+ *  (A7: `rollup.py` is the sole writer of a grade). */
+export const updateEvaluation = (
+  token: string,
+  exerciseId: string,
+  rid: string,
+  evid: string,
+  body: { overall_feedback: string | null },
+): Promise<Evaluation> => apiPatch<Evaluation>(`${base(exerciseId, rid)}/${evid}`, body, token)
 
 export const finalizeEvaluation = (
   token: string,
