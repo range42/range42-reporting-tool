@@ -261,6 +261,7 @@
       "invalid_state": "The evaluation changed state — reload before saving again.",
       "forbidden": "You do not have permission to change this grade."
     },
-    "nav": "Evaluations"
+    "nav": "Evaluations",
+    "queueLoadError": "Your evaluation queue could not be loaded."
   }
 }

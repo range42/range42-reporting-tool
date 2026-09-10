@@ -47,6 +47,8 @@ function detail(over: Partial<EvaluationDetail> = {}): EvaluationDetail {
     updated_at: '2026-09-09T00:00:00Z',
     report_name: 'R',
     report_status: 'submitted',
+    team_name: 'Team Alpha',
+    submitted_at: '2026-09-09T09:00:00Z',
     grade_version: 1,
     sections: [section()],
     ...over,

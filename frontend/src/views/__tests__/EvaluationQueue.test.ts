@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createI18n } from 'vue-i18n'
 import en from '@/locales/en/common.json'
 import EvaluationQueue from '@/views/evaluations/EvaluationQueue.vue'
+import { useAuthStore } from '@/stores/auth'
+import { ApiError } from '@/services/http'
+import * as svc from '@/services/evaluations'
+import type { EvaluationAssignment } from '@/services/evaluations'
 import type { QueueEntry } from '@/lib/groupByDeadline'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
@@ -40,7 +44,9 @@ function mountQueue(entries: QueueEntry[], aiAvailable = false) {
 describe('EvaluationQueue', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    localStorage.clear()
     push.mockClear()
+    vi.restoreAllMocks()
   })
 
   it('renders one group header per deadline', () => {
@@ -126,5 +132,61 @@ describe('EvaluationQueue', () => {
     const on = mountQueue([entry()], true)
     expect(on.get('[data-test="queue-ai-col"]').text()).toBe(en.evaluations.colAi)
     expect(on.find('[data-test="queue-ai-ev1"]').exists()).toBe(true)
+  })
+
+  it("fetches the caller's own assignments when no rows are supplied", async () => {
+    useAuthStore().setSession({
+      access_token: 'tok',
+      token_type: 'bearer',
+      user: { id: 'u1', email: 'e', display_name: 'E', avatar_url: null, is_global_admin: false },
+    })
+    const assignment: EvaluationAssignment = {
+      id: 'ev7',
+      report_id: 'r7',
+      report_name: 'SITREP #9',
+      report_status: 'submitted',
+      team_id: 't1',
+      team_name: 'Team Delta',
+      template_name: 'SITREP',
+      due_at: '2026-09-12T18:00:00Z',
+      submitted_at: '2026-09-11T09:00:00Z',
+      status: 'assigned',
+      graded_section_count: 1,
+      gradable_section_count: 4,
+    }
+    const list = vi.spyOn(svc, 'listMyEvaluations').mockResolvedValue([assignment])
+
+    const w = mount(EvaluationQueue, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(list).toHaveBeenCalledWith('tok', 'ex1')
+    const row = w.get('[data-test="queue-row"]').text()
+    expect(row).toContain('Team Delta')
+    expect(row).toContain('SITREP #9')
+    expect(w.get('[data-test="queue-progress-ev7"]').text()).toBe('1/4')
+  })
+
+  it('does not fetch when rows are supplied by a parent', async () => {
+    const list = vi.spyOn(svc, 'listMyEvaluations')
+    mountQueue([entry()])
+    await flushPromises()
+    expect(list).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed queue load instead of showing an empty queue', async () => {
+    useAuthStore().setSession({
+      access_token: 'tok',
+      token_type: 'bearer',
+      user: { id: 'u1', email: 'e', display_name: 'E', avatar_url: null, is_global_admin: false },
+    })
+    vi.spyOn(svc, 'listMyEvaluations').mockRejectedValue(
+      new ApiError('forbidden', 'no evaluator role here', [], undefined, 403),
+    )
+
+    const w = mount(EvaluationQueue, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    expect(w.get('[data-test="queue-error"]').text()).toBe('no evaluator role here')
+    expect(w.find('[data-test="queue-empty"]').exists()).toBe(false)
   })
 })

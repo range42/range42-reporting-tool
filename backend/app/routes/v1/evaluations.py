@@ -22,10 +22,20 @@ from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.permissions import EVALUATIONS_WRITE
 from app.core.rbac import get_current_user, require_global_admin, require_permission
-from app.models import Evaluation, Report, ReportSection, SectionGrade, TemplateSectionDef, User
+from app.models import (
+    Evaluation,
+    Report,
+    ReportSection,
+    ReportTemplate,
+    SectionGrade,
+    Team,
+    TemplateSectionDef,
+    User,
+)
 from app.routes.v1.reports import _get_report, _has_permission
 from app.schemas.common import DataEnvelope
 from app.schemas.evaluation import (
+    EvaluationAssignmentOut,
     EvaluationBreakdownOut,
     EvaluationCreate,
     EvaluationDetailOut,
@@ -288,6 +298,87 @@ async def _reactivate_evaluation(
     return await _evaluation_out(db, ev)
 
 
+async def _grade_counts_many(db: AsyncSession, evaluation_ids: list[uuid.UUID]) -> dict[uuid.UUID, tuple[int, int]]:
+    """``{evaluation_id: (graded, gradable)}`` for many evaluations in ONE query.
+
+    The per-evaluation :func:`_grade_counts` run in a loop would be an N+1 across the queue,
+    which is the one place a caller holds every assignment they have at once.
+    """
+    if not evaluation_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(Evaluation.id, func.count(SectionGrade.id), func.count(ReportSection.id))
+            .select_from(Evaluation)
+            .join(ReportSection, ReportSection.report_id == Evaluation.report_id)
+            .join(TemplateSectionDef, TemplateSectionDef.id == ReportSection.section_def_id)
+            .outerjoin(
+                SectionGrade,
+                (SectionGrade.report_section_id == ReportSection.id) & (SectionGrade.evaluation_id == Evaluation.id),
+            )
+            .where(Evaluation.id.in_(evaluation_ids), TemplateSectionDef.grade_mode != "not_graded")
+            .group_by(Evaluation.id)
+        )
+    ).all()
+    return {evid: (int(graded), int(gradable)) for evid, graded, gradable in rows}
+
+
+@router.get("/exercises/{exercise_id}/evaluations")
+async def list_my_evaluations(
+    exercise_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
+) -> DataEnvelope[list[EvaluationAssignmentOut]]:
+    """The caller's own evaluation assignments in this exercise (the evaluator queue).
+
+    OWN ROWS ONLY, unconditionally — including for a Global Admin, who sees their own
+    assignments here and reads anyone else's through the report-scoped breakdown. There is no
+    ``assignee`` parameter on purpose: a queue that can be pointed at another evaluator is a
+    peer-visibility surface, and this route has no business being that.
+
+    Unassigned evaluations are excluded: the work is no longer the caller's, and leaving it in
+    the queue would invite grades the write path then refuses.
+
+    Ordered by deadline, undated last, so the client's deadline grouping renders in order
+    without re-sorting what the database already knows.
+    """
+    rows = (
+        await db.execute(
+            select(Evaluation, Report, Team.id, Team.name, ReportTemplate.name)
+            .join(Report, Report.id == Evaluation.report_id)
+            .join(Team, Team.id == Report.team_id)
+            .join(ReportTemplate, ReportTemplate.id == Report.template_id)
+            .where(
+                Report.exercise_id == exercise_id,
+                Evaluation.evaluator_id == user.id,
+                Evaluation.unassigned_at.is_(None),
+            )
+            .order_by(Report.due_at.asc().nulls_last(), Report.name.asc())
+        )
+    ).all()
+    counts = await _grade_counts_many(db, [ev.id for ev, *_ in rows])
+    return DataEnvelope(
+        data=[
+            EvaluationAssignmentOut(
+                id=str(ev.id),
+                report_id=str(report.id),
+                report_name=report.name,
+                report_status=report.status,
+                team_id=str(team_id),
+                team_name=team_name,
+                template_name=template_name,
+                due_at=report.due_at,
+                submitted_at=report.submitted_at,
+                status=ev.status,
+                graded_section_count=counts.get(ev.id, (0, 0))[0],
+                gradable_section_count=counts.get(ev.id, (0, 0))[1],
+            )
+            for ev, report, team_id, team_name, template_name in rows
+        ]
+    )
+
+
 @router.post(_BASE, status_code=201)
 async def assign_evaluator(
     request: Request,
@@ -398,11 +489,14 @@ async def get_evaluation(
     ev = await _get_evaluation(db, report.id, evid)
     _assert_evaluation_access(ev, user)
     base = await _evaluation_out(db, ev)
+    team_name = (await db.execute(select(Team.name).where(Team.id == report.team_id))).scalar_one()
     return DataEnvelope(
         data=EvaluationDetailOut(
             **base.model_dump(),
             report_name=report.name,
             report_status=report.status,
+            team_name=team_name,
+            submitted_at=report.submitted_at,
             grade_version=report.grade_version,
             sections=await _gradable_sections(db, report.id, ev.id),
         )

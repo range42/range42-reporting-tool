@@ -186,9 +186,40 @@ class EvaluationOut(BaseModel):
 class EvaluationDetailOut(EvaluationOut):
     report_name: str
     report_status: str
+    # The evaluator's own view of the report they are grading. Both come from the report row,
+    # which an evaluator who is not a member of that team may NOT read, so they are served
+    # here instead of leaving the client to fetch a row it would be refused.
+    team_name: str
+    submitted_at: datetime | None
     # E3 — exposed so a client can detect that a reopen invalidated published numbers.
     grade_version: int
     sections: list[GradableSectionOut]
+
+
+class EvaluationAssignmentOut(BaseModel):
+    """One row of the evaluator's own queue: their evaluation plus the report context.
+
+    Deliberately NOT ``EvaluationBreakdownRow``: that row answers "who graded this report"
+    for one report and carries the dispute-trail columns, while this answers "what do I have
+    to grade" across reports and carries none of them. Sharing one model between the two is
+    how an evaluator ends up holding a peer's weight.
+
+    Every row is the CALLER'S OWN — the route never returns another evaluator's assignment,
+    at any report status.
+    """
+
+    id: str
+    report_id: str
+    report_name: str
+    report_status: str
+    team_id: str
+    team_name: str
+    template_name: str
+    due_at: datetime | None
+    submitted_at: datetime | None
+    status: str
+    graded_section_count: int
+    gradable_section_count: int
 
 
 class ManualGradeRequest(BaseModel):

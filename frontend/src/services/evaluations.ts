@@ -69,6 +69,9 @@ export interface Evaluation {
 export interface EvaluationDetail extends Evaluation {
   report_name: string
   report_status: string
+  /** Served here because an evaluator outside the report's team may not read the report row. */
+  team_name: string
+  submitted_at: string | null
   grade_version: number
   sections: GradableSection[]
 }
@@ -125,6 +128,34 @@ export type FinalizeInput = Partial<{
 /** Every path is report-nested — there is no flat `/evaluations/{id}` surface. */
 const base = (exerciseId: string, rid: string): string =>
   `/api/v1/exercises/${exerciseId}/reports/${rid}/evaluations`
+
+/** One row of the caller's own evaluator queue (`GET /exercises/{id}/evaluations`). */
+export interface EvaluationAssignment {
+  id: string
+  report_id: string
+  report_name: string
+  report_status: string
+  team_id: string
+  team_name: string
+  template_name: string
+  due_at: string | null
+  submitted_at: string | null
+  status: EvaluationStatus
+  graded_section_count: number
+  gradable_section_count: number
+}
+
+/**
+ * The caller's own assignments in an exercise, deadline-ordered.
+ *
+ * Own rows only — there is no `assignee` parameter, by design: a queue that could be pointed
+ * at another evaluator would be a peer-visibility surface.
+ */
+export const listMyEvaluations = (
+  token: string,
+  exerciseId: string,
+): Promise<EvaluationAssignment[]> =>
+  apiGet<EvaluationAssignment[]>(`/api/v1/exercises/${exerciseId}/evaluations`, token)
 
 export const listEvaluationsForReport = (
   token: string,

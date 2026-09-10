@@ -7,11 +7,9 @@
  * sequencing and no isolation rules live here — those belong to the store, the service and
  * the server respectively.
  *
- * The header's team name and submitted time come from a BEST-EFFORT report fetch:
- * `EvaluationDetail` carries `report_name` but neither field, and `GET …/reports/{rid}` 403s
- * for an evaluator who is not a member of the report's team. So the extra context is
- * attempted and dropped on failure — the header degrades to the report name rather than the
- * view failing over decoration.
+ * The header's team name and submitted time arrive ON the detail payload: the report row
+ * itself is refused to an evaluator outside the report's team, so serving them from the
+ * evaluation is what lets the header be complete for everyone entitled to grade.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -27,8 +25,6 @@ import { useEvaluationStore } from '@/stores/evaluation'
 import { useAuthStore } from '@/stores/auth'
 import { useGradeDraftCache } from '@/composables/useGradeDraftCache'
 import { ApiError } from '@/services/http'
-import { getReport } from '@/services/reports'
-import { listTeams } from '@/services/teams'
 import type { RouteLocationNamedRaw } from 'vue-router'
 
 /** D9: no `GET /ai/status` exists yet (W5-8, #167), so the slot never mounts today. */
@@ -49,8 +45,6 @@ const evid = String(route.params.evid)
 const loading = ref(true)
 const error = ref('')
 const isForbidden = ref(false)
-const teamName = ref<string | null>(null)
-const submittedAt = ref<string | null>(null)
 const hasStaleDraft = ref(false)
 
 const draftCache = useGradeDraftCache(evid)
@@ -75,18 +69,6 @@ function detectStaleDrafts(): void {
   )
 }
 
-async function loadReportContext(): Promise<void> {
-  if (!auth.token) return
-  try {
-    const report = await getReport(auth.token, exerciseId, rid)
-    submittedAt.value = report.submitted_at
-    const teams = await listTeams(auth.token, exerciseId)
-    teamName.value = teams.find((tm) => tm.id === report.team_id)?.name ?? null
-  } catch {
-    // Evaluators are not entitled to the report row; the header does without.
-  }
-}
-
 onMounted(async () => {
   if (!auth.token) {
     loading.value = false
@@ -101,7 +83,6 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-  await loadReportContext()
 })
 
 function discardDrafts(): void {
@@ -146,8 +127,8 @@ async function reload(): Promise<void> {
         <EvaluationHeader
           :report-name="store.detail.report_name"
           :report-status="store.detail.report_status"
-          :team-name="teamName"
-          :submitted-at="submittedAt"
+          :team-name="store.detail.team_name"
+          :submitted-at="store.detail.submitted_at"
           :campaign-to="campaignTo"
         />
 

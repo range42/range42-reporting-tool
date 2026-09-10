@@ -7,8 +7,6 @@ import SingleEvaluation from '@/views/evaluations/SingleEvaluation.vue'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/services/http'
 import * as svc from '@/services/evaluations'
-import * as reportsSvc from '@/services/reports'
-import * as teamsSvc from '@/services/teams'
 import { useGradeDraftCache } from '@/composables/useGradeDraftCache'
 import { useEvaluationStore } from '@/stores/evaluation'
 import type { EvaluationDetail, GradableSection, SectionGrade } from '@/services/evaluations'
@@ -87,6 +85,8 @@ function detail(over: Partial<EvaluationDetail> = {}): EvaluationDetail {
     updated_at: '2026-09-09T00:00:00Z',
     report_name: 'SITREP #6',
     report_status: 'under_evaluation',
+    team_name: 'Team Alpha',
+    submitted_at: '2026-09-09T09:00:00Z',
     grade_version: 1,
     sections: [
       section({ report_section_id: 's2', name: 'Actions', position: 1 }),
@@ -94,29 +94,6 @@ function detail(over: Partial<EvaluationDetail> = {}): EvaluationDetail {
     ],
     ...over,
   }
-}
-
-function stubContext(): void {
-  vi.spyOn(reportsSvc, 'getReport').mockResolvedValue({
-    id: 'r1',
-    exercise_id: 'ex1',
-    team_id: 't1',
-    template_id: 'tpl1',
-    template_version_at_creation: 1,
-    name: 'SITREP #6',
-    description: null,
-    status: 'submitted',
-    approval_required: false,
-    due_at: null,
-    submitted_at: '2026-09-09T09:00:00Z',
-    assigned_writer_id: null,
-    section_count: 2,
-    can_approve: false,
-    sections: [],
-  } as unknown as Awaited<ReturnType<typeof reportsSvc.getReport>>)
-  vi.spyOn(teamsSvc, 'listTeams').mockResolvedValue([
-    { id: 't1', exercise_id: 'ex1', name: 'Team Alpha' } as unknown as teamsSvc.Team,
-  ])
 }
 
 async function setup(user = EVALUATOR, d: EvaluationDetail = detail()) {
@@ -136,7 +113,6 @@ async function setup(user = EVALUATOR, d: EvaluationDetail = detail()) {
     },
     evaluations: [],
   })
-  stubContext()
   const w = mount(SingleEvaluation, { global: { plugins: [i18n] } })
   await flushPromises()
   return w
@@ -184,7 +160,6 @@ describe('SingleEvaluation', () => {
     vi.spyOn(svc, 'getEvaluation').mockRejectedValue(
       new ApiError('forbidden', 'nope', [], undefined, 403),
     )
-    stubContext()
     const w = mount(SingleEvaluation, { global: { plugins: [i18n] } })
     await flushPromises()
 
@@ -315,21 +290,11 @@ describe('SingleEvaluation', () => {
     expect(w.find('[data-test="reopen-reason"]').exists()).toBe(true)
   })
 
-  it('renders the header without team or submitted time when the report is out of scope', async () => {
-    // An evaluator who is not in the report's team gets 403 from GET /reports/{rid}.
-    useAuthStore().setSession({ access_token: 'tok', token_type: 'bearer', user: EVALUATOR })
-    vi.spyOn(svc, 'getEvaluation').mockResolvedValue(detail())
-    vi.spyOn(svc, 'listEvaluationsForReport').mockRejectedValue(
-      new ApiError('forbidden', 'no', [], undefined, 403),
-    )
-    vi.spyOn(reportsSvc, 'getReport').mockRejectedValue(
-      new ApiError('forbidden', 'no', [], undefined, 403),
-    )
-    const w = mount(SingleEvaluation, { global: { plugins: [i18n] } })
-    await flushPromises()
-
-    expect(w.get('[data-test="evaluation-header"]').text()).toContain('SITREP #6')
-    expect(w.find('[data-test="evaluation-team"]').exists()).toBe(false)
-    expect(w.find('[data-test="evaluation-submitted"]').exists()).toBe(false)
+  it('takes the header team and submitted time from the evaluation payload alone', async () => {
+    // No report fetch: GET /reports/{rid} is refused to an evaluator outside the team, so the
+    // fields ride on the evaluation itself.
+    const w = await setup()
+    expect(w.get('[data-test="evaluation-team"]').text()).toBe('Team Alpha')
+    expect(w.get('[data-test="evaluation-submitted"]').text()).toContain('2026')
   })
 })

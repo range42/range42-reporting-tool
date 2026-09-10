@@ -2,36 +2,59 @@
 /**
  * The evaluator's work queue (EV-01): what to grade, grouped by the deadline it shares.
  *
- * PRESENTATIONAL BY NECESSITY. Rows arrive as a prop rather than being fetched here, because
- * the API has no cross-report assignment listing yet: every evaluation read is scoped to one
- * `rid` (`GET /exercises/{id}/reports/{rid}/evaluations`), and `GET /exercises/{id}/reports`
- * is team-scoped, so an evaluator who is not a member of the teams they grade gets an empty
- * list from it. Until an assignment endpoint exists this view renders its empty state; the
- * container that fills `entries` is a one-line change once there is something to call.
+ * Rows come from `GET /exercises/{id}/evaluations`, which returns the CALLER'S OWN
+ * assignments and nobody else's. An `entries` prop still overrides the fetch, so W5-6 and
+ * W5-7 can mount the same table against rows they already hold.
  *
- * The AI pre-check column is opt-in via `aiAvailable` (D9): `GET /ai/status` is W5-8's, so the
+ * The AI pre-check column is opt-in via `aiAvailable`: `GET /ai/status` is W5-8's, so the
  * column stays hidden rather than showing a permanently blank slot.
  */
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { groupByDeadline, type QueueEntry } from '@/lib/groupByDeadline'
+import { listMyEvaluations, type EvaluationAssignment } from '@/services/evaluations'
+import { useAuthStore } from '@/stores/auth'
+import { ApiError } from '@/services/http'
 
-const props = withDefaults(defineProps<{ entries?: QueueEntry[]; aiAvailable?: boolean }>(), {
-  entries: () => [],
-  aiAvailable: false,
-})
+const props = withDefaults(
+  defineProps<{ entries?: QueueEntry[] | null; aiAvailable?: boolean }>(),
+  { entries: null, aiAvailable: false },
+)
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const exerciseId = computed(() => String(route.params.exerciseId))
 
+const fetched = ref<QueueEntry[]>([])
+const loading = ref(false)
+const error = ref('')
+
+/** Wire shape -> the flat row the table and the deadline grouping read. */
+function toEntry(a: EvaluationAssignment): QueueEntry {
+  return {
+    evaluationId: a.id,
+    reportId: a.report_id,
+    reportName: a.report_name,
+    teamName: a.team_name,
+    templateName: a.template_name,
+    submittedAt: a.submitted_at,
+    dueAt: a.due_at,
+    gradedSectionCount: a.graded_section_count,
+    gradableSectionCount: a.gradable_section_count,
+  }
+}
+
+/** A caller-supplied list wins, so a parent that already holds rows skips the round trip. */
+const entries = computed<QueueEntry[]>(() => props.entries ?? fetched.value)
+
 /** Unsubmitted work has no content to grade yet, so it sits outside the deadline groups
  *  instead of padding a group the evaluator cannot act on. */
-const submitted = computed(() => props.entries.filter((e) => e.submittedAt !== null))
-const upcoming = computed(() => props.entries.filter((e) => e.submittedAt === null))
+const submitted = computed(() => entries.value.filter((e) => e.submittedAt !== null))
+const upcoming = computed(() => entries.value.filter((e) => e.submittedAt === null))
 const groups = computed(() => groupByDeadline(submitted.value))
 
 /** Comparing means comparing TEAMS. Two reports from one team is not a cohort. */
@@ -46,14 +69,30 @@ function open(e: QueueEntry): void {
     params: { exerciseId: exerciseId.value, rid: e.reportId, evid: e.evaluationId },
   })
 }
+
+onMounted(async () => {
+  if (props.entries !== null || !auth.token) return
+  loading.value = true
+  try {
+    fetched.value = (await listMyEvaluations(auth.token, exerciseId.value)).map(toEntry)
+  } catch (e: unknown) {
+    error.value = e instanceof ApiError ? e.message : t('evaluations.queueLoadError')
+  } finally {
+    loading.value = false
+  }
+})
 </script>
 
 <template>
   <main class="space-y-6 p-4">
     <h1 class="text-lg font-semibold">{{ t('evaluations.queueTitle') }}</h1>
 
+    <p v-if="loading" class="text-sm text-[var(--rt-fg-muted)]">{{ t('evaluations.loading') }}</p>
+
+    <p v-else-if="error" data-test="queue-error" class="text-sm text-red-500">{{ error }}</p>
+
     <p
-      v-if="entries.length === 0"
+      v-else-if="entries.length === 0"
       data-test="queue-empty"
       class="text-sm text-[var(--rt-fg-muted)]"
     >
