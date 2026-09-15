@@ -47,7 +47,7 @@ export const router = createRouter({
     {
       path: '/exercises/:exerciseId/evaluations',
       name: 'evaluation-queue',
-      component: () => import('@/views/evaluations/EvaluationQueue.vue'),
+      component: () => import('@/views/evaluations/EvaluationQueuePage.vue'),
       meta: { requiresAuth: true, requiresEvaluator: true },
     },
     {
