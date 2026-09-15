@@ -21,6 +21,12 @@ export const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/exercises/:exerciseId',
+      name: 'exercise-entry',
+      component: () => import('@/views/ExerciseEntry.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/exercises/:exerciseId/reports',
       name: 'reports',
       component: () => import('@/views/reports/ReportList.vue'),
@@ -47,7 +53,7 @@ export const router = createRouter({
     {
       path: '/exercises/:exerciseId/evaluations',
       name: 'evaluation-queue',
-      component: () => import('@/views/evaluations/EvaluationQueue.vue'),
+      component: () => import('@/views/evaluations/EvaluationQueuePage.vue'),
       meta: { requiresAuth: true, requiresEvaluator: true },
     },
     {

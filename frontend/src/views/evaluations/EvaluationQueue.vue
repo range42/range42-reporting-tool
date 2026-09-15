@@ -84,7 +84,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="space-y-6 p-4">
+  <div class="space-y-6">
     <h1 class="text-lg font-semibold">{{ t('evaluations.queueTitle') }}</h1>
 
     <p v-if="loading" class="text-sm text-[var(--rt-fg-muted)]">{{ t('evaluations.loading') }}</p>
@@ -211,5 +211,5 @@ onMounted(async () => {
         </tbody>
       </table>
     </section>
-  </main>
+  </div>
 </template>

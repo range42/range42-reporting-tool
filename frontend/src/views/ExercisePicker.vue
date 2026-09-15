@@ -89,7 +89,7 @@ onMounted(async () => {
       <RouterLink
         v-for="ex in exercises"
         :key="ex.id"
-        :to="`/exercises/${ex.id}/reports`"
+        :to="`/exercises/${ex.id}`"
         data-test="exercise-card"
         class="group flex items-center gap-5 rounded-xl border border-zinc-200 bg-white p-5 transition hover:border-indigo-400 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-indigo-500"
         :class="statusStyle[ex.status].dim"
