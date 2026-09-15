@@ -346,3 +346,15 @@ class EvaluationBreakdownOut(BaseModel):
     finalize_gate_satisfied: bool
     aggregate: BreakdownAggregate
     evaluations: list[EvaluationBreakdownRow]
+
+
+class EvaluatorCandidateOut(BaseModel):
+    """One assignable evaluator for ``GET /exercises/{id}/evaluator-candidates``.
+
+    Deliberately thin: the assignment picker needs a name to show and an id to post back,
+    nothing else about the user.
+    """
+
+    user_id: str
+    display_name: str
+    email: str
