@@ -35,6 +35,9 @@ class Report(Base, UUIDMixin, TimestampMixin, MetadataMixin):
     # Ordered multi-step chain: [{role_key|user_id, required: bool}, ...].
     # NULL or single-entry = single-step default (WP4 / ARCHITECTURE §7).
     approval_chain: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
+    # Which submission the report is on. Bumped by recall and rejection so the approvals of a
+    # superseded submission stop counting without being deleted.
+    approval_cycle: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     writer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -37,7 +37,7 @@ function pending(id: string, name: string): Report {
   }
 }
 
-function detail(canApprove: boolean): ReportDetail {
+function detail(canApprove: boolean, over: Partial<ReportDetail> = {}): ReportDetail {
   return {
     id: 'r1',
     exercise_id: 'ex1',
@@ -55,8 +55,24 @@ function detail(canApprove: boolean): ReportDetail {
     metadata: null,
     sections: [],
     approval_chain: null,
+    approval_cycle: 1,
     approval_records: [],
     can_approve: canApprove,
+    ...over,
+  }
+}
+
+function approvalRecord(step: number, cycle: number) {
+  return {
+    id: `a${step}-${cycle}`,
+    report_id: 'r1',
+    approver_id: 'u1',
+    step,
+    cycle,
+    action: 'approved' as const,
+    is_admin_override: false,
+    comment: null,
+    created_at: '2026-09-15T10:00:00Z',
   }
 }
 
@@ -128,5 +144,52 @@ describe('ApproverQueue.vue', () => {
     await flushPromises()
     expect(w.find('[data-test="decision-block"]').exists()).toBe(false)
     expect(w.find('[data-test="not-approver"]').exists()).toBe(true)
+  })
+
+  // A recall or rejection bumps the report's cycle, superseding the approvals of the withdrawn
+  // submission. Counting them would mark step 1 done and skip it on the resubmission — the
+  // client-side half of the same bug the backend cycle fixes.
+
+  /** The first chain step's markup; the dot class carries its state. */
+  function firstStep(w: ReturnType<typeof mountQueue>): string {
+    const step = w.findAll('[data-test="chain-step"]')[0]
+    if (!step) throw new Error('no chain step rendered')
+    return step.html()
+  }
+
+  async function selectWith(over: Partial<ReportDetail>) {
+    vi.spyOn(reports, 'listPendingApproval').mockResolvedValue([pending('r1', 'Report One')])
+    vi.spyOn(reports, 'getReport').mockResolvedValue(detail(true, over))
+    const w = mountQueue()
+    await flushPromises()
+    await w.find('[data-test="queue-item"]').trigger('click')
+    await flushPromises()
+    return w
+  }
+
+  it('counts an approval from the current submission as done', async () => {
+    const w = await selectWith({
+      approval_cycle: 1,
+      approval_records: [approvalRecord(1, 1)],
+      approval_chain: [
+        { role_key: 'team_approver', required: true },
+        { role_key: 'team_approver', required: true },
+      ],
+    })
+    expect(firstStep(w)).toContain('bg-emerald-500')
+  })
+
+  it('ignores an approval superseded by a recall', async () => {
+    const w = await selectWith({
+      approval_cycle: 2,
+      approval_records: [approvalRecord(1, 1)],
+      approval_chain: [
+        { role_key: 'team_approver', required: true },
+        { role_key: 'team_approver', required: true },
+      ],
+    })
+    const first = firstStep(w)
+    expect(first).not.toContain('bg-emerald-500')
+    expect(first).toContain('bg-amber-500')
   })
 })
