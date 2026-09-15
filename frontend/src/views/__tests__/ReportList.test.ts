@@ -99,4 +99,52 @@ describe('ReportList.vue', () => {
       params: { exerciseId: 'ex1' },
     })
   })
+
+  // Assignment only makes sense once a report has actually been submitted, and it is a
+  // global-admin action: the row action mirrors both rules.
+  function report(over: Record<string, unknown> = {}) {
+    return {
+      id: 'r1',
+      exercise_id: 'ex1',
+      team_id: 't1',
+      template_id: 'tpl1',
+      template_version_at_creation: 1,
+      name: 'My Report',
+      description: null,
+      status: 'submitted',
+      approval_required: false,
+      due_at: null,
+      submitted_at: null,
+      assigned_writer_id: null,
+      section_count: 2,
+      can_approve: false,
+      ...over,
+    }
+  }
+
+  it('offers an admin the evaluator assignment for a submitted report', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report()] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    await wrapper.find('[data-test="assign-evaluators-r1"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({
+      name: 'report-evaluators',
+      params: { exerciseId: 'ex1', rid: 'r1' },
+    })
+  })
+
+  it('does not offer assignment for a report that is still a draft', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report({ status: 'draft' })] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="assign-evaluators-r1"]').exists()).toBe(false)
+  })
+
+  it('hides the assignment column from non-admins', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report()] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="assign-evaluators-r1"]').exists()).toBe(false)
+  })
 })

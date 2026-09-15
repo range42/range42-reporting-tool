@@ -216,3 +216,41 @@ export const reopenEvaluation = (
   reason: string,
 ): Promise<EvaluationBreakdown> =>
   apiPost<EvaluationBreakdown>(`${base(exerciseId, rid)}/${evid}/reopen`, { reason }, token)
+
+/** Global Admin only, and `reason` is mandatory — the handler refuses a blank one.
+ *  The removal is SOFT: the evaluation and its grades survive for the dispute trail, so the
+ *  breakdown that comes back still lists the evaluator, now carrying `unassigned_at`. */
+export const unassignEvaluator = (
+  token: string,
+  exerciseId: string,
+  rid: string,
+  evid: string,
+  reason: string,
+): Promise<EvaluationBreakdown> =>
+  apiPost<EvaluationBreakdown>(`${base(exerciseId, rid)}/${evid}/unassign`, { reason }, token)
+
+/** Global Admin only. Assigning does NOT start the evaluation — the report's status moves on
+ *  the evaluator's first write, not here. Re-assigning someone previously unassigned revives
+ *  their existing row rather than creating a second one. */
+export const assignEvaluator = (
+  token: string,
+  exerciseId: string,
+  rid: string,
+  evaluatorId: string,
+): Promise<Evaluation> =>
+  apiPost<Evaluation>(base(exerciseId, rid), { evaluator_id: evaluatorId }, token)
+
+/** One assignable evaluator (`GET /exercises/{id}/evaluator-candidates`, Global Admin only). */
+export interface EvaluatorCandidate {
+  user_id: string
+  display_name: string
+  email: string
+}
+
+/** Who may be assigned in this exercise. Holders of an explicit evaluator role only: a global
+ *  admin is accepted by the assign endpoint but is not offered here. */
+export const listEvaluatorCandidates = (
+  token: string,
+  exerciseId: string,
+): Promise<EvaluatorCandidate[]> =>
+  apiGet<EvaluatorCandidate[]>(`/api/v1/exercises/${exerciseId}/evaluator-candidates`, token)
