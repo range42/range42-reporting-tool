@@ -95,6 +95,9 @@ export function apiPost<T>(path: string, body: unknown, token?: string): Promise
 export function apiPatch<T>(path: string, body: unknown, token?: string): Promise<T> {
   return request<T>('PATCH', path, body, token)
 }
+export function apiPut<T>(path: string, body: unknown, token?: string): Promise<T> {
+  return request<T>('PUT', path, body, token)
+}
 export function apiDelete(path: string, token?: string): Promise<void> {
   return request<void>('DELETE', path, undefined, token)
 }

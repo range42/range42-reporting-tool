@@ -26,4 +26,19 @@ describe('capabilities store', () => {
     await c.load('tok', 'ex1')
     expect(c.canApproveReports('ex1')).toBe(true)
   })
+
+  it('canEvaluate is true when the exercise grants evaluations:write', () => {
+    const c = useCapabilitiesStore()
+    c.set('ex1', ['evaluations:write'])
+    expect(c.canEvaluate('ex1')).toBe(true)
+  })
+
+  it('canEvaluate is false for an exercise with no cached capabilities', () => {
+    const c = useCapabilitiesStore()
+    c.set('ex1', ['evaluations:write'])
+    expect(c.canEvaluate('ex2')).toBe(false)
+    // Cached, but without the grant.
+    c.set('ex3', ['reports:approve'])
+    expect(c.canEvaluate('ex3')).toBe(false)
+  })
 })

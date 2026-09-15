@@ -68,3 +68,68 @@ body {
   background: var(--rt-border);
   border-radius: 8px;
 }
+
+/* Read-only rich-text rendering, ported from the mockup's `.prose-rt` (_shared.css).
+   Tailwind resets list markers and heading sizes, so sanitized report content needs
+   them restored explicitly — otherwise an evaluator reads an unformatted wall of text. */
+.prose-rt p {
+  margin: 0.6em 0;
+  line-height: 1.65;
+}
+.prose-rt ul {
+  list-style: disc;
+  padding-left: 1.3em;
+  margin: 0.6em 0;
+}
+.prose-rt ol {
+  list-style: decimal;
+  padding-left: 1.3em;
+  margin: 0.6em 0;
+}
+.prose-rt li {
+  margin: 0.2em 0;
+}
+.prose-rt strong {
+  font-weight: 600;
+  color: inherit;
+}
+.prose-rt code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  background: color-mix(in oklab, var(--rt-accent) 10%, transparent);
+  color: var(--rt-accent);
+  padding: 0.08em 0.35em;
+  border-radius: 3px;
+}
+.prose-rt h1,
+.prose-rt h2,
+.prose-rt h3 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 1.2em 0 0.4em;
+}
+.prose-rt h1 {
+  font-size: 1.35rem;
+}
+.prose-rt h2 {
+  font-size: 1.15rem;
+}
+.prose-rt h3 {
+  font-size: 1rem;
+}
+.prose-rt blockquote {
+  border-left: 2px solid var(--rt-border);
+  padding-left: 0.9em;
+  margin: 0.6em 0;
+  color: var(--rt-fg-muted);
+}
+.prose-rt table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+}
+.prose-rt th,
+.prose-rt td {
+  border: 1px solid var(--rt-border);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
