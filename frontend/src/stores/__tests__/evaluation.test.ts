@@ -310,4 +310,97 @@ describe('evaluation store', () => {
     expect(mock.mock.calls.filter((c) => c[1]?.method === 'PUT')).toHaveLength(0)
     expect(s.isDirty('s1')).toBe(true)
   })
+  // The evaluator types a grade, then feedback, then corrects the grade. Each input sends its
+  // own one-field patch, so a draft that replaced rather than merged dropped whichever field
+  // was set last-but-one -- off the screen AND out of the save.
+  describe('a grade and its feedback are edited through separate inputs', () => {
+    it('keeps the grade on screen when feedback is typed after it', async () => {
+      // Arrange
+      const s = useEvaluationStore()
+      stubFetch(env(200, detail()))
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+
+      // Act
+      s.setGrade('s1', { grade: 7 })
+      s.setGrade('s1', { feedback: 'g' })
+
+      // Assert
+      expect(s.effectiveGrade('s1')).toBe(7)
+      expect(s.effectiveFeedback('s1')).toBe('g')
+    })
+
+    it('keeps the feedback on screen when the grade is corrected afterwards', async () => {
+      // Arrange
+      const s = useEvaluationStore()
+      stubFetch(env(200, detail()))
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+
+      // Act
+      s.setGrade('s1', { feedback: 'good work' })
+      s.setGrade('s1', { grade: 8 })
+
+      // Assert
+      expect(s.effectiveFeedback('s1')).toBe('good work')
+      expect(s.effectiveGrade('s1')).toBe(8)
+    })
+
+    it('sends both fields in the one save', async () => {
+      // Arrange
+      const s = useEvaluationStore()
+      const mock = stubFetch(env(200, detail()), env(200, {}), env(200, detail()))
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+      s.setGrade('s1', { grade: 7 })
+      s.setGrade('s1', { feedback: 'g' })
+
+      // Act
+      await s.flush()
+
+      // Assert
+      const put = mock.mock.calls.find((c) => c[1]?.method === 'PUT')
+      expect(put).toBeDefined()
+      expect(JSON.parse(put![1].body as string)).toMatchObject({ grade: '7.00', feedback: 'g' })
+    })
+
+    it('rejects an out-of-range correction without discarding the feedback already typed', async () => {
+      // Arrange
+      const s = useEvaluationStore()
+      stubFetch(env(200, detail()))
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+      s.setGrade('s1', { grade: 7 })
+      s.setGrade('s1', { feedback: 'keep me' })
+
+      // Act — 99 is above the section's max of 10
+      s.setGrade('s1', { grade: 99 })
+
+      // Assert
+      expect(s.errorFor('s1')).not.toBeNull()
+      expect(s.effectiveFeedback('s1')).toBe('keep me')
+      expect(s.effectiveGrade('s1')).toBe(7)
+    })
+
+    it('falls back to the stored feedback when nothing has been typed', async () => {
+      // Arrange
+      const s = useEvaluationStore()
+      const stored = section({
+        grade: {
+          id: 'g1',
+          evaluation_id: 'ev1',
+          report_section_id: 's1',
+          grade: '7.50',
+          pass_fail_result: null,
+          rubric_scores: null,
+          feedback: 'from the server',
+          created_at: '2026-09-09T00:00:00Z',
+          updated_at: '2026-09-09T00:00:00Z',
+        },
+      })
+      stubFetch(env(200, detail({ sections: [stored] })))
+
+      // Act
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+
+      // Assert
+      expect(s.effectiveFeedback('s1')).toBe('from the server')
+    })
+  })
 })

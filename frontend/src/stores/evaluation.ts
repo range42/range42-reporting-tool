@@ -52,11 +52,24 @@ export const useEvaluationStore = defineStore('evaluation', () => {
   )
   const gradableCount = computed(() => gradableSections.value.length)
 
+  /** The grade as last saved by the server. */
+  function storedGrade(sectionId: string): number | null {
+    return parseGrade(sectionsById.value[sectionId]?.grade?.grade ?? null)
+  }
+
   /** The stored grade, or the draft that supersedes it. Drafts win: they are what the user sees. */
   function effectiveGrade(sectionId: string): number | null {
     const draft = drafts.value[sectionId]
     if (draft) return draft.grade
-    return parseGrade(sectionsById.value[sectionId]?.grade?.grade ?? null)
+    return storedGrade(sectionId)
+  }
+
+  /** Same rule as `effectiveGrade`, for the feedback box: what the evaluator has typed wins
+   *  over what the server last stored, or the field resets itself as they type. */
+  function effectiveFeedback(sectionId: string): string {
+    const draft = drafts.value[sectionId]
+    if (draft && 'feedback' in draft.input) return draft.input.feedback ?? ''
+    return sectionsById.value[sectionId]?.grade?.feedback ?? ''
   }
 
   const isDirty = (sectionId: string): boolean => sectionId in drafts.value
@@ -125,14 +138,20 @@ export const useEvaluationStore = defineStore('evaluation', () => {
   }
 
   /** Record an edit. Immutable throughout: the stored grade row is never touched, and each
-   *  call replaces the draft and error maps rather than mutating them in place. */
+   *  call replaces the draft and error maps rather than mutating them in place.
+   *
+   *  The patch is MERGED into any draft already held for the section. Callers send one field
+   *  at a time (the grade control and the feedback box are separate inputs), and `putGrade`
+   *  only sends the keys present — so replacing the draft would drop the field the evaluator
+   *  set a moment ago, both from the screen and from the save. */
   function setGrade(sectionId: string, input: GradeUpsertInput): void {
     const section = sectionsById.value[sectionId]
     if (!section) return
 
-    const invalid = rangeError(section, input)
+    const merged: GradeUpsertInput = { ...drafts.value[sectionId]?.input, ...input }
+    const invalid = rangeError(section, merged)
     if (invalid) {
-      // Rejected: no draft, so a bad value is never queued for a save.
+      // Rejected: the draft is left as it was, so a bad value is never queued for a save.
       errors.value = { ...errors.value, [sectionId]: invalid }
       return
     }
@@ -141,7 +160,11 @@ export const useEvaluationStore = defineStore('evaluation', () => {
     )
     drafts.value = {
       ...drafts.value,
-      [sectionId]: { input, grade: input.grade ?? null },
+      [sectionId]: {
+        input: merged,
+        // A patch that does not carry `grade` leaves the grade where it stood.
+        grade: 'grade' in merged ? (merged.grade ?? null) : storedGrade(sectionId),
+      },
     }
   }
 
@@ -242,6 +265,7 @@ export const useEvaluationStore = defineStore('evaluation', () => {
     canFinalize,
     dirtySectionIds,
     effectiveGrade,
+    effectiveFeedback,
     isDirty,
     errorFor,
     load,

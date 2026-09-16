@@ -33,6 +33,9 @@ const isLocked = computed(() => store.detail?.status === 'completed')
 
 const grade = computed(() => store.effectiveGrade(props.sectionId))
 const storedGrade = computed(() => section.value?.grade ?? null)
+/** The draft wins over the stored row: binding the box to the stored value makes it snap
+ *  back on the re-render that the first keystroke itself triggers. */
+const feedback = computed(() => store.effectiveFeedback(props.sectionId))
 
 /** Save-error codes come from the API. Translate when we have a message, else show the
  *  code — an untranslated code is poor, but hiding a refused save is worse. */
@@ -114,7 +117,7 @@ function save(): void {
         rows="2"
         :disabled="isLocked"
         :placeholder="t('evaluations.feedbackPlaceholder')"
-        :value="storedGrade?.feedback ?? ''"
+        :value="feedback"
         class="w-full resize-none rounded-md border border-[var(--rt-border)] bg-[var(--rt-bg-elev)] p-2 text-xs"
         @input="onFeedback(($event.target as HTMLTextAreaElement).value)"
         @blur="save"
