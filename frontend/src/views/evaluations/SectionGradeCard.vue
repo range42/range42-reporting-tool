@@ -4,13 +4,13 @@
  * the grade control for the section's mode, and a feedback box.
  *
  * This is the CONTAINER of the trio — it owns the store wiring so `ReportContentPane`,
- * `EvaluationCriteria` and `GradeControl` stay presentational and reusable across W5-6's
- * paired layout and W5-7's compare panes.
+ * `EvaluationCriteria` and `GradeControl` stay presentational and reusable in the paired and
+ * compare layouts.
  *
- * SAVE TIMING: edits land in the store immediately (so the preview and `canFinalize` react
- * as the evaluator types) but only reach the server on blur. Nothing here debounces —
- * `useEvaluationStore.flushAfter()` exists for that, and Task 10 owns the autosave cadence
- * for the whole view rather than each card racing its own timer.
+ * SAVE TIMING: edits land in the store immediately (so the preview and `canFinalize` react as
+ * the evaluator types) but only reach the server on blur. Nothing here debounces —
+ * `useEvaluationStore.flushAfter()` exists for that, so the autosave cadence belongs to the
+ * whole view rather than to each card racing its own timer.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -29,7 +29,7 @@ const store = useEvaluationStore()
 const section = computed(() => store.sectionsById[props.sectionId] ?? null)
 const isGradable = computed(() => section.value?.grade_mode !== 'not_graded')
 /** A finalized evaluation is closed for writes server-side; the UI must not invite them. */
-const isLocked = computed(() => store.detail?.status === 'completed')
+const isLocked = computed(() => store.isFinalized)
 
 const grade = computed(() => store.effectiveGrade(props.sectionId))
 const storedGrade = computed(() => section.value?.grade ?? null)

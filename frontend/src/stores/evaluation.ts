@@ -80,8 +80,7 @@ export const useEvaluationStore = defineStore('evaluation', () => {
     () => gradableSections.value.filter((s) => effectiveGrade(s.report_section_id) !== null).length,
   )
   /** The server's count wins once it has answered for everything on screen — a peer's save
-   *  can move it. While a draft is unsaved the local count is what the user is looking at,
-   *  and a server count that predates the edit would read as the edit being lost. */
+   *  can move it. While a draft is unsaved the local count is what the user is looking at. */
   const gradedCount = computed(() =>
     dirtySectionIds.value.length > 0 || serverGradedCount.value === null
       ? localGradedCount.value
@@ -97,10 +96,13 @@ export const useEvaluationStore = defineStore('evaluation', () => {
       grade_weight: parseGrade(s.grade_weight) ?? 1,
     })),
   )
-  /** Provisional only — `rollup.py` is canonical (D6). */
+  /** Provisional only — `rollup.py` is canonical. */
   const previewGrade = computed(() => scoringPreview(previewSections.value))
   /** The server's number if it has one, else the local preview. */
   const overallGrade = computed(() => serverOverallGrade.value ?? previewGrade.value)
+
+  /** A finalized evaluation is closed for writes server-side; only a reopen unlocks it. */
+  const isFinalized = computed(() => detail.value?.status === 'completed')
 
   const canFinalize = computed(
     () =>
@@ -140,10 +142,8 @@ export const useEvaluationStore = defineStore('evaluation', () => {
   /** Record an edit. Immutable throughout: the stored grade row is never touched, and each
    *  call replaces the draft and error maps rather than mutating them in place.
    *
-   *  The patch is MERGED into any draft already held for the section. Callers send one field
-   *  at a time (the grade control and the feedback box are separate inputs), and `putGrade`
-   *  only sends the keys present — so replacing the draft would drop the field the evaluator
-   *  set a moment ago, both from the screen and from the save. */
+   *  The patch is MERGED into any draft already held for the section, because callers send one
+   *  field at a time (the grade control and the feedback box are separate inputs). */
   function setGrade(sectionId: string, input: GradeUpsertInput): void {
     const section = sectionsById.value[sectionId]
     if (!section) return
@@ -168,7 +168,37 @@ export const useEvaluationStore = defineStore('evaluation', () => {
     }
   }
 
-  /** A newer published version means our drafts are against a dead grade (D19). */
+  /** The payload for one section's save.
+   *
+   *  A PUT REPLACES the whole grade row server-side, so it must carry the section's entire
+   *  state — its grading channel and its feedback — not just the field that changed. The draft
+   *  holds only what the evaluator touched; the stored row supplies the rest.
+   */
+  function savePayload(sectionId: string): GradeUpsertInput {
+    const section = sectionsById.value[sectionId]
+    const stored = section?.grade ?? null
+    const base: GradeUpsertInput = { feedback: stored?.feedback ?? null }
+    if (section?.grade_mode === 'numeric') base.grade = parseGrade(stored?.grade ?? null)
+    if (section?.grade_mode === 'pass_fail')
+      base.pass_fail_result = stored?.pass_fail_result ?? null
+    if (section?.grade_mode === 'rubric') base.rubric_scores = stored?.rubric_scores ?? null
+    return { ...base, ...drafts.value[sectionId]?.input }
+  }
+
+  /** One channel per row: a save with no value in the section's channel is refused
+   *  server-side. Feedback typed before any grade is held as a draft until the grade lands,
+   *  rather than sent to be rejected. */
+  function isSavable(sectionId: string, payload: GradeUpsertInput): boolean {
+    const mode = sectionsById.value[sectionId]?.grade_mode
+    if (mode === 'numeric') return payload.grade !== null && payload.grade !== undefined
+    if (mode === 'pass_fail')
+      return payload.pass_fail_result !== null && payload.pass_fail_result !== undefined
+    if (mode === 'rubric')
+      return Array.isArray(payload.rubric_scores) && payload.rubric_scores.length > 0
+    return false
+  }
+
+  /** A newer published version means our drafts are against a dead grade. */
   function observeGradeVersion(version: number): void {
     if (gradeVersion.value !== null && version > gradeVersion.value) needsReload.value = true
   }
@@ -185,7 +215,7 @@ export const useEvaluationStore = defineStore('evaluation', () => {
       pending = null
     }
     const context = ctx.value
-    if (!context || needsReload.value || saving.value) return
+    if (!context || needsReload.value || saving.value || isFinalized.value) return
     const ids = dirtySectionIds.value
     if (ids.length === 0) return
 
@@ -196,15 +226,11 @@ export const useEvaluationStore = defineStore('evaluation', () => {
       for (const id of ids) {
         const draft = drafts.value[id]
         if (!draft) continue
+        const payload = savePayload(id)
+        // Not yet complete enough to store — keep the draft, do not spend a rejected round trip.
+        if (!isSavable(id, payload)) continue
         try {
-          await putGrade(
-            context.token,
-            context.exerciseId,
-            context.rid,
-            context.evid,
-            id,
-            draft.input,
-          )
+          await putGrade(context.token, context.exerciseId, context.rid, context.evid, id, payload)
           saved.push(id)
         } catch (e: unknown) {
           failed[id] = saveErrorCode(e)
@@ -212,6 +238,11 @@ export const useEvaluationStore = defineStore('evaluation', () => {
       }
       drafts.value = Object.fromEntries(
         Object.entries(drafts.value).filter(([id]) => !saved.includes(id)),
+      )
+      // A section that has just saved is no longer in error; clearing it here is what lets
+      // `canFinalize` recover after a failed save.
+      errors.value = Object.fromEntries(
+        Object.entries(errors.value).filter(([id]) => !saved.includes(id)),
       )
       if (Object.keys(failed).length > 0) errors.value = { ...errors.value, ...failed }
       // The server is the only authority on overall_grade, graded_section_count and
@@ -236,6 +267,11 @@ export const useEvaluationStore = defineStore('evaluation', () => {
       pending = null
       void flush()
     }, ms)
+  }
+
+  /** Record the server's completion locally so the inputs lock without waiting for a reload. */
+  function markFinalized(): void {
+    if (detail.value) detail.value = { ...detail.value, status: 'completed' }
   }
 
   function reset(): void {
@@ -263,6 +299,7 @@ export const useEvaluationStore = defineStore('evaluation', () => {
     previewGrade,
     overallGrade,
     canFinalize,
+    isFinalized,
     dirtySectionIds,
     effectiveGrade,
     effectiveFeedback,
@@ -271,6 +308,7 @@ export const useEvaluationStore = defineStore('evaluation', () => {
     load,
     setGrade,
     observeGradeVersion,
+    markFinalized,
     flush,
     flushAfter,
     reset,

@@ -263,7 +263,9 @@ describe('evaluation store', () => {
     await s.flush()
 
     const put = mock.mock.calls.find((c) => c[1]?.method === 'PUT')!
-    expect(JSON.parse(put[1].body)).toEqual({ grade: '7.05' })
+    // Feedback rides along because a PUT replaces the row: the payload is the section's
+    // whole state, not just the field that changed.
+    expect(JSON.parse(put[1].body)).toEqual({ grade: '7.05', feedback: null })
   })
 
   it('prefers the server graded_section_count over the local count once a response arrives', async () => {
@@ -295,6 +297,49 @@ describe('evaluation store', () => {
     expect(s.gradedCount).toBe(2)
   })
 
+  it('reports a completed evaluation as finalized so the UI can lock its inputs', async () => {
+    // Arrange
+    stubFetch(env(200, detail({ status: 'completed' })))
+    const s = useEvaluationStore()
+
+    // Act
+    await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+
+    // Assert
+    expect(s.isFinalized).toBe(true)
+  })
+
+  it('sends no grade save once the evaluation is finalized', async () => {
+    // Arrange: a draft survives from before the finalize; the server would refuse the PUT.
+    const mock = stubFetch(env(200, detail()))
+    const s = useEvaluationStore()
+    await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+    s.setGrade('s1', { grade: 8 })
+    s.markFinalized()
+
+    // Act
+    await s.flush()
+
+    // Assert
+    expect(mock.mock.calls.filter((c) => c[1]?.method === 'PUT')).toHaveLength(0)
+    expect(s.isDirty('s1')).toBe(true)
+  })
+
+  it('marks the evaluation finalized without discarding the loaded detail', async () => {
+    // Arrange
+    stubFetch(env(200, detail()))
+    const s = useEvaluationStore()
+    await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+    expect(s.isFinalized).toBe(false)
+
+    // Act
+    s.markFinalized()
+
+    // Assert
+    expect(s.isFinalized).toBe(true)
+    expect(s.detail?.report_name).toBe('R')
+  })
+
   it('flags a stale grade_version and requests a reload instead of overwriting', async () => {
     const mock = stubFetch(env(200, detail({ grade_version: 1 })))
     const s = useEvaluationStore()
@@ -311,8 +356,7 @@ describe('evaluation store', () => {
     expect(s.isDirty('s1')).toBe(true)
   })
   // The evaluator types a grade, then feedback, then corrects the grade. Each input sends its
-  // own one-field patch, so a draft that replaced rather than merged dropped whichever field
-  // was set last-but-one -- off the screen AND out of the save.
+  // own one-field patch, so the draft must merge rather than replace.
   describe('a grade and its feedback are edited through separate inputs', () => {
     it('keeps the grade on screen when feedback is typed after it', async () => {
       // Arrange
@@ -401,6 +445,89 @@ describe('evaluation store', () => {
 
       // Assert
       expect(s.effectiveFeedback('s1')).toBe('from the server')
+    })
+  })
+  // A PUT replaces the whole row, so every save must carry the section's full state. These
+  // cover the sequence a real evaluator follows: grade, save, THEN write the feedback.
+  describe('feedback edited after the grade has already been saved', () => {
+    function gradedSection() {
+      return section({
+        grade: {
+          id: 'g1',
+          evaluation_id: 'ev1',
+          report_section_id: 's1',
+          grade: '7.00',
+          pass_fail_result: null,
+          rubric_scores: null,
+          feedback: null,
+          created_at: '2026-09-09T00:00:00Z',
+          updated_at: '2026-09-09T00:00:00Z',
+        },
+      })
+    }
+
+    it('sends the stored grade alongside the new feedback', async () => {
+      // Arrange — the grade is already on the server and no draft is held.
+      const s = useEvaluationStore()
+      const mock = stubFetch(
+        env(200, detail({ sections: [gradedSection()] })),
+        env(200, {}),
+        env(200, detail({ sections: [gradedSection()] })),
+      )
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+      s.setGrade('s1', { feedback: 'well argued' })
+
+      // Act
+      await s.flush()
+
+      // Assert
+      const put = mock.mock.calls.find((c) => c[1]?.method === 'PUT')
+      expect(put).toBeDefined()
+      expect(JSON.parse(put![1].body as string)).toMatchObject({
+        grade: '7.00',
+        feedback: 'well argued',
+      })
+    })
+
+    it('holds feedback typed before any grade instead of sending a payload the server refuses', async () => {
+      // Arrange — nothing graded yet.
+      const s = useEvaluationStore()
+      const mock = stubFetch(env(200, detail()))
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+      s.setGrade('s1', { feedback: 'too early' })
+
+      // Act
+      await s.flush()
+
+      // Assert
+      expect(mock.mock.calls.filter((c) => c[1]?.method === 'PUT')).toHaveLength(0)
+      expect(s.isDirty('s1')).toBe(true)
+      expect(s.errorFor('s1')).toBeNull()
+      expect(s.effectiveFeedback('s1')).toBe('too early')
+    })
+
+    it('clears a previous failure when the retry succeeds, so finalize unblocks', async () => {
+      // Arrange — the save is refused once, leaving an error and a retained draft. No further
+      // edit follows, since setGrade would clear the error by itself.
+      const s = useEvaluationStore()
+      stubFetch(
+        env(200, detail({ sections: [gradedSection()] })),
+        errEnv(422, 'HTTP_ERROR'),
+        env(200, {}),
+        env(200, detail({ sections: [gradedSection()] })),
+      )
+      await s.load(CTX.token, CTX.exerciseId, CTX.rid, CTX.evid)
+      s.setGrade('s1', { feedback: 'my notes' })
+      await s.flush()
+      expect(s.errorFor('s1')).not.toBeNull()
+      expect(s.canFinalize).toBe(false)
+
+      // Act — the same draft is flushed again and the server accepts it this time.
+      await s.flush()
+
+      // Assert
+      expect(s.errorFor('s1')).toBeNull()
+      expect(s.canFinalize).toBe(true)
     })
   })
 })
