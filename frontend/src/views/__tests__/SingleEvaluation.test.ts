@@ -181,19 +181,28 @@ describe('SingleEvaluation', () => {
     expect(w.get('[data-test="breakdown-aggregate"]').text()).toContain('7.50')
   })
 
-  it('shows the reopen control only for a global admin on a completed evaluation', async () => {
-    const asEvaluator = await setup(EVALUATOR, detail({ status: 'completed' }))
-    expect(asEvaluator.find('[data-test="reopen-open"]').exists()).toBe(false)
+  it('offers the reopen control to the evaluator who owns a completed evaluation', async () => {
+    // Arrange / Act
+    const w = await setup(EVALUATOR, detail({ status: 'completed', evaluator_id: EVALUATOR.id }))
 
-    setActivePinia(createPinia())
-    vi.restoreAllMocks()
-    const inProgress = await setup(ADMIN, detail({ status: 'in_progress' }))
-    expect(inProgress.find('[data-test="reopen-open"]').exists()).toBe(false)
+    // Assert — reopening is the only route back to an editable, finalizable evaluation.
+    expect(w.find('[data-test="reopen-open"]').exists()).toBe(true)
+  })
 
-    setActivePinia(createPinia())
-    vi.restoreAllMocks()
-    const asAdmin = await setup(ADMIN, detail({ status: 'completed' }))
-    expect(asAdmin.find('[data-test="reopen-open"]').exists()).toBe(true)
+  it('offers the reopen control to a global admin on a completed evaluation', async () => {
+    // Arrange / Act
+    const w = await setup(ADMIN, detail({ status: 'completed' }))
+
+    // Assert
+    expect(w.find('[data-test="reopen-open"]').exists()).toBe(true)
+  })
+
+  it('offers no reopen control while the evaluation is still in progress', async () => {
+    // Arrange / Act
+    const w = await setup(ADMIN, detail({ status: 'in_progress' }))
+
+    // Assert
+    expect(w.find('[data-test="reopen-open"]').exists()).toBe(false)
   })
 
   it('requires a reason before submitting a reopen', async () => {

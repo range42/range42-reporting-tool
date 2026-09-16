@@ -1,13 +1,11 @@
-"""W5-4 Task 2 — ``POST .../evaluations/{evid}/reopen``: guards and authz.
+"""``POST .../evaluations/{evid}/reopen``: guards, authz, mutation and round trip.
 
-Guards land before behaviour so Task 3's mutation cannot quietly pass through a check that
-was never written. Every case here asserts the rejection AND that nothing moved: a guard
-placed after the mutation still returns the right status code, and only
+Every rejection case asserts the rejection AND that nothing moved: a guard placed after the
+mutation still returns the right status code, and only
 ``test_rejected_reopen_never_mutates_or_audits`` notices.
 
-Path shape follows this surface's documented nesting — under the report, not a flat
-``/evaluations/{id}`` — so the exercise-scoped permission dependency has an ``exercise_id``
-to resolve against.
+The path is nested under the report rather than flat so that the exercise-scoped permission
+dependency has an ``exercise_id`` to resolve against.
 """
 
 import uuid
@@ -84,10 +82,10 @@ async def _reopen_audit_count(migrated_db, evid) -> int:
 
 
 async def test_reopen_columns_exist_from_the_w5_1_migration(migrated_db: async_sessionmaker) -> None:
-    """W5-4 adds no migration: the three columns come from W5-1's ``0011``.
+    """This surface adds no migration: the three columns come from ``0011``.
 
-    Asserted instead of trusted — if a later edit to ``0011`` drops them, the failure should
-    name the missing column here rather than surface as an opaque 500 from the Task 3 mutation.
+    Asserted instead of trusted — if a later edit to ``0011`` drops them, the failure names the
+    missing column here rather than surfacing as an opaque 500 from the mutation.
     """
     # Arrange / Act
     async with migrated_db() as s:
@@ -129,11 +127,11 @@ async def test_reopen_is_forbidden_for_every_exercise_role(migrated_db: async_se
     assert r.status_code == 403, r.text
 
 
-async def test_reopen_is_forbidden_for_the_owning_evaluator(migrated_db: async_sessionmaker) -> None:
-    """The strongest form of the rule: not even the evaluator may un-finalize their own work.
+async def test_reopen_is_permitted_for_the_owning_evaluator(migrated_db: async_sessionmaker) -> None:
+    """An evaluator revising work they already gave comes back in through the reopen.
 
-    There is no self-revert path. Evaluator isolation removes the reconciliation window that
-    would justify one, so the only way back into grading is an admin reopen.
+    It is still the only door: grades stay immutable while the evaluation is completed, and the
+    revision publishes a new grade version rather than editing the old one in place.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -144,7 +142,27 @@ async def test_reopen_is_forbidden_for_the_owning_evaluator(migrated_db: async_s
         r = await c.post(_reopen_url(ex, rid, evid), json={"reason": "recount"}, headers=eh)
 
     # Assert
+    assert r.status_code == 200, r.text
+    assert (await _evaluation_reopen_columns(migrated_db, evid))[0] == "in_progress"
+
+
+async def test_reopen_is_forbidden_for_an_evaluator_who_does_not_own_the_evaluation(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Self-revision is not peer revision: evaluator isolation is untouched by it."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
+        other, _uid = await evaluator(migrated_db, c, ah, ex, "ev-other")
+
+        # Act
+        r = await c.post(_reopen_url(ex, rid, evid), json={"reason": "recount"}, headers=other)
+
+    # Assert
     assert r.status_code == 403, r.text
+    assert r.json()["error"]["message"] == "not_your_evaluation"
+    assert (await _evaluation_reopen_columns(migrated_db, evid))[0] == "completed"
 
 
 async def test_reopen_returns_404_for_an_unknown_evaluation(migrated_db: async_sessionmaker) -> None:
@@ -256,12 +274,13 @@ async def test_rejected_reopen_never_mutates_or_audits(migrated_db: async_sessio
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
-        ex, rid, _sid, eh, evid = await _completed_world(migrated_db, c, ah)
+        ex, rid, _sid, _eh, evid = await _completed_world(migrated_db, c, ah)
         anon_token, _ = await make_user_token(migrated_db, jti="nobody")
+        foreign, _uid = await evaluator(migrated_db, c, ah, ex, "ev-foreign")
         rejections = (
             (None, {"reason": "recount"}),
             ({"Authorization": f"Bearer {anon_token}"}, {"reason": "recount"}),
-            (eh, {"reason": "recount"}),
+            (foreign, {"reason": "recount"}),
             (ah, {}),
             (ah, {"reason": "   "}),
         )
@@ -280,7 +299,7 @@ async def test_rejected_reopen_never_mutates_or_audits(migrated_db: async_sessio
     assert await _reopen_audit_count(migrated_db, evid) == 0
 
 
-# --- W5-4 Task 3: the mutation -------------------------------------------------------
+# --- the mutation ---------------------------------------------------------------------
 
 
 async def _evaluation_finalize_columns(migrated_db, evid):
@@ -471,7 +490,7 @@ async def test_reopen_response_shows_the_updated_row_in_the_breakdown(
     assert row["finalize_is_admin_override"] is False
 
 
-# --- W5-4 Task 4: grade version, report status, supersession --------------------------
+# --- grade version, report status, supersession ---------------------------------------
 
 _REOPENED_EVENT = "event.report_evaluation_reopened"
 _EVALUATED_EVENT = "event.report_evaluated"
@@ -727,12 +746,11 @@ async def test_the_supersession_payload_excludes_per_evaluator_rows(
         assert evid not in flat
 
 
-# --- W5-4 Task 6: the round trip -----------------------------------------------------
+# --- the round trip -------------------------------------------------------------------
 #
-# Characterization only. Reopen re-enters W5-3's ordinary finalize path — there is no
-# reopen-specific finalize branch, and these tests exist to prove that staying true. A failure
-# here means the finalize path took a shortcut that assumed a first finalize, not that reopen
-# is broken.
+# Characterization only. Reopen re-enters the ordinary finalize path — there is no
+# reopen-specific finalize branch. A failure here means the finalize path took a shortcut that
+# assumed a first finalize, not that reopen is broken.
 
 
 async def _finalize(c, headers, ex, rid, evid, **body):
@@ -918,17 +936,13 @@ async def test_a_reopen_that_does_not_move_the_grade_still_bumps_the_version(
 ) -> None:
     """A supersession event must never claim that version N supersedes version N.
 
-    Two evaluators who agree exactly: both grade 8, the aggregate is 8.00. Reopening one
-    leaves the other contributing the same 8.00, so the published NUMBER is unchanged — but a
-    publication still happened, because the report left ``evaluated`` and its grade now rests
-    on one evaluation instead of two.
+    Two evaluators who agree exactly: both grade 8, the aggregate is 8.00. Reopening one leaves
+    the other contributing the same 8.00, so the published NUMBER is unchanged — but a
+    publication still happened, because the report left ``evaluated`` and its grade now rests on
+    one evaluation instead of two.
 
-    The recompute normally bumps only when the number moves, which is right for a grade save:
-    bumping on every keystroke would tell consumers the grade changed when it did not. A
-    reopen is the opposite case — the state changed even though the number did not — so the
-    reopen asks for the bump explicitly.
-
-    Identical grades are not an exotic case; two evaluators agreeing is the expected outcome.
+    The recompute normally bumps only when the number moves; a reopen asks for the bump
+    explicitly, because the state changed even though the number did not.
     """
     # Arrange
     async with client(migrated_db) as c:

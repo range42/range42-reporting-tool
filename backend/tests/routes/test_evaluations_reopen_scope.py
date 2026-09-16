@@ -1,12 +1,13 @@
-"""W5-4 Task 7 — the negative surface: no self-revert, no edit-after-finalize.
+"""The negative surface: no edit-after-finalize, and no un-finalize beside the reopen.
 
-THIS FILE IS A SCOPE REDUCTION, AND A SCOPE REDUCTION WITHOUT TESTS IS A SUGGESTION. Nothing
-here asserts a feature; every test asserts that something does NOT exist or is NOT permitted.
-It is the file a reviewer opens to check that a reconciliation surface has not crept back in.
+Most of what follows asserts that something does NOT exist or is NOT permitted. It is the file
+a reviewer opens to check that a reconciliation surface has not crept back in.
 
-The decision it guards: an evaluator can neither un-finalize their own work nor edit it after
-finalizing. Evaluator isolation removes the reconciliation window that would justify either,
-so an admin reopen is the only way back into grading.
+The rule it guards: a finalized evaluation is frozen. Grades and overall feedback are refused
+while it is completed, and the ONE way back into grading is the reopen — audited, with a
+mandatory reason, publishing a new grade version. An evaluator may drive that reopen on their
+OWN evaluation so they can revise and finalize again; they still cannot edit in place, and they
+still cannot touch a peer's evaluation.
 """
 
 import re
@@ -20,7 +21,7 @@ from tests.routes._helpers import client
 
 pytestmark = pytest.mark.integration
 
-#: Any path shaped like an evaluator-driven un-finalize. Deliberately broad.
+#: Any un-finalize path other than the one audited reopen. Deliberately broad.
 _SELF_REVERT_PATH = re.compile(r"/evaluations/\{[^}]+\}/(un-?finalize|revert|withdraw|reopen-own)")
 
 
@@ -43,12 +44,17 @@ async def _completed(migrated_db, c, ah, *, jti: str = "ev-0"):
     return ex, rid, sid, eh, uid, evid
 
 
-# --- no self-revert ------------------------------------------------------------------
+# --- the reopen is the only un-finalize ----------------------------------------------
 
 
-async def test_an_evaluator_cannot_reopen_their_own_evaluation(migrated_db: async_sessionmaker) -> None:
-    """Duplicated from the reopen authz tests on purpose — this is the file a reviewer reads
-    to confirm the rule, and a rule proven only somewhere else is a rule waiting to be lost."""
+async def test_an_evaluator_reopening_their_own_evaluation_must_still_give_a_reason(
+    migrated_db: async_sessionmaker,
+) -> None:
+    """Duplicated from the reopen guard tests on purpose — this is the file a reviewer reads to
+    confirm the rule, and a rule proven only somewhere else is a rule waiting to be lost.
+
+    Self-revision is not silent revision: the reason is what a later dispute reads.
+    """
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -57,15 +63,35 @@ async def test_an_evaluator_cannot_reopen_their_own_evaluation(migrated_db: asyn
         # Act
         r = await c.post(
             f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/reopen",
-            json={"reason": "i want another go"},
+            json={"reason": "   "},
             headers=eh,
+        )
+
+    # Assert
+    assert r.status_code == 422, r.text
+    assert r.json()["error"]["message"] == "reason_required"
+
+
+async def test_an_evaluator_cannot_reopen_a_peers_evaluation(migrated_db: async_sessionmaker) -> None:
+    """Revising your own work is not the same as reaching into someone else's."""
+    # Arrange
+    async with client(migrated_db) as c:
+        ah, _ = await ga_headers(migrated_db)
+        ex, rid, _sid, _eh, _uid, evid = await _completed(migrated_db, c, ah)
+        peer, _peer_uid = await evaluator(migrated_db, c, ah, ex, "ev-peer")
+
+        # Act
+        r = await c.post(
+            f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/reopen",
+            json={"reason": "i disagree with them"},
+            headers=peer,
         )
 
     # Assert
     assert r.status_code == 403, r.text
 
 
-def test_no_evaluator_driven_un_finalize_route_exists() -> None:
+def test_no_un_finalize_route_exists_beside_the_reopen() -> None:
     """Reads as paranoid. It is the cheapest available guard against the surface returning.
 
     Asserted against the live OpenAPI schema rather than by grepping source, so a route
@@ -76,7 +102,7 @@ def test_no_evaluator_driven_un_finalize_route_exists() -> None:
 
     # Assert
     offenders = [p for p in paths if _SELF_REVERT_PATH.search(p)]
-    assert offenders == [], f"an evaluator-driven un-finalize surface reappeared: {offenders}"
+    assert offenders == [], f"a second un-finalize surface reappeared beside the reopen: {offenders}"
 
 
 # --- no edit after finalize ----------------------------------------------------------

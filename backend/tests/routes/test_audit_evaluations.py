@@ -1,13 +1,9 @@
-"""Audit coverage for the W5-1 evaluation surface.
+"""Audit coverage for the evaluation surface.
 
 Two halves. The happy-path half proves every mutation writes its row; the negative half proves
 a request ending in a 4xx writes NONE. If a ``..._writes_no_audit_row`` test fails, the fix is
 to move ``record_audit`` after the last ``raise`` in the offending handler — never to relax the
 assertion.
-
-Actions introduced by this slice: ``evaluation.assigned`` (Task 5),
-``evaluation.feedback_updated`` (Task 7), ``section_grade.saved`` (Task 8), and
-``report.under_evaluation`` (Task 7/8, via ``state_machine.transition``).
 """
 
 import asyncio
@@ -170,17 +166,12 @@ async def test_422_on_invalid_grade_writes_no_audit_row(migrated_db: async_sessi
         assert r.status_code == 422
     assert await _count(migrated_db, "section_grade.saved") == 0
     # A rejected grade write must not have begun the evaluation either: _begin_evaluation runs
-    # AFTER validation in Task 8's handler precisely so the report stays 'submitted'.
+    # AFTER validation so the report stays 'submitted'.
     assert await _count(migrated_db, "report.under_evaluation") == 0
 
 
 # ======================================================================================
-# W5-3 — the multi-evaluator surface's audit coverage.
-#
-# Actions this slice adds: ``evaluation.completed`` (Task 7), ``report.evaluated`` (Task 7, via
-# ``state_machine.transition``), ``evaluation.unassigned`` (Task 9), ``evaluation.reassigned``
-# (Task 9), ``event.report_evaluated`` (Task 11, the L11 emit seam), plus
-# ``report.grade_recomputed`` written by ``rollup`` whenever the published grade actually moves.
+# The multi-evaluator surface's audit coverage.
 #
 # THE NEGATIVE HALF IS THE LOAD-BEARING ONE. A rejected finalize must write nothing at all:
 # ``state_machine.transition`` raises BEFORE it mutates, and every ``record_audit`` in these
@@ -207,9 +198,8 @@ async def _report_and_evaluators(migrated_db, c, ah, *, evaluators=2):
     """Like ``_world``, but with the action snapshot taken BEFORE anyone is assigned.
 
     The set assertion below is a DELTA against this snapshot rather than a whole-table read:
-    building a submitted report writes a dozen WP2-WP4 rows (exercise, team, template, report,
-    submit), and pinning those here would make an unrelated slice's audit change fail this
-    slice's test for no reason.
+    building a submitted report writes a dozen unrelated rows (exercise, team, template, report,
+    submit), and pinning those here would make an unrelated change fail this test for no reason.
     """
     ex, rid, sid = await submitted_report(c, ah)
     # Role grants are setup too (``exercise_role.assign``), so they happen before the snapshot;
@@ -234,8 +224,8 @@ async def test_full_multi_evaluator_flow_writes_the_expected_audit_action_set(
 ) -> None:
     """assign x2 -> grade x2 -> finalize x2 -> unassign, as one exact set.
 
-    An EXACT set, not a subset: a superset is how a duplicate transition or a stray second
-    event slips in unnoticed, and that is precisely the failure Task 12 exists to prevent.
+    An EXACT set, not a subset: a superset is how a duplicate transition or a stray second event
+    slips in unnoticed.
     """
     # Arrange
     ah, _ = await ga_headers(migrated_db)
@@ -283,7 +273,7 @@ async def test_rejected_finalize_writes_no_audit_row(migrated_db: async_sessionm
         (h_a, evid_a, _uid_a), (h_b, evid_b, _uid_b) = graders
         await _grade(c, ex, rid, evid_a, sid, "8", h_a)
 
-        # Act: A finalizing B's evaluation is a 403 (D1); A finalizing twice is a 409.
+        # Act: A finalizing B's evaluation is a 403; A finalizing twice is a 409.
         forbidden = await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid_b}/finalize", headers=h_a)
         assert (
             await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid_a}/finalize", headers=h_a)
@@ -382,7 +372,7 @@ async def test_admin_override_finalize_audit_details_record_is_admin_override_tr
 async def test_report_evaluated_and_its_event_are_written_once_each_per_crossing(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """The transition audit row and the L11 event are a pair; neither may double up."""
+    """The transition audit row and the emitted event are a pair; neither may double up."""
     # Arrange
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
@@ -406,7 +396,7 @@ async def test_report_evaluated_and_its_event_are_written_once_each_per_crossing
 
 
 # ======================================================================================
-# W5-4 Task 8 — the reopen path's audit coverage and its concurrency.
+# The reopen path's audit coverage and its concurrency.
 #
 # The reopen writes THREE rows where a finalize writes two: one on the evaluation
 # (``evaluation.reopened``, carrying the reason), one on the report if it actually left
@@ -542,11 +532,13 @@ async def test_rejected_reopen_writes_no_audit_row(migrated_db: async_sessionmak
         # 409 first, while the evaluation is still in_progress and nothing is finalized.
         rejections = [await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "early"}, headers=ah)]
         assert (await c.post(_finalize_url(ex, rid, evid_a), headers=h_a)).status_code == 200
+        # The owning evaluator may reopen their own work, so the 403 case needs a stranger.
+        foreign, _foreign_uid = await evaluator(migrated_db, c, ah, ex, "ev-foreign")
         before = await _reopen_counts(migrated_db)
 
         # Act
         rejections += [
-            await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "nope"}, headers=h_a),  # 403
+            await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "nope"}, headers=foreign),  # 403
             await c.post(_reopen_url(ex, rid, str(uuid.uuid4())), json={"reason": "nope"}, headers=ah),  # 404
             await c.post(_reopen_url(ex, rid, evid_a), json={"reason": "   "}, headers=ah),  # 422
         ]
@@ -655,14 +647,12 @@ async def test_a_held_report_lock_stalls_the_reopen_until_it_is_released(
     which is what shows it was waiting on the lock rather than failing for some other reason.
 
     WHAT THIS DOES NOT PROVE, and do not let the name suggest otherwise: that the handler takes
-    the lock BEFORE mutating. It cannot. ``rollup.recompute_report_grade`` takes the same row
-    lock internally, so a handler that mutated first and locked later would stall here just the
-    same, and its mutation would be flushed-but-uncommitted and therefore invisible to the
-    observing session either way. Measured: with the handler's own
-    ``_get_report_for_update`` swapped for an unlocked read, this test still passes.
+    the lock BEFORE mutating. ``rollup.recompute_report_grade`` takes the same row lock
+    internally, so a handler that mutated first and locked later would stall here just the same.
+    Measured: with the handler's own ``_get_report_for_update`` swapped for an unlocked read,
+    this test still passes.
 
-    Lock ORDER — report before evaluation — is what prevents a production deadlock against
-    finalize and unassign, and it is guarded structurally by the test below instead.
+    Lock ORDER — report before evaluation — is guarded structurally by the test below instead.
     """
     # Arrange: a finalized evaluation, so the reopen is otherwise permitted.
     ah, _ = await ga_headers(migrated_db)
@@ -705,9 +695,8 @@ def test_reopen_takes_the_report_lock_before_touching_the_evaluation() -> None:
     then load the evaluation. Two paths acquiring these two locks in opposite orders deadlock
     in production, and a deadlock surfaces as hung requests — never as a failing test.
 
-    A source assertion is a blunt instrument, but it is the only one available here, and it
-    fails loudly the moment someone reorders the handler or swaps the locking read for a plain
-    one. Behavioural tests cannot see the difference: see the docstring above.
+    A source assertion is a blunt instrument, but it is the only one available here: behavioural
+    tests cannot see the difference (see the docstring above).
     """
     # Arrange
     src = inspect.getsource(reopen_evaluation)

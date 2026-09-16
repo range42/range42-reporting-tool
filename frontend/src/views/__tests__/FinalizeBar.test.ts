@@ -7,7 +7,12 @@ import FinalizeBar from '@/views/evaluations/FinalizeBar.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useEvaluationStore } from '@/stores/evaluation'
 import * as svc from '@/services/evaluations'
-import type { EvaluationBreakdown, EvaluationDetail, GradableSection } from '@/services/evaluations'
+import type {
+  EvaluationBreakdown,
+  EvaluationDetail,
+  GradableSection,
+  SectionGrade,
+} from '@/services/evaluations'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 const USER = { id: 'u1', email: 'm', display_name: 'M', avatar_url: null, is_global_admin: false }
@@ -31,6 +36,20 @@ function section(over: Partial<GradableSection> = {}): GradableSection {
     evaluation_criteria: null,
     grade: null,
     ...over,
+  }
+}
+
+function storedGrade(sectionId = 's1'): SectionGrade {
+  return {
+    id: `g-${sectionId}`,
+    evaluation_id: 'ev1',
+    report_section_id: sectionId,
+    grade: '8.00',
+    pass_fail_result: null,
+    rubric_scores: null,
+    feedback: null,
+    created_at: '2026-09-09T00:00:00Z',
+    updated_at: '2026-09-09T00:00:00Z',
   }
 }
 
@@ -199,8 +218,59 @@ describe('FinalizeBar', () => {
     await flushPromises()
 
     const note = w.get('[data-test="finalize-waiting"]').text()
-    // No headcounts, no ratios, no peer identities (D1/E1).
+    // No headcounts, no ratios, no peer identities.
     expect(note).not.toMatch(/\d/)
+  })
+
+  it('refuses to finalize an evaluation that is already completed', async () => {
+    // Arrange: browsing back to work already given — every section is graded, so nothing but
+    // the finalized status stands between the evaluator and a second, refused finalize.
+    const { w } = await setup(
+      detail({
+        status: 'completed',
+        sections: [
+          section({ grade: storedGrade() }),
+          section({ report_section_id: 's2', grade: storedGrade('s2') }),
+        ],
+      }),
+    )
+
+    // Act / Assert
+    expect((w.get('[data-test="finalize-btn"]').element as HTMLButtonElement).disabled).toBe(true)
+    expect(w.get('[data-test="finalize-done"]').text()).toBe(en.evaluations.finalized)
+  })
+
+  it('does not invite overall feedback on an evaluation that is already completed', async () => {
+    // Arrange
+    const { w } = await setup(detail({ status: 'completed' }))
+    const patch = vi.spyOn(svc, 'updateEvaluation')
+
+    // Act
+    const box = w.get('[data-test="finalize-feedback"]')
+    await box.trigger('blur')
+
+    // Assert — the server refuses the PATCH in this state, so it is never sent.
+    expect((box.element as HTMLInputElement).disabled).toBe(true)
+    expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('locks the grading surface as soon as the finalize is accepted', async () => {
+    // Arrange
+    const { store, w } = await setup()
+    store.setGrade('s1', { grade: 6 })
+    store.setGrade('s2', { grade: 8 })
+    await flushPromises()
+    vi.spyOn(svc, 'finalizeEvaluation').mockResolvedValue(
+      breakdown({ finalize_gate_satisfied: true }),
+    )
+    expect(store.isFinalized).toBe(false)
+
+    // Act
+    await w.get('[data-test="finalize-btn"]').trigger('click')
+    await flushPromises()
+
+    // Assert — without this the section cards stay editable until someone reloads the page.
+    expect(store.isFinalized).toBe(true)
   })
 
   it('persists overall feedback through PATCH /evaluations/{id}', async () => {

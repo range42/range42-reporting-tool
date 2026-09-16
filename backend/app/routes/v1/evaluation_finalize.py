@@ -1,22 +1,12 @@
-"""Finalize, gate settling and the D2 deadlock exit (WP5 W5-3).
+"""Finalize, reopen, unassign, and the report-level finalize gate.
 
-Split out of ``evaluations.py``, which owns the W5-1 CRUD surface. The cut is by SLICE, not by
-verb: everything here exists because a report has SEVERAL evaluators, and it shares one idea —
-an evaluation stops being editable and the report-level gate is re-asked. W5-4's reopen lands
-here too, on the same ``_settle_finalize_gate``.
+The dependency runs one way, this module -> ``evaluations``; the shared response builder lives
+in ``app.services.evaluation`` so neither route module imports the other.
 
-The dependency runs one way, this module -> ``evaluations``, and must stay that way. The
-response builder both modules need lives in ``app.services.evaluation`` rather than in either
-route module, so neither has to import the other to build a payload.
+EVALUATOR ISOLATION: ``_assert_evaluation_access`` gates every path that is not Global-Admin-only.
 
-D1 — EVALUATOR ISOLATION applies here exactly as in ``evaluations.py``: ``_assert_evaluation_access``
-gates every path that is not already Global-Admin-only.
-
-LOCK ORDER — report, THEN evaluation. Every handler in this module takes the parent report's
-row lock as its first act, through ``_get_report_for_update``, and only then loads the
-evaluation. W5-4's reopen joins the same set and must take the same order: two paths acquiring
-these two locks in opposite orders deadlock in production, where it surfaces as hung requests
-rather than a failing test.
+LOCK ORDER — report, THEN evaluation, in every handler here. Acquiring these two locks in the
+opposite order deadlocks in production.
 """
 
 import uuid
@@ -52,38 +42,24 @@ from app.services.workflow import state_machine
 router = APIRouter(tags=["evaluations"])
 
 
-# --- W5-3: finalize -------------------------------------------------------------------
+# --- finalize -------------------------------------------------------------------------
 
-# An evaluator may finalize their own work while the report is under evaluation OR already
-# evaluated. The second case is ``any_can_finalize``: the first finalize opens the gate and the
-# report becomes ``evaluated`` immediately, but the other assigned evaluators are still
-# mid-grading. Refusing them would strand their evaluations permanently — un-finalizable
-# through no fault of theirs, and invisible in the breakdown — so the gate opening must not
-# double as a deadline. Their later finalize still joins the aggregate and publishes a new
-# grade_version, which is how a consumer notices the number was refined.
+# ``evaluated`` is finalizable too: under ``any_can_finalize`` the first finalize opens the gate
+# while the other assigned evaluators are still grading, and they must not be stranded.
 _FINALIZABLE_REPORT_STATUSES = frozenset({"under_evaluation", "evaluated"})
 
 
 async def _get_report_for_update(db: AsyncSession, exercise_id: uuid.UUID, report_id: uuid.UUID) -> Report:
     """Fetch the report with its row locked, and with COMMITTED values.
 
-    Serializes finalize / unassign / (W5-4) reopen against each other: all three read every
-    sibling evaluation and then write the parent report, so they must not interleave. Two
-    evaluators pressing Finalize together would otherwise both read a gate that is still closed
-    and neither would transition the report.
+    Serializes finalize / unassign / reopen against each other: all three read every sibling
+    evaluation and then write the parent report. LOCK ORDER IS ALWAYS report-then-evaluation.
 
-    LOCK ORDER IS ALWAYS report-then-evaluation. W5-4 must take the same order — two code paths
-    taking these two locks in opposite orders is a production deadlock, not a test failure.
+    ``populate_existing`` is load-bearing, not just the ``with_for_update``: the sessionmaker
+    runs ``expire_on_commit=False``, so locking alone would leave the caller holding the
+    snapshot it read before it began waiting. Lock and re-read must stay one operation.
 
-    ``populate_existing`` IS THE LOAD-BEARING PART, not the ``with_for_update``. Locking alone
-    leaves the caller holding whatever it read BEFORE it began waiting: the sessionmaker runs
-    ``expire_on_commit=False``, so nothing invalidates that snapshot. The loser of a race would
-    then see ``status == 'under_evaluation'``, conclude the report had not crossed, and emit a
-    second ``report.evaluated`` for a single crossing. Acquiring the lock and re-reading are one
-    operation here so they cannot drift apart.
-
-    ``_get_report`` still runs first, for the 404 and the exercise scoping that a bare id lookup
-    cannot do.
+    ``_get_report`` still runs first, for the 404 and the exercise scoping.
     """
     report = await _get_report(db, exercise_id, report_id)
     return (
@@ -94,10 +70,9 @@ async def _get_report_for_update(db: AsyncSession, exercise_id: uuid.UUID, repor
 
 
 async def _ungraded_section_def_ids(db: AsyncSession, report_id: uuid.UUID, evaluation_id: uuid.UUID) -> list[str]:
-    """Gradeable sections this evaluation has not scored (§7.2).
+    """Gradeable sections this evaluation has not scored.
 
-    ``grade_mode='not_graded'`` sections are excluded — they are not gradeable, so they can
-    never block a finalize.
+    ``grade_mode='not_graded'`` sections are excluded — they can never block a finalize.
     """
     rows = (
         await db.execute(
@@ -119,11 +94,7 @@ async def _ungraded_section_def_ids(db: AsyncSession, report_id: uuid.UUID, eval
 
 
 async def _assert_finalizable(db: AsyncSession, ev: Evaluation, report: Report, user: User) -> None:
-    """Every rejection a finalize can raise, before the first mutation.
-
-    Extracted so W5-4's re-finalize path reuses it verbatim rather than restating the guards
-    and drifting from them.
-    """
+    """Raise every rejection a finalize can produce, before the first mutation."""
     _assert_evaluation_access(ev, user)
     if ev.unassigned_at is not None:
         raise HTTPException(status_code=409, detail={"error": "evaluation_unassigned"})
@@ -137,16 +108,10 @@ async def _assert_finalizable(db: AsyncSession, ev: Evaluation, report: Report, 
 
 
 def _assert_reopenable(ev: Evaluation) -> None:
-    """Every rejection a reopen can raise, before the first mutation.
+    """Raise every rejection a reopen can produce, before the first mutation.
 
-    Sits beside ``_assert_finalizable`` deliberately: the two are a pair — one closes an
-    evaluation, the other re-opens it — and a guard that drifts from its opposite is how a
-    state becomes reachable in one direction only.
-
-    ORDER MATTERS. Unassigned is checked FIRST. A dropped evaluator's seat is already out of
-    the counted set and its weight renormalized away, so answering ``not_finalized`` for a
-    completed-then-unassigned evaluation would describe the wrong problem and invite a caller
-    to "fix" it by finalizing again.
+    ORDER MATTERS: unassigned is checked FIRST, so a completed-then-unassigned evaluation is
+    reported as unassigned rather than as ``not_finalized``.
     """
     if ev.unassigned_at is not None:
         raise HTTPException(status_code=409, detail={"error": "evaluation_unassigned"})
@@ -159,14 +124,10 @@ async def _resolve_finalize_actor(
 ) -> tuple[uuid.UUID, bool]:
     """Who is CREDITED with this finalize, and is it an admin override?
 
-    Mirrors ``reports.py::_resolve_on_behalf_of`` (§4.2 deadlock resolution) with one extra
-    check the approval chain cannot make: an approval step names a *role*, which many users may
-    satisfy, but an evaluation names exactly one evaluator — so ``on_behalf_of`` must name them.
-    The stricter check is available here, so it is taken.
+    An evaluation names exactly one evaluator, so ``on_behalf_of`` must name them.
 
     The returned id is the credited EVALUATOR. ``finalized_by`` is set to the actor at the call
-    site, never to this value: conflating them is how the dispute trail starts lying about who
-    pressed the button.
+    site, never to this value.
     """
     if body.on_behalf_of is None:
         return actor.id, False
@@ -197,22 +158,19 @@ async def _settle_finalize_gate(
 ) -> tuple[bool, str]:
     """Ask the gate whether the report is finished, and transition it if so.
 
-    Reads the facts back through ``rollup.load_evaluation_facts`` — the SAME query the
-    aggregate used — so the report can never be declared evaluated over a different set of
-    evaluations than the one its grade was computed from.
+    Reads the facts through ``rollup.load_evaluation_facts`` — the SAME query the aggregate
+    used — so the report is never declared evaluated over a different set of evaluations.
 
-    ``trigger`` names the cause of the crossing — ``evaluation_finalized`` when the last
-    evaluator pressed the button, ``evaluator_unassigned`` when an admin removed the one who
-    never would. Same edge, opposite stories, and a dispute needs to tell them apart.
+    ``trigger`` names the cause of the crossing: ``evaluation_finalized`` or
+    ``evaluator_unassigned``.
 
-    Returns ``(gate_satisfied, mode)``. Emits ``report.evaluated`` (L11) on the crossing.
+    Returns ``(gate_satisfied, mode)``. Emits ``report.evaluated`` on the crossing.
     """
     mode = await resolve_finalize_policy(db, exercise_id)
     facts = await rollup.load_evaluation_facts(db, report.id)
     satisfied = is_gate_open(facts, mode)
     # Only an under_evaluation report has anywhere to go: ``evaluated -> evaluated`` is not a
-    # legal edge, and attempting it on a later finalize would raise InvalidTransition and emit
-    # a second report.evaluated row for one crossing.
+    # legal edge.
     if satisfied and report.status == "under_evaluation":
         await state_machine.transition(
             db,
@@ -223,7 +181,7 @@ async def _settle_finalize_gate(
             details={"finalize_policy": mode, "evaluation_id": str(evaluation_id), "trigger": trigger},
             ip=ip,
         )
-        # L11 — the emit seam, on the CROSSING only. Guarded by the same branch as the
+        # The emit seam, on the CROSSING only. Guarded by the same branch as the
         # transition so a later finalize on an already-evaluated report announces nothing.
         await events.emit_report_evaluated(db, report)
     return satisfied, mode
@@ -240,14 +198,13 @@ async def finalize_evaluation(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> DataEnvelope[EvaluationBreakdownOut]:
-    """Mark this evaluator's work done, then settle the report-level gate (§7.2).
+    """Mark this evaluator's work done, then settle the report-level gate.
 
     ORDER IS LOAD-BEARING: lock, guard, complete the evaluation, recompute the aggregate,
-    THEN ask the gate. A gate settled before the recompute would fire ``report.evaluated``
-    carrying the previous grade — announcing a number that the same request then changes.
+    THEN ask the gate — otherwise ``report.evaluated`` announces the previous grade.
 
     An evaluator finalizing their own work sends no body. A Global Admin may send
-    ``on_behalf_of`` + ``comment`` to break a deadlock (D2) — see ``_resolve_finalize_actor``.
+    ``on_behalf_of`` + ``comment`` to break a deadlock — see ``_resolve_finalize_actor``.
     """
     body = body or FinalizeRequest()
     report: Report = await _get_report_for_update(db, exercise_id, rid)
@@ -257,13 +214,13 @@ async def finalize_evaluation(
 
     ev.status = "completed"
     ev.completed_at = datetime.now(UTC)
-    # ``finalized_by`` is the ACTOR, ``evaluator_id`` stays the credited evaluator (D2).
+    # ``finalized_by`` is the ACTOR, ``evaluator_id`` stays the credited evaluator.
     ev.finalized_by = user.id
     ev.finalize_is_admin_override = is_override
     ev.finalize_comment = body.comment if is_override else None
     await db.flush()
 
-    # A7: rollup stays the sole writer of overall_grade / grade_version.
+    # rollup stays the sole writer of overall_grade / grade_version.
     await rollup.recompute_report_grade(
         db, report, actor_id=user.id, trigger="evaluation.finalized", ip=client_ip(request)
     )
@@ -307,24 +264,19 @@ async def unassign_evaluator(
     user: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[EvaluationBreakdownOut]:
-    """Global-Admin deadlock exit (D2, half two): drop an unavailable evaluator.
+    """Global-Admin deadlock exit: drop an unavailable evaluator. Removes the seat entirely.
 
-    Half one finalizes IN the absent evaluator's name; this half removes the seat entirely,
-    for when there is no grade to publish on their behalf. Mirrors the ARCHITECTURE §4.2
-    approval-chain override pattern.
+    SOFT, DELIBERATELY. Nothing is deleted and ``status`` is not rewritten: the evaluation and
+    its section grades survive so a later dispute can still read them. ``unassigned_at IS NOT
+    NULL`` alone takes the evaluator out of the counted set.
 
-    SOFT, DELIBERATELY (L8). Nothing is deleted and ``status`` is not rewritten: the evaluation
-    and its section grades survive so a later dispute can still read what the removed evaluator
-    had done. ``unassigned_at IS NOT NULL`` alone takes them out of the L7 counted set.
-
-    ORDER IS LOAD-BEARING, exactly as in finalize: lock, guard, mutate, recompute, THEN settle
-    the gate — a gate settled first would announce a grade the same request goes on to change.
+    ORDER IS LOAD-BEARING, as in finalize: lock, guard, mutate, recompute, THEN settle the gate.
     """
     report: Report = await _get_report_for_update(db, exercise_id, rid)  # report, then evaluation
     ev = await _get_evaluation(db, report.id, evid)
     if ev.unassigned_at is not None:
         # Not idempotent-by-silence: a second call must not re-run the recompute and bump
-        # grade_version (L9) for a change that already happened.
+        # grade_version for a change that already happened.
         raise HTTPException(status_code=409, detail={"error": "already_unassigned"})
     reason = body.reason.strip()
     if not reason:
@@ -335,7 +287,7 @@ async def unassign_evaluator(
     ev.unassign_reason = reason
     await db.flush()
 
-    # A7: rollup stays the sole writer of overall_grade / grade_version. L5 renormalization —
+    # rollup stays the sole writer of overall_grade / grade_version. Renormalization —
     # the dropped weight leaves the denominator, it does not rescale the survivors' grade.
     await rollup.recompute_report_grade(
         db, report, actor_id=user.id, trigger="evaluation.unassigned", ip=client_ip(request)
@@ -358,7 +310,7 @@ async def unassign_evaluator(
         details={
             "evaluator_id": str(ev.evaluator_id),
             "reason": reason,
-            # Redundant with the action name, but it keeps the WP4 audit-details shape
+            # Redundant with the action name, but it keeps the audit-details shape
             # recognisable to a log consumer that greps for the flag.
             "is_admin_override": True,
             "finalize_gate_satisfied": satisfied,
@@ -370,7 +322,7 @@ async def unassign_evaluator(
     return DataEnvelope(data=await breakdown.build(db, report, user, exercise_id=exercise_id))
 
 
-# --- W5-4: reopen ---------------------------------------------------------------------
+# --- reopen ---------------------------------------------------------------------------
 
 
 @router.post(_BASE + "/{evid}/reopen")
@@ -380,42 +332,36 @@ async def reopen_evaluation(
     rid: uuid.UUID,
     evid: uuid.UUID,
     body: ReopenRequest | None = None,
-    user: User = Depends(require_global_admin),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> DataEnvelope[EvaluationBreakdownOut]:
-    """Return a finalized evaluation to grading. Global Admin only.
+    """Return a finalized evaluation to grading. The assigned evaluator, or a Global Admin.
 
-    THE ONLY un-finalize path. There is no evaluator self-revert and no edit-after-finalize:
-    evaluator isolation removes the reconciliation window that would justify either, so the
-    single admin entrance here is the whole surface.
+    THE ONLY un-finalize path, and still the only way back into grading: there is no
+    edit-after-finalize. An evaluator revising work they already gave comes through here,
+    with a reason, and finalizes again afterwards.
 
     A reopen produces a NEW grade version rather than an in-place edit — the original
     ``report.evaluated`` is not retractable, so supersession is the only mechanism available.
 
-    LOCK ORDER — report, THEN evaluation, exactly as finalize and unassign take it. Reopen
-    reads every sibling evaluation and writes the parent report, so it must serialize against
-    both; taking these two locks in the opposite order is a production deadlock rather than a
-    failing test.
+    LOCK ORDER — report, THEN evaluation, as finalize and unassign take it.
 
-    The evaluator's WORK SURVIVES. Section grades and overall feedback are untouched: this is
-    the whole difference between a reopen and an unassign-then-reassign, and the evaluator
-    resumes from what they already entered.
+    The evaluator's WORK SURVIVES: section grades and overall feedback are untouched.
 
-    A reopened evaluation still COUNTS — it is not unassigned, so it stays in the gate and
-    holds the report shut — but it no longer CONTRIBUTES a grade. The aggregate therefore falls
-    back to the evaluations still completed, and to NULL when none remain.
+    A reopened evaluation still COUNTS towards the gate but no longer CONTRIBUTES a grade, so
+    the aggregate falls back to the evaluations still completed, and to NULL when none remain.
     """
     body = body or ReopenRequest()
     report: Report = await _get_report_for_update(db, exercise_id, rid)  # report, then evaluation
     ev = await _get_evaluation(db, report.id, evid)
+    _assert_evaluation_access(ev, user)
     reason = body.reason.strip()
     if not reason:
         raise HTTPException(status_code=422, detail={"error": "reason_required"})
     _assert_reopenable(ev)
 
-    # CAPTURED BEFORE the recompute below, which is the sole writer of grade_version: read
-    # afterwards, both of these would already describe the new state and the supersession
-    # event would announce that version 2 supersedes version 2.
+    # CAPTURED BEFORE the recompute below, which is the sole writer of grade_version.
     superseded_version = report.grade_version
     status_before = report.status
 
@@ -423,9 +369,8 @@ async def reopen_evaluation(
     # Cleared, not preserved. A completion time on a non-complete row means two different
     # things depending on ``status``; the dispute trail lives in ``audit_log`` instead.
     ev.completed_at = None
-    # The override fields belong to the finalize that just went away. Left behind, they would
-    # misattribute the NEXT finalize — an evaluator's own re-finalize inheriting someone
-    # else's comment and an override flag it never earned.
+    # The override fields belong to the finalize that just went away; left behind, they would
+    # misattribute the NEXT finalize.
     ev.finalized_by = None
     ev.finalize_is_admin_override = False
     ev.finalize_comment = None
@@ -434,12 +379,10 @@ async def reopen_evaluation(
     ev.reopened_by = user.id
     await db.flush()
 
-    # A7: rollup stays the sole writer of overall_grade / grade_version.
+    # rollup stays the sole writer of overall_grade / grade_version.
     #
-    # force_version_bump: a reopen is a publication even when the number does not move. Two
-    # evaluators who agreed exactly leave the aggregate untouched when one is reopened, and
-    # without the bump the supersession event below would announce that version N supersedes
-    # version N — true, and useless to a consumer.
+    # force_version_bump: a reopen is a publication even when the number does not move, so the
+    # supersession event below cannot announce that version N supersedes version N.
     timeline = await rollup.recompute_report_grade(
         db,
         report,
@@ -449,9 +392,8 @@ async def reopen_evaluation(
         force_version_bump=True,
     )
 
-    # Only a report that actually reached ``evaluated`` has anywhere to go. One still under
-    # evaluation — a sibling evaluator holding the gate shut — has no edge to itself, and
-    # attempting one would raise rather than no-op.
+    # Only a report that actually reached ``evaluated`` has anywhere to go; there is no
+    # ``under_evaluation -> under_evaluation`` edge.
     if status_before == "evaluated":
         await state_machine.transition(
             db,
@@ -477,6 +419,8 @@ async def reopen_evaluation(
         details={
             "evaluator_id": str(ev.evaluator_id),
             "reason": reason,
+            # Distinguishes an evaluator revising their own work from an admin intervening.
+            "is_self_reopen": user.id == ev.evaluator_id,
             "reopen_count": ev.reopen_count,
             "report_status_before": status_before,
             "superseded_grade_version": superseded_version,

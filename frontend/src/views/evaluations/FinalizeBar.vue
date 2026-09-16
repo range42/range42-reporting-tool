@@ -5,13 +5,11 @@
  *
  * WHICH NUMBER IS SHOWN. The server's `overall_grade` wins whenever it exists; the local
  * weighted preview only fills the gap before the first save, and is labelled provisional so
- * nobody quotes it (D6 — `rollup.py` is canonical).
+ * nobody quotes it (`rollup.py` is canonical).
  *
- * THE WAITING NOTE CARRIES NO HEADCOUNT (D1/E1). Under `all_must_finalize` an evaluator who
- * finalizes first must be told the report grade is not published yet — but not how many peers
- * remain, nor who they are. The aggregate does carry a headcount, and it is deliberately not
- * used here: "1 of 3 evaluators done" tells an evaluator something about their peers' work,
- * which is the whole thing evaluator isolation exists to prevent.
+ * THE WAITING NOTE CARRIES NO HEADCOUNT. An evaluator who finalizes first is told the report
+ * grade is not published yet — but not how many peers remain, nor who they are. The aggregate
+ * does carry a headcount and is deliberately not used here: evaluator isolation.
  */
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -39,7 +37,9 @@ const isProvisional = computed(() => serverGrade.value === null && store.preview
 const shownGrade = computed(() => serverGrade.value ?? formatGrade(store.previewGrade) ?? '—')
 
 const remaining = computed(() => Math.max(store.gradableCount - store.gradedCount, 0))
-const canFinalize = computed(() => store.canFinalize && !isFinalizing.value && !isDone.value)
+/** True from the moment the server accepts the finalize, and on every later visit. */
+const isFinalized = computed(() => store.isFinalized || isDone.value)
+const canFinalize = computed(() => store.canFinalize && !isFinalizing.value && !isFinalized.value)
 
 async function onFinalize(): Promise<void> {
   if (!canFinalize.value || !auth.token) return
@@ -48,6 +48,8 @@ async function onFinalize(): Promise<void> {
   try {
     const breakdown = await finalizeEvaluation(auth.token, props.exerciseId, props.rid, props.evid)
     isDone.value = true
+    // The server has closed the evaluation for writes; lock the grading surface with it.
+    store.markFinalized()
     isWaitingOnOthers.value =
       breakdown.finalize_policy === ALL_MUST_FINALIZE && !breakdown.finalize_gate_satisfied
   } catch {
@@ -57,9 +59,10 @@ async function onFinalize(): Promise<void> {
   }
 }
 
-/** Overall feedback lives on the evaluation, not on a section, so it PATCHes separately. */
+/** Overall feedback lives on the evaluation, not on a section, so it PATCHes separately.
+ *  A finalized evaluation refuses the PATCH, so it is not attempted. */
 async function onFeedbackBlur(): Promise<void> {
-  if (!auth.token) return
+  if (!auth.token || isFinalized.value) return
   const next = feedback.value.trim() === '' ? null : feedback.value
   if (next === (store.detail?.overall_feedback ?? null)) return
   try {
@@ -112,7 +115,7 @@ async function onFeedbackBlur(): Promise<void> {
           v-model="feedback"
           data-test="finalize-feedback"
           type="text"
-          :disabled="isDone"
+          :disabled="isFinalized"
           :placeholder="t('evaluations.overallFeedbackPlaceholder')"
           class="h-9 w-full rounded-md border border-[var(--rt-border)] bg-[var(--rt-bg-elev)] px-3 text-sm"
           @blur="onFeedbackBlur"
@@ -137,7 +140,7 @@ async function onFeedbackBlur(): Promise<void> {
     >
       {{ t('evaluations.waitingOthers') }}
     </p>
-    <p v-else-if="isDone" data-test="finalize-done" class="px-4 pb-2 text-xs text-emerald-600">
+    <p v-else-if="isFinalized" data-test="finalize-done" class="px-4 pb-2 text-xs text-emerald-600">
       {{ t('evaluations.finalized') }}
     </p>
     <p v-if="failed" data-test="finalize-error" class="px-4 pb-2 text-xs text-red-500">

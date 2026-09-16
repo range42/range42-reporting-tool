@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The evaluator's grading surface for ONE evaluation (§6.8).
+ * The evaluator's grading surface for ONE evaluation.
  *
  * ORCHESTRATION ONLY: load the evaluation into the store, then hand the pieces to
  * `SectionGradeCard`, `FinalizeBar` and `EvaluatorBreakdown`. No grading arithmetic, no save
@@ -27,7 +27,7 @@ import { useGradeDraftCache } from '@/composables/useGradeDraftCache'
 import { ApiError } from '@/services/http'
 import type { RouteLocationNamedRaw } from 'vue-router'
 
-/** D9: no `GET /ai/status` exists yet (W5-8, #167), so the slot never mounts today. */
+/** No `GET /ai/status` endpoint exists yet, so the slot never mounts today. */
 const props = withDefaults(defineProps<{ aiAvailable?: boolean }>(), { aiAvailable: false })
 
 const CAMPAIGN_ROUTE = 'evaluation-campaign'
@@ -52,9 +52,14 @@ const draftCache = useGradeDraftCache(evid)
 /** Template authoring order, not payload order — the evaluator reads top to bottom. */
 const sections = computed(() => [...store.sections].sort((a, b) => a.position - b.position))
 
-const canReopen = computed(() => auth.isAdmin && store.detail?.status === 'completed')
+/** Reopening is the only way back into grading, so the evaluation's own evaluator gets it
+ *  too — without it their finalized work is editable nowhere and finalizable never again. */
+const isOwnEvaluation = computed(() => store.detail?.evaluator_id === auth.user?.id)
+/** Reopening is the only route back into grading, so the evaluation's own evaluator gets it
+ *  too — otherwise their finalized work is editable nowhere and finalizable never again. */
+const canReopen = computed(() => store.isFinalized && (auth.isAdmin || isOwnEvaluation.value))
 
-/** Null until W5-6 registers the campaign route; ViewModeSwitch disables the control then. */
+/** Null while the campaign route is unregistered; ViewModeSwitch disables the control then. */
 const campaignTo = computed<RouteLocationNamedRaw | null>(() =>
   router.hasRoute(CAMPAIGN_ROUTE)
     ? { name: CAMPAIGN_ROUTE, params: { exerciseId, rid, evid } }
