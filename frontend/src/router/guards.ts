@@ -12,10 +12,15 @@ export interface RouteFlags {
 
 const EXERCISE_PATH = /^\/exercises\/([^/]+)/
 
+/** The exercise id an app path is scoped to, or null when it carries no exercise segment. */
+export function exerciseIdFromPath(path: string): string | null {
+  return EXERCISE_PATH.exec(path)?.[1] ?? null
+}
+
 /** Whether the cached capabilities for the exercise in `path` carry the given grant.
  *  A path with no exercise segment can never satisfy an exercise-scoped capability. */
 function hasExerciseCapability(path: string, grant: 'approve' | 'evaluate'): boolean {
-  const exerciseId = EXERCISE_PATH.exec(path)?.[1]
+  const exerciseId = exerciseIdFromPath(path)
   if (!exerciseId) return false
   const capabilities = useCapabilitiesStore()
   return grant === 'approve'
@@ -31,7 +36,7 @@ export function resolveNavigation(flags: RouteFlags, to: string): string | null 
   if (flags.requiresAdmin && !auth.isAdmin) return '/exercises'
   // Coarse capability gates: global admins always pass; everyone else needs the cached
   // capability for the exercise in the path (populated on entering the exercise). Neither
-  // gate decides WHICH report the caller may touch — that is the server's D1 (E1) scoping.
+  // gate decides WHICH report the caller may touch — that is the server's scoping.
   if (flags.requiresApprover && !auth.isAdmin && !hasExerciseCapability(to, 'approve'))
     return '/exercises'
   if (flags.requiresEvaluator && !auth.isAdmin && !hasExerciseCapability(to, 'evaluate'))

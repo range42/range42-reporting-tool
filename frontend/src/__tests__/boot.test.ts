@@ -38,13 +38,12 @@ describe('bootstrap', () => {
     app = undefined
     vi.unstubAllGlobals()
     document.body.innerHTML = ''
+    window.history.replaceState({}, '', '/')
   })
 
   it('rehydrates the session before installing the router', async () => {
-    // Installing the router starts the initial navigation, which runs the guards.
-    // `isAuthenticated` needs a token AND a fetched user, so rehydrating after
-    // installation sends a page load with a valid token to /login, and nothing
-    // re-evaluates the route once /auth/me answers.
+    // Installing the router starts the initial navigation, which runs the guards, and
+    // `isAuthenticated` needs a token AND a fetched user — so rehydration must come first.
     localStorage.setItem('rt_token', 'tok')
 
     const calls: string[] = []
@@ -96,5 +95,39 @@ describe('bootstrap', () => {
     await bootstrap(app)
 
     expect(router.currentRoute.value.path).not.toBe('/login')
+  })
+
+  it('a page load on an evaluation deep link stays on the evaluation route', async () => {
+    // Arrange: a reload lands straight on a `requiresEvaluator` route, so nothing has
+    // cached the exercise capabilities the guard reads.
+    const path = '/exercises/ex1/reports/r1/evaluations/ev1'
+    localStorage.setItem('rt_token', 'tok')
+    window.history.replaceState({}, '', path)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/auth/me')) return envelope(USER)
+        if (url.endsWith('/exercises/ex1/me'))
+          return envelope({ is_global_admin: false, capabilities: ['evaluations:write'] })
+        return envelope({
+          report_name: 'r',
+          sections: [],
+          grade_version: 1,
+          overall_grade: null,
+          graded_section_count: 0,
+        })
+      }),
+    )
+
+    // Act: fresh modules, because vue-router only runs its initial navigation for the
+    // first app a router instance is installed into.
+    vi.resetModules()
+    const [boot, freshRouter] = await Promise.all([import('@/boot'), import('@/router')])
+    app = makeApp()
+    await boot.bootstrap(app)
+
+    // Assert
+    expect(freshRouter.router.currentRoute.value.path).toBe(path)
   })
 })
