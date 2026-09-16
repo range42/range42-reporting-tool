@@ -68,6 +68,16 @@ function dueSoon(dueAt: string | null): boolean {
   return due !== null && due.urgency !== 'none'
 }
 
+/** Mirrors the backend's assignable set: an evaluator can only be put on a report that has
+ *  actually been submitted. Assigning does not start the evaluation. */
+const ASSIGNABLE_STATUSES: readonly string[] = ['submitted', 'under_evaluation']
+
+const canAssign = (status: string): boolean => ASSIGNABLE_STATUSES.includes(status)
+
+function openEvaluators(id: string): void {
+  void router.push({ name: 'report-evaluators', params: { exerciseId, rid: id } })
+}
+
 function openReport(id: string): void {
   void router.push(`/exercises/${exerciseId}/reports/${id}`)
 }
@@ -148,6 +158,12 @@ function createReport(): void {
             <th class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
               {{ t('reports.due') }}
             </th>
+            <th
+              v-if="auth.isAdmin"
+              class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500"
+            >
+              {{ t('reports.evaluators') }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -185,9 +201,20 @@ function createReport(): void {
               </span>
               <span v-else class="text-zinc-400">{{ t('reports.noDue') }}</span>
             </td>
+            <td v-if="auth.isAdmin" class="px-5 py-3">
+              <button
+                v-if="canAssign(r.status)"
+                :data-test="`assign-evaluators-${r.id}`"
+                type="button"
+                class="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium transition hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60"
+                @click.stop="openEvaluators(r.id)"
+              >
+                {{ t('reports.manageEvaluators') }}
+              </button>
+            </td>
           </tr>
           <tr v-if="reports.length === 0">
-            <td colspan="4" class="px-5 py-8 text-center text-sm text-zinc-400">
+            <td :colspan="auth.isAdmin ? 5 : 4" class="px-5 py-8 text-center text-sm text-zinc-400">
               <span data-test="reports-empty">{{ t('reports.empty') }}</span>
             </td>
           </tr>

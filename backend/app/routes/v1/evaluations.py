@@ -24,9 +24,11 @@ from app.core.permissions import EVALUATIONS_WRITE
 from app.core.rbac import get_current_user, require_global_admin, require_permission
 from app.models import (
     Evaluation,
+    ExerciseRole,
     Report,
     ReportSection,
     ReportTemplate,
+    RoleDefinition,
     SectionGrade,
     Team,
     TemplateSectionDef,
@@ -41,6 +43,7 @@ from app.schemas.evaluation import (
     EvaluationDetailOut,
     EvaluationOut,
     EvaluationUpdate,
+    EvaluatorCandidateOut,
     GradableSectionOut,
     ManualGradeRequest,
     ReportGradeOut,
@@ -321,6 +324,41 @@ async def _grade_counts_many(db: AsyncSession, evaluation_ids: list[uuid.UUID]) 
         )
     ).all()
     return {evid: (int(graded), int(gradable)) for evid, graded, gradable in rows}
+
+
+@router.get("/exercises/{exercise_id}/evaluator-candidates")
+async def list_evaluator_candidates(
+    exercise_id: uuid.UUID,
+    _: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[list[EvaluatorCandidateOut]]:
+    """Users assignable as evaluators in this exercise (Global Admin only).
+
+    Membership is by EXPLICIT exercise role granting ``evaluations:write``, resolved through
+    ``role_definition`` so a custom role qualifies exactly as the seeded ``evaluator`` does.
+    A global admin clears the assign endpoint's own check without holding any such role, but
+    running an exercise is not evaluating in it, so admins are not offered as candidates.
+    """
+    grants = (await db.execute(select(RoleDefinition.role_key, RoleDefinition.permissions))).all()
+    role_keys = [key for key, permissions in grants if EVALUATIONS_WRITE in permissions]
+    if not role_keys:
+        return DataEnvelope(data=[])
+    users = (
+        (
+            await db.execute(
+                select(User)
+                .join(ExerciseRole, ExerciseRole.user_id == User.id)
+                .where(ExerciseRole.exercise_id == exercise_id, ExerciseRole.role_key.in_(role_keys))
+                .distinct()
+                .order_by(User.display_name, User.email)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return DataEnvelope(
+        data=[EvaluatorCandidateOut(user_id=str(u.id), display_name=u.display_name, email=u.email) for u in users]
+    )
 
 
 @router.get("/exercises/{exercise_id}/evaluations")
