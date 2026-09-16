@@ -92,6 +92,7 @@ class ApprovalRecordOut(BaseModel):
     report_id: str
     approver_id: str
     step: int
+    cycle: int
     action: str
     is_admin_override: bool
     comment: str | None
@@ -104,6 +105,7 @@ class ApprovalRecordOut(BaseModel):
             report_id=str(r.report_id),
             approver_id=str(r.approver_id),
             step=r.step,
+            cycle=r.cycle,
             action=r.action,
             is_admin_override=r.is_admin_override,
             comment=r.comment,
@@ -268,6 +270,9 @@ class ReportDetailOut(_GatedGradeFields):
     assigned_writer_id: str | None
     writer_notes: str | None
     approval_chain: list[dict[str, Any]] | None
+    # Which submission the approval_records below should be read against: rows from an earlier
+    # cycle were superseded by a recall or rejection and no longer count towards this one.
+    approval_cycle: int
     approval_records: list[ApprovalRecordOut]
     metadata: dict[str, Any] | None
     sections: list[ReportSectionOut]
@@ -300,6 +305,7 @@ class ReportDetailOut(_GatedGradeFields):
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
             writer_notes=r.writer_notes,
             approval_chain=r.approval_chain,
+            approval_cycle=r.approval_cycle,
             approval_records=[ApprovalRecordOut.from_model(a) for a in (approval_records or [])],
             metadata=r.metadata_,
             sections=[ReportSectionOut.from_models(s, d) for s, d in pairs],

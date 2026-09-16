@@ -27,6 +27,9 @@ class ApprovalRecord(Base, UUIDMixin):
         UUID(as_uuid=True), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
     )
     step: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+    # The report's approval_cycle when this was written: an approval belongs to one
+    # submission, not to the report forever.
+    cycle: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
     action: Mapped[str] = mapped_column(String(20), nullable=False)
     is_admin_override: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("false")

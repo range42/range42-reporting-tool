@@ -239,11 +239,19 @@ def _required_steps(entries: list[dict[str, object]]) -> set[int]:
     return {i + 1 for i, e in enumerate(entries) if e.get("required", True)}
 
 
-async def _approved_steps(db: AsyncSession, report_id: uuid.UUID) -> set[int]:
+async def _approved_steps(db: AsyncSession, report: Report) -> set[int]:
+    """Steps approved in the report's CURRENT submission cycle.
+
+    Earlier cycles are superseded, not deleted: a recall or rejection bumps the cycle, so the
+    rows stay readable for the audit trail while stopping short of counting towards this
+    submission. Without this, a recalled report could never be approved again.
+    """
     rows = (
         await db.execute(
             select(ApprovalRecord.step).where(
-                ApprovalRecord.report_id == report_id, ApprovalRecord.action == "approved"
+                ApprovalRecord.report_id == report.id,
+                ApprovalRecord.action == "approved",
+                ApprovalRecord.cycle == report.approval_cycle,
             )
         )
     ).scalars()
@@ -516,7 +524,7 @@ async def get_report(
 ) -> DataEnvelope[ReportDetailOut]:
     report = await _get_report(db, exercise_id, rid)
     await _assert_report_access(db, exercise_id, report, user, write=False)
-    approved = await _approved_steps(db, report.id)
+    approved = await _approved_steps(db, report)
     can_approve = await _can_approve(db, exercise_id, report, user, approved)
     grade_gate = await _GradeGate.resolve(db, exercise_id, user)
     is_team_member = report.team_id in await _caller_team_ids(db, exercise_id, user)
@@ -737,7 +745,7 @@ async def approve_report(
     entries = _chain_entries(report)
     n_steps = len(entries) or 1
     required = _required_steps(entries)
-    approved = await _approved_steps(db, report.id)
+    approved = await _approved_steps(db, report)
 
     if body.step is not None:
         if not (1 <= body.step <= n_steps):
@@ -758,6 +766,7 @@ async def approve_report(
             report_id=report.id,
             approver_id=approver_id,
             step=step,
+            cycle=report.approval_cycle,
             action="approved",
             is_admin_override=is_admin_override,
             comment=body.comment,
@@ -810,19 +819,24 @@ async def reject_report(
             report_id=report.id,
             approver_id=user.id,
             step=body.step or 1,
+            cycle=report.approval_cycle,
             action="rejected",
             is_admin_override=False,
             comment=body.comment,
         )
     )
     await db.flush()
+    # The content is about to change, so earlier steps in this cycle must sign off again
+    # rather than being silently skipped on resubmission. Superseding, not deleting.
+    rejected_cycle = report.approval_cycle
+    report.approval_cycle += 1
     await _apply_transition(
         db,
         report,
         target_status="draft",
         actor_id=user.id,
         action="report.reject",
-        details={"comment": body.comment},
+        details={"comment": body.comment, "cycle": rejected_cycle},
         ip=client_ip(request),
     )
     await db.refresh(report)
@@ -871,13 +885,17 @@ async def recall_report(
     if await _evaluation_started(db, report):
         raise HTTPException(status_code=409, detail={"error": "evaluation_in_progress"})
     # Recall is not an approval action -> no approval_record, just the state transition.
+    # It DOES supersede this cycle's approvals: the report goes back to draft to be changed,
+    # and an approval of the withdrawn submission must not carry over to the next one.
+    recalled_cycle = report.approval_cycle
+    report.approval_cycle += 1
     await _apply_transition(
         db,
         report,
         target_status="draft",
         actor_id=user.id,
         action="report.recall",
-        details={"comment": body.comment},
+        details={"comment": body.comment, "cycle": recalled_cycle},
         ip=client_ip(request),
     )
     await db.refresh(report)

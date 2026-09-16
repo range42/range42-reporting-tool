@@ -18,6 +18,8 @@ export interface ApprovalRecord {
   report_id: string
   approver_id: string
   step: number
+  /** The submission this decision belonged to; compare against the report's `approval_cycle`. */
+  cycle: number
   action: ApprovalAction
   is_admin_override: boolean
   comment: string | null
@@ -80,6 +82,7 @@ export interface ReportDetail {
   metadata: Record<string, unknown> | null
   sections: ReportSection[]
   approval_chain: ApprovalStep[] | null
+  approval_cycle: number
   approval_records: ApprovalRecord[]
   can_approve: boolean
 }

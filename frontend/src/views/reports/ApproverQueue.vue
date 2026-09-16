@@ -70,8 +70,12 @@ const steps = computed<StepView[]>(() => {
   const d = selected.value
   if (!d) return []
   const entries = d.approval_chain ?? []
+  // Only THIS submission's approvals count: a recall or rejection bumps the report's cycle,
+  // superseding earlier ones, so a step approved before a recall is open again.
   const approved = new Set(
-    d.approval_records.filter((r) => r.action === 'approved').map((r) => r.step),
+    d.approval_records
+      .filter((r) => r.action === 'approved' && r.cycle === d.approval_cycle)
+      .map((r) => r.step),
   )
   const count = entries.length || 1
   const requiredIdx = entries.length ? entries.flatMap((e, i) => (e.required ? [i + 1] : [])) : [1]
