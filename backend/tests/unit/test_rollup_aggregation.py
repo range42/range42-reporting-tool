@@ -1,12 +1,11 @@
-"""Task 5 — several evaluators' grades folded into the report's single grade (M8).
+"""Several evaluators' grades folded into the report's single grade.
 
 Each evaluation carries an ``aggregated_weight``, so a lead evaluator can count for more than
 a shadow one. The report grade is the weighted average of the per-evaluator grades.
 
 This exercises the COMPOSITION — sections to an evaluator grade to a report grade — through
-``compute_evaluation_grade`` and W5-3's ``aggregate_overall_grade``. W5-2's
-``compute_report_grade`` is gone; ``test_scoring_aggregate.py`` covers the aggregate in
-isolation, and what is pinned here is that the two halves still meet on the plan's numbers.
+``compute_evaluation_grade`` and ``aggregate_overall_grade``; ``test_scoring_aggregate.py``
+covers the aggregate in isolation.
 """
 
 from decimal import Decimal
@@ -89,18 +88,13 @@ def test_report_grade_ignores_zero_weight_evaluations() -> None:
 
 
 def test_report_grade_excludes_an_in_progress_evaluation() -> None:
-    """The W5-2 behaviour this replaces: an in-progress evaluation used to contribute.
-
-    W5-2's provisional M8 policy let any evaluation with a graded section count, so a grade was
-    visible before anyone finalized. L7 narrows the numerator to completed evaluations, which is
-    why the same input now yields None.
-    """
+    """The numerator is narrowed to completed evaluations, so the same input yields None."""
     in_progress = _ev(_s("8"), eid="still-grading")
     assert _report_grade(in_progress, status="in_progress") is None
 
 
 def test_report_grade_excludes_an_unassigned_evaluation() -> None:
-    # L5 renormalization: the survivor's grade stands unscaled, the removed weight simply goes.
+    # Renormalization: the survivor's grade stands unscaled, the removed weight simply goes.
     kept = _ev(_s("8"), eid="kept")
     dropped = _ev(_s("2"), weight="4", eid="dropped")
     assert aggregate_overall_grade([_facts(kept), _facts(dropped, unassigned=True)]) == Decimal("8.00")
@@ -116,14 +110,10 @@ def test_report_grade_quantizes_after_aggregating_not_before() -> None:
 def test_golden_path_two_evaluators_weighted_report_grade_is_7_41() -> None:
     """Two evaluators at unequal weight — lands on 7.41.
 
-    Constructed here rather than copied: the plan's worked example lives in the gitignored
-    docs/superpowers tree. Evaluator A is Task 4's golden-path evaluation, reused so the two
-    tests chain, and the arithmetic is spelled out so it can be re-derived.
+    A  lead    8.22 (the single-evaluator golden path)  aggregated_weight 2 -> 16.44
+    B  shadow  (5.58 + 6.00) / 2 = 5.79                 aggregated_weight 1 ->  5.79
 
-        A  lead    8.22 (Task 4's golden path)   aggregated_weight 2 -> 16.44
-        B  shadow  (5.58 + 6.00) / 2 = 5.79      aggregated_weight 1 ->  5.79
-
-        22.23 / 3 = 7.41
+    22.23 / 3 = 7.41
     """
     lead = _ev(
         _s("8.5", weight="2", section_def_id="exec"),

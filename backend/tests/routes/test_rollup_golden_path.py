@@ -1,9 +1,9 @@
-"""Task 12 — the plan's worked example, end to end through the real API.
+"""The worked example, end to end through the real API.
 
-The unit-level golden paths (Tasks 4 and 5) use a constructed fixture. This one reproduces the
-W5-2 plan's worked example verbatim, driving every grading mode through the HTTP routes so the
-whole slice — validation, rubric pre-rollup, pass_fail scaling, not_graded exclusion,
-multi-evaluator aggregation, persistence, M17 visibility — is exercised in one pass.
+The unit-level golden paths use a constructed fixture. This one drives every grading mode
+through the HTTP routes so the whole path — validation, rubric pre-rollup, pass_fail scaling,
+not_graded exclusion, multi-evaluator aggregation, persistence, gated visibility — is exercised
+in one pass.
 
     Template: S1 numeric 0-10 w1.0 · S2 pass_fail 0-10 w1.5 · S3 rubric 0-10 w2.0 {A w1 max5, B w1 max5}
               S4 choice, not_graded, w1.0
@@ -18,11 +18,10 @@ multi-evaluator aggregation, persistence, M17 visibility — is exercised in one
 
     report.overall_grade = (8.22·1.00 + 7.00·2.00) / 3.00 = 22.22 / 3.00 = 7.406… -> 7.41
 
-W5-3 CHANGED WHEN THIS PUBLISHES. Under W5-2 each grade save moved the report grade, so the
-worked example reached version 4 by the end. L7 now excludes in-progress evaluations, and §7.2
-requires every gradeable section graded before an evaluation may finalize — which is why Y
-grades all three here rather than S1 alone. The report therefore publishes twice: 8.22 when X
-finalizes, 7.41 when Y does and the gate closes.
+Publication happens on finalize: an in-progress evaluation is excluded, and every gradeable
+section must be graded before an evaluation may finalize — which is why Y grades all three here
+rather than S1 alone. The report therefore publishes twice: 8.22 when X finalizes, 7.41 when Y
+does and the gate closes.
 """
 
 import pytest
@@ -115,7 +114,7 @@ async def test_worked_example_lands_on_8_22_and_7_41(migrated_db: async_sessionm
         await _put_grade(c, ex, rid, evid_x, sids["S2"], {"pass_fail_result": True}, hx)
         scores = [{"criterion": "A", "score": "4"}, {"criterion": "B", "score": "3"}]
         s3 = await _put_grade(c, ex, rid, evid_x, sids["S3"], {"rubric_scores": scores}, hx)
-        assert s3["grade"] == "7.00"  # M7 pre-rollup: 0.70 stretched onto 0-10
+        assert s3["grade"] == "7.00"  # rubric pre-rollup: 0.70 stretched onto 0-10
         assert await _evaluation_grade(c, ex, rid, evid_x, hx) == "8.22"
         # Nothing published yet: X is still in progress, so the report has no grade at all.
         assert await _report_grade(c, ex, rid, ah) == (None, False, 0)

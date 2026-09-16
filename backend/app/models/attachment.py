@@ -8,12 +8,12 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 
 class Attachment(Base, UUIDMixin, TimestampMixin):
-    """A file uploaded to a report section (WP3 S9) — attachment or inline image.
+    """A file uploaded to a report section — attachment or inline image.
 
     ``content_type`` is server-sniffed from magic bytes, never the client claim;
     ``storage_key`` locates the blob behind the StorageBackend Protocol;
     ``classification`` is copied from the exercise at upload time so it travels
-    with the stored file (WP6 export, WP8-C backup).
+    with the stored file.
     """
 
     __tablename__ = "attachment"

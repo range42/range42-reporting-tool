@@ -13,7 +13,7 @@ export interface ChoiceValue {
 export interface ChoiceConfig {
   selection: 'single' | 'multiple'
   values: ChoiceValue[]
-  /** Opaque catalog metadata (G-4): preserved by the backend, never interpreted in v1. */
+  /** Opaque catalog metadata: preserved by the backend, never interpreted. */
   catalog_binding?: Record<string, unknown> | null
 }
 export interface RubricCriterion {
@@ -117,7 +117,7 @@ export const updateSection = (
 ): Promise<Section> => apiPatch<Section>(`${base}/${tid}/sections/${sid}`, body, token)
 export const deleteSection = (token: string, tid: string, sid: string): Promise<void> =>
   apiDelete(`${base}/${tid}/sections/${sid}`, token)
-/** CSV import of choice values (WP3 S12): `code,label` header; additive merge. */
+/** CSV import of choice values: `code,label` header; additive merge. */
 export const importChoiceValues = (
   token: string,
   tid: string,

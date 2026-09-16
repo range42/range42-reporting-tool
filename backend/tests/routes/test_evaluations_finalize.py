@@ -1,9 +1,9 @@
-"""W5-3 Task 2 — ``finalize_policy`` resolution (G-6, missing-row default).
+"""``finalize_policy`` resolution and the finalize endpoint.
 
 ``scoring_config.finalize_policy`` decides whether every assigned evaluator must finalize
-before a report's grade is aggregated. Exercises created before WP5 have no
-``scoring_config`` row at all, so the resolver must answer with the documented default
-rather than NULL — the aggregation branch reads a mode, never an absence.
+before a report's grade is aggregated. An exercise with no ``scoring_config`` row resolves to
+the documented default rather than NULL — the aggregation branch reads a mode, never an
+absence.
 """
 
 import asyncio
@@ -47,7 +47,7 @@ async def _resolve(migrated_db, exercise_id: str) -> str:
 async def test_finalize_policy_defaults_to_all_must_finalize_when_no_scoring_config_row_exists(
     migrated_db: async_sessionmaker,
 ) -> None:
-    # Arrange: an exercise predating WP5 — no scoring_config row of its own.
+    # Arrange: an exercise with no scoring_config row of its own.
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
         ex = await _exercise(c, ah)
@@ -94,10 +94,10 @@ async def test_finalize_policy_reads_the_seeded_default_row(migrated_db: async_s
     assert mode == ALL_MUST_FINALIZE
 
 
-# --- Task 7: POST .../evaluations/{evid}/finalize -------------------------------------
+# --- POST .../evaluations/{evid}/finalize ---------------------------------------------
 #
-# Path shape follows this module's documented L3 deviation — nested under the report, not
-# §6.8's flat /evaluations/{id} — so the exercise-scoped permission dependency has an
+# The path is nested under the report rather than flat so that the exercise-scoped permission
+# dependency has an exercise_id to resolve against.
 # exercise_id to resolve against.
 
 
@@ -403,11 +403,10 @@ async def _audit_actions(migrated_db, resource_id):
 async def test_remaining_evaluators_can_still_finalize_after_the_gate_opened(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """Under ``any_can_finalize`` the first finalize marks the report evaluated (§7.2).
+    """Under ``any_can_finalize`` the first finalize marks the report evaluated.
 
-    That must not strand the other evaluators: their own work is still in progress, and
-    refusing it would leave an evaluation permanently un-finalizable through no fault of the
-    person assigned to it.
+    The remaining evaluators must still be able to finalize their own work, which is still in
+    progress.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -473,20 +472,14 @@ async def test_finalizing_an_evaluated_report_does_not_transition_it_again(
 
 
 # ======================================================================================
-# W5-3 Task 11 — the ``report.evaluated`` emit seam (L11) + WP6 handoff.
+# The ``report.evaluated`` emit seam.
 #
-# WP5 HAS NO WEBHOOKS. No `webhook_config`, no HMAC signer, no delivery engine — those are
-# WP6 (#53/#54). What this task pins down is the CALL SITE: one function that builds the
-# §11.3 payload and records that the event happened. WP6 replaces its body with an outbox
-# insert and every caller keeps working.
+# One function builds the event payload and records that the event happened. The audit row
+# (`event.report_evaluated`) is the only observable for it today, so the seam is asserted
+# through that row.
 #
-# The seam is asserted through the audit row (`event.report_evaluated`) because that is the
-# only observable WP5 has. When WP6 lands, these tests should keep passing unchanged — if
-# they need editing, the seam was not a seam.
-#
-# D1 EXTENDS TO MACHINES. A webhook carrying the per-evaluator breakdown is a peer-visibility
-# hole with extra steps, and a durable one: the payload outlives the request in an outbox, a
-# delivery log and someone's HTTP endpoint.
+# The payload must never carry the per-evaluator breakdown: it leaves the deployment and
+# outlives the request.
 # ======================================================================================
 
 
@@ -547,7 +540,7 @@ async def test_report_evaluated_event_is_not_emitted_when_the_gate_stays_open(
 async def test_report_evaluated_payload_matches_the_architecture_shape(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """§11.3: ``{exercise_id, report_id, team_id, overall_grade, section_grades[]}``."""
+    """Payload shape: ``{exercise_id, report_id, team_id, overall_grade, section_grades[]}``."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -577,11 +570,10 @@ async def test_report_evaluated_payload_matches_the_architecture_shape(
 
 
 async def test_report_evaluated_payload_carries_grade_version(migrated_db: async_sessionmaker) -> None:
-    """ADDITIVE TO §11.3, deliberately (§9-A8).
+    """The payload carries the monotonic grade version.
 
-    Delivery is at-least-once and §11.3 defines no retraction event, so a consumer's only
-    defence against acting on a superseded grade is D3's monotonic version. Without it a
-    reopen-and-regrade is indistinguishable from a duplicate delivery of the original.
+    Delivery is at-least-once and there is no retraction event, so the version is a consumer's
+    only defence against acting on a superseded grade.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -602,10 +594,10 @@ async def test_report_evaluated_payload_carries_grade_version(migrated_db: async
 async def test_report_evaluated_payload_does_not_include_per_evaluator_rows(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """D1 extends to machines — whole-payload scan, not a field check.
+    """No per-evaluator values leak — asserted as a whole-payload scan, not a field check.
 
-    Two evaluators with different grades, so a payload that leaked per-evaluator values would
-    contain 9.00 and 5.00 as well as the 7.00 aggregate.
+    Two evaluators with different grades, so a leaking payload would contain 9.00 and 5.00 as
+    well as the 7.00 aggregate.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -632,12 +624,11 @@ async def test_report_evaluated_payload_does_not_include_per_evaluator_rows(
 async def test_report_evaluated_section_grades_exclude_an_unassigned_evaluator(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """THE PAYLOAD MUST RECONCILE WITH ITSELF.
+    """``section_grades`` is aggregated over the same set as ``overall_grade``.
 
-    ``overall_grade`` counts only contributing evaluations (L7), so ``section_grades`` must be
-    aggregated over the same set. Averaged over every row instead, a payload would publish
-    section values that do not add up to the overall grade it ships alongside them — and the
-    consumer has no way to tell which half to trust.
+    ``overall_grade`` counts only contributing evaluations, so averaging sections over every
+    row instead would publish section values that do not add up to the overall grade shipped
+    alongside them.
 
     Two evaluators grade 9 and 5; the 5 is unassigned before the gate closes. Both halves must
     then read 9.00.
@@ -666,29 +657,19 @@ async def test_report_evaluated_section_grades_exclude_an_unassigned_evaluator(
 
 
 # ======================================================================================
-# W5-3 Task 12 — concurrent finalize by two evaluators.
+# Concurrent finalize by two evaluators.
 #
-# THE RACE: finalize reads every sibling evaluation, then writes the parent report. Two
-# evaluators pressing the button at the same instant each read a pre-state in which the other
-# has not finished, so without serialization you get one of two wrong outcomes:
+# THE RACE: finalize reads every sibling evaluation, then writes the parent report. Without
+# serialization, two evaluators finalizing at the same instant either both see a gate that is
+# still closed (the report is stuck ``under_evaluation`` with every evaluator finished) or lose
+# an update (each aggregates over its own contribution alone and the last write wins).
 #
-#   * neither transitions — both see a gate that is still closed, and the report is stuck
-#     ``under_evaluation`` with every evaluator finished; or
-#   * a lost update — each aggregates over its own contribution alone and the last write wins
-#     with half the data, publishing a grade that averages one evaluator.
+# ``asyncio.gather`` over ``httpx.ASGITransport`` does NOT overlap requests in this harness, so
+# the gathered tests below are BACK-TO-BACK calls: they pin the idempotence of the outcome but
+# cannot fail on a lost update or a stale read. The race itself is driven at the session level,
+# in the two transaction tests at the end of this block.
 #
-# HOW MUCH OF THIS THE HTTP TESTS ACTUALLY COVER: less than it looks. ``asyncio.gather`` over
-# ``httpx.ASGITransport`` does NOT overlap requests in this harness — measured at the handler
-# boundary, request 2 does not enter until request 1 has returned, with one shared client or
-# two. So the gathered tests below are BACK-TO-BACK calls: they pin the idempotence of the
-# outcome (one transition, one event, one version bump, a clean 409) but they cannot fail on a
-# lost update or a stale read.
-#
-# The race itself is therefore exercised at the session level, in the two tests at the end of
-# this block, where two transactions can be driven against each other deterministically.
-#
-# LOCK ORDER IS ALWAYS report-then-evaluation. W5-4's reopen must take the same order or the
-# two slices deadlock against each other in production.
+# LOCK ORDER IS ALWAYS report-then-evaluation; the opposite order deadlocks in production.
 # ======================================================================================
 
 
@@ -729,8 +710,7 @@ async def test_back_to_back_finalize_by_two_evaluators_produces_a_consistent_agg
     """THE LOST-UPDATE ASSERTION.
 
     Grades 8 and 6 at equal weight aggregate to 7.00. Either request aggregating over its own
-    contribution alone would publish 8.00 or 6.00 — both plausible-looking numbers, which is
-    what makes this failure mode survive review.
+    contribution alone would publish 8.00 or 6.00 — both plausible-looking numbers.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -777,7 +757,7 @@ async def test_second_finalize_on_the_same_evaluation_returns_409_not_a_duplicat
 async def test_losing_a_finalize_race_does_not_double_bump_grade_version(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """D3 — the version identifies the published grade, so one crossing is one version.
+    """One crossing is one version.
 
     Two concurrent finalizes publish one aggregate between them. A version bumped twice would
     tell every consumer the grade changed again when it did not.
@@ -816,15 +796,12 @@ async def _report_ids(migrated_db, c, ah):
 async def test_get_report_for_update_sees_state_committed_by_another_transaction(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """THE STALE-READ BUG THIS TASK EXISTS TO CLOSE.
+    """Acquiring the lock and re-reading the row must be the same operation.
 
-    Locking the row is not enough on its own. A handler that loads the report, THEN blocks on
-    the lock, still holds the attribute values it read before waiting — the sessionmaker uses
-    ``expire_on_commit=False``, so nothing invalidates them. The loser of a finalize race would
-    read ``status == 'under_evaluation'`` from that snapshot, decide the report had not crossed
-    yet, and emit a second ``report.evaluated`` for one crossing.
-
-    Acquiring the lock and re-reading the row must be the same operation.
+    The sessionmaker uses ``expire_on_commit=False``, so a handler that loads the report and
+    THEN blocks on the lock still holds the attribute values it read before waiting. The loser
+    of a finalize race would read a stale ``under_evaluation`` and emit a second
+    ``report.evaluated`` for one crossing.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -849,9 +826,9 @@ async def test_get_report_for_update_blocks_a_second_transaction_until_the_first
 ) -> None:
     """Mutual exclusion, asserted rather than assumed.
 
-    ``lock_timeout`` is what makes this deterministic: the second transaction is told to give
-    up after 250ms instead of blocking the suite, so a lock that was never taken shows up as a
-    PASSING acquisition where a failure is expected.
+    ``lock_timeout`` is what makes this deterministic: the second transaction gives up after
+    250ms instead of blocking the suite, so a lock that was never taken shows up as a PASSING
+    acquisition where a failure is expected.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -876,13 +853,9 @@ async def test_get_report_for_update_blocks_a_second_transaction_until_the_first
 
 
 # ======================================================================================
-# The admin-override rejection branches.
-#
-# FOUND UNCOVERED DURING THE W5-4 CLOSE-OUT, and they belong to W5-3's own surface rather
-# than to reopen — so they are tested here, beside the override they guard. Each is a state a
-# real admin reaches: a forgotten comment, a pasted id from the wrong row, a colleague's name
-# typed into the wrong seat. An error branch nothing exercises is an error branch nobody has
-# read since it was written.
+# The admin-override rejection branches. Each is a state a real admin reaches: a forgotten
+# comment, a pasted id from the wrong row, a colleague's name typed into the wrong seat.
+# ======================================================================================
 # ======================================================================================
 
 
@@ -963,9 +936,8 @@ async def test_finalize_on_behalf_of_an_unknown_user_is_404(migrated_db: async_s
 async def test_finalize_on_behalf_of_the_wrong_evaluator_is_422(migrated_db: async_sessionmaker) -> None:
     """An evaluation names exactly ONE evaluator, so the override must name them.
 
-    The stricter check the approval chain cannot make: an approval step names a role that many
-    users satisfy, but crediting a grade to someone who was never assigned it would put a
-    person's name on an assessment they did not make.
+    Crediting a grade to someone who was never assigned it would put a person's name on an
+    assessment they did not make.
     """
     # Arrange: a real user who is simply not this evaluation's evaluator.
     async with client(migrated_db) as c:
@@ -988,8 +960,8 @@ async def test_finalize_on_behalf_of_the_wrong_evaluator_is_422(migrated_db: asy
 async def test_a_second_unassign_of_the_same_evaluator_is_409(migrated_db: async_sessionmaker) -> None:
     """Not idempotent-by-silence, deliberately.
 
-    A silent second unassign would re-run the recompute and publish a fresh grade version for
-    a change that already happened — telling every consumer the grade moved when it did not.
+    A silent second unassign would re-run the recompute and publish a fresh grade version for a
+    change that already happened.
     """
     # Arrange
     async with client(migrated_db) as c:

@@ -1,8 +1,8 @@
-"""W5-3 Task 6 — the evaluation transitions, as behaviour rather than table lookups.
+"""The evaluation transitions, as behaviour rather than table lookups.
 
-``tests/unit/test_state_machine.py`` already asserts which edges ``is_allowed`` permits. What
-was missing is what ``transition()`` *does* on the two evaluation targets: it must leave
-``submitted_at`` alone, and it must emit exactly one audit row.
+``tests/unit/test_state_machine.py`` asserts which edges ``is_allowed`` permits. Asserted here
+is what ``transition()`` *does* on the two evaluation targets: it must leave ``submitted_at``
+alone, and it must emit exactly one audit row.
 
 Pure by design. ``transition()`` only calls ``add()`` and ``flush()`` on its session, so a stub
 stands in for the database and the grading rules stay testable without one.
@@ -93,7 +93,7 @@ async def test_transition_to_evaluated_records_exactly_one_audit_row() -> None:
 
 
 async def test_rejected_transition_mutates_nothing_and_writes_no_audit_row() -> None:
-    # Arrange: recall after evaluation began is blocked by §7.2.
+    # Arrange: recall after evaluation began is blocked.
     report = _report("under_evaluation")
     session = _StubSession()
 
@@ -112,21 +112,17 @@ async def test_rejected_transition_mutates_nothing_and_writes_no_audit_row() -> 
 
 
 def test_evaluated_only_opens_the_reopen_edge() -> None:
-    """W5-1 opened ``evaluated -> under_evaluation`` early for W5-4's reopen.
+    """``evaluated -> under_evaluation`` is open for reopen, and it is the ONLY edge out.
 
-    Task 6's plan text expected ``evaluated`` to still be closed here and asked for the closure
-    to be asserted. It is not closed, deliberately (see the table's own comment), so what is
-    pinned instead is that reopen is the ONLY edge out — nothing may reach ``draft`` or
-    ``submitted`` from a graded report.
+    Nothing may reach ``draft`` or ``submitted`` from a graded report.
     """
     # Arrange / Act / Assert
     assert ALLOWED_TRANSITIONS["evaluated"] == frozenset({"under_evaluation"})
 
 
-# --- W5-4 Task 1: the reopen edge, as behaviour ---------------------------------------
+# --- the reopen edge, as behaviour ----------------------------------------------------
 #
-# The edge itself was opened early (see the test above). What was never asserted is what
-# ``transition()`` DOES when a report walks back to grading — which is the half that a reopen
+# What ``transition()`` DOES when a report walks back to grading — the half that a reopen
 # actually depends on.
 
 

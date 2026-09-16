@@ -1,13 +1,11 @@
 """Approvals belong to a SUBMISSION, not to the report forever.
 
-Before the cycle counter, ``approval_record`` recorded only "step N was approved" with no way
-to say which submission it approved. A recall therefore left the approval standing: the report
-came back as a draft, was resubmitted, and could never be approved again — approve refused with
-``step_already_approved`` and the approver was offered no control, so the report was stuck in
-``pending_approval`` for good.
+``approval_record`` carries a cycle counter so an approval names the submission it approved: a
+recall followed by a resubmission reopens every step instead of leaving the report stuck in
+``pending_approval`` with ``step_already_approved``.
 
-Rejection carries the same rule by decision: content changes after a rejection, so earlier
-steps must sign off again rather than being silently skipped.
+Rejection carries the same rule: content changes after a rejection, so earlier steps must sign
+off again rather than being silently skipped.
 """
 
 import uuid
@@ -79,7 +77,7 @@ async def _cycle(migrated_db: async_sessionmaker, rid: str) -> int:
 
 
 async def test_a_recalled_report_can_be_approved_again(migrated_db: async_sessionmaker) -> None:
-    """The reported bug: recall -> resubmit -> approve was a permanent dead end."""
+    """Recall -> resubmit -> approve must succeed, not dead-end."""
     ah = await _ga(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await _mk_pending(c, ah)
@@ -136,7 +134,7 @@ async def test_approving_the_same_step_twice_in_one_cycle_is_still_refused(migra
 
 
 async def test_rejection_invalidates_an_earlier_step_approval(migrated_db: async_sessionmaker) -> None:
-    """Decided rule: the content changed, so step 1 signs off again rather than being skipped."""
+    """The content changed, so step 1 signs off again rather than being skipped."""
     ah = await _ga(migrated_db)
     chain = [{"role_key": "team_approver", "required": True}, {"role_key": "team_approver", "required": True}]
     async with client(migrated_db) as c:

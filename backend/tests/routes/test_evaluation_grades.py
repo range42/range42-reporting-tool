@@ -9,7 +9,7 @@ from tests.routes._helpers import client
 
 pytestmark = pytest.mark.integration
 
-# weight is required by section_invariant_error (WP3): each criterion needs max_score>0 AND weight>0.
+# weight is required by section_invariant_error: each criterion needs max_score>0 AND weight>0.
 RUBRIC = [{"name": "Clarity", "max_score": 5, "weight": 1}, {"name": "Depth", "max_score": 10, "weight": 1}]
 NUMERIC = {"grade_mode": "numeric", "grade_min": 0, "grade_max": 10}
 PASS_FAIL = {"grade_mode": "pass_fail"}
@@ -114,7 +114,7 @@ async def test_put_numeric_grade_rejects_bad_payloads(migrated_db: async_session
 async def test_put_pass_fail_result_stores_zero_or_one(
     migrated_db: async_sessionmaker, result: bool, expected: str
 ) -> None:
-    # A4 — store 0/1; W5-2's rollup applies the grade_max scaling.
+    # Store 0/1; the rollup applies the grade_max scaling.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **PASS_FAIL)
@@ -144,8 +144,8 @@ async def test_put_rubric_scores_persists_the_criteria_array(migrated_db: async_
 
 
 async def test_put_rubric_persists_the_pre_rolled_grade_into_section_grade(migrated_db: async_sessionmaker) -> None:
-    # M7 — flipped from W5-1's "leaves grade null"; Task 8 wired the pre-rollup in. The section
-    # declares no range, so Clarity 4/5 = 80% lands on [0, 1].
+    # The rubric is pre-rolled on write. The section declares no range, so Clarity 4/5 = 80%
+    # lands on [0, 1].
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **RUBRIC_SECTION)
@@ -160,7 +160,7 @@ async def test_rubric_grade_participates_in_the_report_rollup(migrated_db: async
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **RUBRIC_SECTION)
         body = {"rubric_scores": [{"criterion": "Clarity", "score": "4"}, {"criterion": "Depth", "score": "8"}]}
         await c.put(_grade_url(ex, rid, evid, sid), json=body, headers=h)
-        # W5-3 L7: a grade reaches the report only once its evaluation is finalized.
+        # A grade reaches the report only once its evaluation is finalized.
         await finalize(c, h, ex, rid, evid)
     async with migrated_db() as s:
         og = (
@@ -193,7 +193,7 @@ async def test_put_rubric_without_scores_returns_422(migrated_db: async_sessionm
 
 
 async def test_put_rubric_on_section_without_rubric_criteria_returns_422(migrated_db: async_sessionmaker) -> None:
-    # Edge case 15 — a template misconfiguration WP3 does not forbid. 422, never a 500.
+    # A template misconfiguration the authoring surface does not forbid. 422, never a 500.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **RUBRIC_SECTION)
@@ -215,7 +215,7 @@ async def test_put_rubric_on_section_without_rubric_criteria_returns_422(migrate
 async def test_put_grade_on_not_graded_section_returns_422_and_creates_no_row(
     migrated_db: async_sessionmaker,
 ) -> None:
-    # §7.2's finalize condition and §4.2's rollup rule both read the ABSENCE of the row.
+    # The finalize condition and the rollup rule both read the ABSENCE of the row.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah)  # default grade_mode = not_graded
@@ -240,9 +240,8 @@ async def test_first_grade_write_moves_report_to_under_evaluation(migrated_db: a
 
 
 async def test_grade_write_recomputes_report_overall_grade(migrated_db: async_sessionmaker) -> None:
-    # FLIPPED TWICE. W5-1 asserted both stayed null/zero; W5-2's Task 8 wired the A7 rollup in
-    # so a grade save published immediately; W5-3's L7 now requires the evaluation to be
-    # finalized first, so the publication happens on finalize and inside that transaction.
+    # Publication happens on finalize and inside that transaction: an in-progress evaluation
+    # contributes nothing to the report.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **NUMERIC)
@@ -268,11 +267,10 @@ async def test_grade_write_recomputes_the_callers_evaluation_overall_grade(migra
 
 
 async def test_grade_edits_before_finalize_publish_one_version(migrated_db: async_sessionmaker) -> None:
-    """W5-3: re-grading while still in progress publishes nothing, so it costs no versions.
+    """Re-grading while still in progress publishes nothing, so it costs no versions.
 
-    W5-2 asserted one bump per changed save. Under L7 an in-progress evaluation contributes
-    nothing to the report, so all three saves below leave ``overall_grade`` NULL and the single
-    version comes from the finalize.
+    An in-progress evaluation contributes nothing to the report, so all three saves below leave
+    ``overall_grade`` NULL and the single version comes from the finalize.
     """
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
@@ -321,8 +319,8 @@ async def test_grade_write_on_completed_evaluation_returns_409(migrated_db: asyn
             await s.commit()
         r = await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "5"}, headers=h)
         assert r.status_code == 409
-        # Renamed from "evaluation_completed" in W5-4: one guard now answers for grades,
-        # feedback and grade deletion, and its sibling code is "evaluation_unassigned".
+        # One guard answers for grades, feedback and grade deletion, and its sibling code is
+        # "evaluation_unassigned".
         assert r.json()["error"]["message"] == "evaluation_finalized"
 
 
@@ -365,7 +363,7 @@ async def test_get_grades_as_global_admin_returns_every_evaluators_grades(migrat
         evid2 = await assign(c, ah, ex, rid, uid2)
         await c.put(_grade_url(ex, rid, evid1, sid), json={"grade": "4"}, headers=h1)
         await c.put(_grade_url(ex, rid, evid2, sid), json={"grade": "9"}, headers=h2)
-        # Admin bypasses D1 and can read each evaluation's grades, one evaluation at a time.
+        # Admin bypasses evaluator isolation and can read each evaluation's grades, one at a time.
         a = (await c.get(_grades_url(ex, rid, evid1), headers=ah)).json()["data"]
         b = (await c.get(_grades_url(ex, rid, evid2), headers=ah)).json()["data"]
         assert [r["grade"] for r in a] == ["4.00"]
@@ -386,7 +384,7 @@ async def test_two_evaluators_grade_the_same_section_independently(migrated_db: 
 
 
 async def test_grade_round_trips_as_decimal_not_float(migrated_db: async_sessionmaker) -> None:
-    # A float anywhere in this path will bite W5-2's arithmetic.
+    # A float anywhere in this path will bite the grading arithmetic.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **NUMERIC)
@@ -407,7 +405,7 @@ async def test_pass_fail_section_may_declare_grade_bounds(migrated_db: async_ses
     numeric siblings. The stored grade stays 0/1 — rollup.py scales it, not the write path."""
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
-        # _report_with_section asserts 201 on the section POST, which is the half that used to fail.
+        # _report_with_section asserts 201 on the section POST.
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah, **BOUNDED_PASS_FAIL)
         d = (await c.put(_grade_url(ex, rid, evid, sid), json={"pass_fail_result": True}, headers=h)).json()["data"]
         assert d["pass_fail_result"] is True

@@ -103,7 +103,7 @@ async def test_recall_forbidden_without_permission(migrated_db: async_sessionmak
     assert await _audit_count(migrated_db, "report.recall") == 0
 
 
-# --- W5-4: the recall guard against a live evaluation surface ------------------------
+# --- the recall guard against a live evaluation surface ------------------------------
 #
 # ORDER TRAP. ``_require_status(report, "submitted")`` runs BEFORE the evaluation guard, and
 # the first evaluator write moves the report to ``under_evaluation`` — so a report that has a
@@ -153,7 +153,7 @@ async def _grade(c, ex, rid, evid, sid, value, headers) -> None:
 async def test_recall_is_allowed_when_evaluations_are_only_assigned(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """Assignment is not the start of work. The pre-WP5 permissiveness must not regress."""
+    """Assignment is not the start of work, so recall stays permitted."""
     # Arrange
     ah, _ = await _ga(migrated_db)
     async with client(migrated_db) as c:

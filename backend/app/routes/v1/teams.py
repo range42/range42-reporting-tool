@@ -100,7 +100,7 @@ async def list_team_members(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_team_membership),
 ) -> DataEnvelope[list[TeamMemberOut]]:
-    """Members of a team — powers the assigned-writer selector (L7)."""
+    """Members of a team — powers the assigned-writer selector."""
     await _get_team(db, exercise_id, team_id)
     rows = (
         await db.execute(

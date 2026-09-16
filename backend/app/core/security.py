@@ -1,4 +1,4 @@
-"""Token verification boundaries (shape reservation — no impl yet).
+"""Token verification boundaries.
 
 Two distinct token families exist, with different trust models:
 
@@ -13,8 +13,6 @@ Two distinct token families exist, with different trust models:
    from the JWKS endpoint advertised at ``OIDC_ISSUER_URL``). We never hold an
    asymmetric private key — there is no asymmetric key management on our side
    for v1.
-
-Implementations (mint/verify app JWTs, JWKS fetch + cache + verify) land in WP2.
 """
 
 from dataclasses import dataclass
@@ -34,7 +32,7 @@ class InvalidToken(Exception):
 
 @dataclass(frozen=True)
 class AppClaims:
-    """Decoded app-JWT payload (minimal-claims model, see design L1)."""
+    """Decoded app-JWT payload (minimal-claims model)."""
 
     sub: str
     is_global_admin: bool

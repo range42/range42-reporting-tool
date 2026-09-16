@@ -1,20 +1,16 @@
-"""Scoring rollup (WP5 W5-2 — A7, the math).
+"""Scoring rollup: the grade arithmetic and the single write that publishes it.
 
-SOLE-WRITER CONTRACT: this module is the *only* writer of ``report.overall_grade``.
-It honors every grading mode — ``not_graded`` / ``manual`` / ``pass_fail`` /
-``rubric`` / ``aggregated_weight`` — and returns the §6.10 timeline shape so
-callers can render grade history. No other code path may set ``overall_grade``.
+SOLE-WRITER CONTRACT: this module is the *only* writer of ``report.overall_grade``. It honors
+every grading mode — ``not_graded`` / ``manual`` / ``pass_fail`` / ``rubric`` /
+``aggregated_weight`` — and returns the timeline shape so callers can render grade history.
+No other code path may set ``overall_grade``.
 
-STRUCTURE (M3) — a pure core wrapped in a thin persistence shell:
+STRUCTURE — a pure core wrapped in a thin persistence shell:
 
-* The ``compute_*`` functions are pure. They take the ``*Input`` dataclasses below, touch no
-  database and no ORM object, and are exhaustively unit-tested without a session. All grading
-  arithmetic lives here.
-* ``recompute_report_grade`` (Task 7) is the shell: it loads rows, calls the pure core, and
-  performs the single write, inside the caller's transaction.
-
-Keeping the split means the scoring rules can be reasoned about — and re-derived by hand from
-a failing report — without standing up a database.
+* The ``compute_*`` functions are pure: they take the ``*Input`` dataclasses below, touch no
+  database and no ORM object, and hold all the grading arithmetic.
+* ``recompute_report_grade`` is the shell: it loads rows, calls the pure core, and performs
+  the single write, inside the caller's transaction.
 """
 
 from __future__ import annotations
@@ -47,9 +43,9 @@ _GRADE_MODES = frozenset({"numeric", "pass_fail", "rubric", "not_graded"})
 class SectionGradeInput:
     """One section's grading state, flattened from ``template_section_def`` + ``section_grade``.
 
-    ``grade`` is whatever is stored on the row: the numeric grade, 0/1 for ``pass_fail`` (M6
-    scales it here, not at write time), or the pre-rolled rubric value (M7). ``None`` means no
-    grade has been recorded yet.
+    ``grade`` is whatever is stored on the row: the numeric grade, 0/1 for ``pass_fail``
+    (scaled here, not at write time), or the pre-rolled rubric value. ``None`` means no grade
+    has been recorded yet.
     """
 
     section_def_id: str
@@ -59,7 +55,7 @@ class SectionGradeInput:
     grade_min: Decimal | None
     grade_max: Decimal | None
     grade_weight: Decimal
-    # Template ordering, echoed into the §6.10 timeline so sections render in authoring order.
+    # Template ordering, echoed into the timeline so sections render in authoring order.
     position: int = 0
 
 
@@ -71,13 +67,12 @@ class EvaluationInput:
     evaluator_id: str
     aggregated_weight: Decimal
     sections: tuple[SectionGradeInput, ...] = ()
-    # M16 — feeds the derived ``evaluated_at``; None while this evaluator is still working.
+    # Feeds the derived ``evaluated_at``; None while this evaluator is still working.
     completed_at: datetime | None = None
-    # L7 — whether this evaluation feeds the GRADE. Carried as a resolved boolean rather than
-    # as ``status``/``unassigned_at`` so the pure layer stays free of the predicate's rules
-    # while still being able to obey it. The timeline needs both answers at once: section
-    # grades must exclude non-contributors, while ``evaluated_at`` and ``evaluator_count``
-    # must keep counting them (M16) — which a pre-filtered input list could not express.
+    # Whether this evaluation feeds the GRADE. A resolved boolean rather than
+    # ``status``/``unassigned_at`` so the pure layer stays free of the predicate's rules. The
+    # timeline needs both answers at once: section grades exclude non-contributors, while
+    # ``evaluated_at`` and ``evaluator_count`` keep counting them.
     contributes: bool = True
 
 
@@ -89,9 +84,8 @@ def _dec(v: object) -> Decimal:
 def _resolve_bounds(grade_min: Decimal | None, grade_max: Decimal | None) -> tuple[Decimal, Decimal]:
     """The section's output range, defaulting to [0, 1] when the template declares none.
 
-    A section that never declared a range has no scale to stretch onto, so a normalized 0..1
-    fraction is the honest answer. Non-numeric sections on a mixed template should declare
-    bounds — see ``section_invariant_error`` — or they under-score beside numeric siblings.
+    Non-numeric sections on a mixed template should declare bounds — see
+    ``section_invariant_error`` — or they under-score beside numeric siblings.
     """
     low = grade_min if grade_min is not None else Decimal(0)
     high = grade_max if grade_max is not None else Decimal(1)
@@ -99,7 +93,7 @@ def _resolve_bounds(grade_min: Decimal | None, grade_max: Decimal | None) -> tup
 
 
 def _criterion_weight(c: dict[str, Any]) -> Decimal:
-    """§4.2's rubric_criteria shape does not mark ``weight`` required; absent means 1."""
+    """The rubric_criteria shape does not mark ``weight`` required; absent means 1."""
     w = c.get("weight")
     return Decimal(1) if w is None else _dec(w)
 
@@ -116,7 +110,7 @@ def compute_rubric_rollup(
     grade_min: Decimal | None,
     grade_max: Decimal | None,
 ) -> Decimal | None:
-    """Pre-roll rubric criteria into one section grade (§4.2).
+    """Pre-roll rubric criteria into one section grade.
 
     Each criterion is scored as a fraction of its OWN maximum; those fractions are averaged by
     criterion weight and stretched onto the section's range:
@@ -124,16 +118,13 @@ def compute_rubric_rollup(
         normalized = Σ((score / max_score) · weight) / Σ(weight)
         grade      = grade_min + normalized · (grade_max - grade_min)
 
-    OPERATOR DECISION (2026-09-01) — this replaces the plan's Σ(score·w)/Σ(max_score·w). Under
-    that formula a criterion with a larger ``max_score`` carries more influence than its
-    ``weight`` declares, so the two fields fight over the same job. Here ``weight`` alone
-    controls influence and ``max_score`` only sets granularity. Changing this back silently
-    re-grades every rubric section ever scored, so treat it as a data migration, not a tweak.
+    ``weight`` alone controls influence; ``max_score`` only sets granularity. Changing this
+    formula silently re-grades every rubric section ever scored — treat it as a data migration.
 
     Criteria with no submitted score are excluded from BOTH sums. Scores naming a criterion
     that no longer exists on the template are ignored, and a score above its criterion's
-    maximum is clamped — a template edit must not break, or inflate, the rollup of an
-    already-graded report. Returns None when nothing can be computed.
+    maximum is clamped, so a template edit cannot break or inflate an already-graded report.
+    Returns None when nothing can be computed.
     """
     if not criteria or not scores:
         return None
@@ -159,13 +150,11 @@ def compute_rubric_rollup(
 
 
 def _scale_pass_fail(s: SectionGradeInput) -> Decimal:
-    """§4.2: '1.0=pass, 0.0=fail scaled to grade_max'. The stored value is 0/1 (W5-1 L8) and is
-    scaled here, so re-ranging a template re-scores old reports instead of freezing the number.
+    """Scale a stored pass/fail 0/1 onto the section's range: a pass is worth grade_max.
 
-    A template MAY declare grade_min/grade_max on a pass_fail section (operator decision,
-    2026-09-01) — a pass is then worth grade_max, keeping it comparable with numeric siblings
-    on a mixed template. Sections authored before that carry no bounds and scale onto [0, 1],
-    where a pass counts as 1; they need a template edit to score fairly.
+    Scaling happens here rather than at write time, so re-ranging a template re-scores old
+    reports instead of freezing the number. A section with no declared bounds scales onto
+    [0, 1], where a pass counts as 1.
     """
     if s.grade not in (Decimal(0), Decimal(1)):
         raise ValueError(f"pass_fail grade must be 0 or 1, got {s.grade}")
@@ -176,9 +165,9 @@ def _scale_pass_fail(s: SectionGradeInput) -> Decimal:
 def compute_section_value(s: SectionGradeInput) -> Decimal | None:
     """The scaled value this section contributes, or None when it contributes nothing.
 
-    None means EXCLUDED FROM BOTH numerator and weight denominator (§4.2 rollup rule) —
-    either the section is ``not_graded`` (M4), or it is gradable but ungraded so far (M5).
-    Returning 0 for either case would silently depress the average instead.
+    None means EXCLUDED FROM BOTH the numerator and the weight denominator — the section is
+    either ``not_graded`` or gradable but ungraded so far. Returning 0 would depress the
+    average instead.
     """
     if s.grade_mode not in _GRADE_MODES:
         raise ValueError(f"unknown grade_mode {s.grade_mode!r}")
@@ -188,16 +177,15 @@ def compute_section_value(s: SectionGradeInput) -> Decimal | None:
         return None
     if s.grade_mode == "pass_fail":
         return _scale_pass_fail(s)
-    return s.grade  # numeric, and rubric (pre-rolled per M7)
+    return s.grade  # numeric, and rubric (pre-rolled)
 
 
 def has_mixed_grade_max(sections: Sequence[SectionGradeInput]) -> bool:
     """Whether the contributing sections disagree about their upper bound.
 
-    M12 keeps the RAW weighted average and does not normalize across scales, so a 0-100
-    section averaged with a 0-10 one legitimately dominates. That is almost always a template
-    mistake rather than an intent, hence the flag — the caller warns, the maths does not change.
-    Sections that contribute nothing are ignored; their bounds never reach the average.
+    The rollup keeps the RAW weighted average and does not normalize across scales, so a 0-100
+    section averaged with a 0-10 one dominates. This flag lets the caller warn; the maths does
+    not change. Sections that contribute nothing are ignored.
     """
     maxima = {s.grade_max for s in sections if s.grade_mode != "not_graded" and s.grade_max is not None}
     return len(maxima) > 1
@@ -206,9 +194,8 @@ def has_mixed_grade_max(sections: Sequence[SectionGradeInput]) -> bool:
 def compute_evaluation_grade(ev: EvaluationInput) -> Decimal | None:
     """One evaluator's overall grade for a report.
 
-    Sections contributing None — ``not_graded`` (M4) or ungraded (M5) — are excluded from BOTH
-    the numerator and the weight denominator. A zero-weight section is excluded too: it would
-    add nothing to either sum, and keeping it risks a 0/0.
+    Sections contributing None — ``not_graded`` or ungraded — are excluded from BOTH the
+    numerator and the weight denominator. A zero-weight section is excluded too, to avoid 0/0.
     """
     pairs: list[tuple[Decimal, Decimal]] = []
     for s in ev.sections:
@@ -227,15 +214,13 @@ def compute_evaluation_grade(ev: EvaluationInput) -> Decimal | None:
     return None if avg is None else quantize_grade(avg)
 
 
-# W5-2's ``compute_report_grade`` / ``_contributing_evaluations`` are gone. Its M8 rule was
-# provisional — any evaluation with a graded section contributed, because nothing could reach
-# ``completed`` yet. W5-3 replaces it with ``aggregate.aggregate_overall_grade``, which reads
-# the status and ``unassigned_at`` that ``EvaluationInput`` deliberately never carried (L7).
+# The report-level aggregate lives in ``aggregate.aggregate_overall_grade``, which reads the
+# status and ``unassigned_at`` that ``EvaluationInput`` deliberately never carries.
 
 
 @dataclass(frozen=True)
 class GradeTimeline:
-    """What ``recompute_report_grade`` hands back: the persisted grade plus its §6.10 entry.
+    """What ``recompute_report_grade`` hands back: the persisted grade plus its timeline entry.
 
     ``entry`` carries the full timeline shape so a caller can render grade history without a
     second query. It is None only when the report has no evaluations to describe.
@@ -247,36 +232,31 @@ class GradeTimeline:
     entry: TimelineEntry | None = None
 
 
-# The WP1 shape reservation ``rollup(report_id)`` is gone: ``recompute_report_grade`` below is
-# the real entry point, and it needs the caller's session to honour the transaction contract
-# that a module-level function could not.
+# ``recompute_report_grade`` below is the entry point; it takes the caller's session so the
+# write honours the caller's transaction.
 
 
-# --- persistence shell (M3) ---------------------------------------------------
+# --- persistence shell --------------------------------------------------------
 #
 # Everything above is pure. Everything below touches the database, and only through the
-# caller's session — it never commits. Keeping the boundary here is what lets the grading
-# rules be tested without a database at all.
+# caller's session — it never commits.
 
 
 def _bump_grade_version(report: Report) -> None:
-    """D3 — THE ONLY PLACE ``grade_version`` IS INCREMENTED.
+    """THE ONLY PLACE ``grade_version`` IS INCREMENTED.
 
-    Monotonic by construction: +1, never a recomputed or reset value, so a version can never
-    be reused for a different grade. Every caller must funnel through here — a second
-    increment site is how the counter starts lying to consumers who use it to detect stale
-    published grades. Task 10's sole-writer guard asserts this function is unique.
+    Monotonic by construction: +1, never a recomputed or reset value, so a version is never
+    reused for a different grade. Every caller must funnel through here; the sole-writer guard
+    test asserts this function is unique.
     """
     report.grade_version = report.grade_version + 1
 
 
 async def _lock_report_row(db: AsyncSession, report_id: uuid.UUID) -> None:
-    """Serialize concurrent recomputes of the same report (B9).
+    """Serialize concurrent recomputes of the same report.
 
-    Two evaluators saving a grade at the same moment would otherwise read the same
-    ``grade_version``, both write version+1, and publish two different grades under one
-    version. SELECT ... FOR UPDATE makes the second wait for the first to commit, so the
-    versions stay strictly monotonic. Contention is per-report and the section is short.
+    SELECT ... FOR UPDATE, so two evaluators saving a grade at the same moment cannot both
+    write version+1 and publish two different grades under one version.
     """
     await db.execute(select(Report.id).where(Report.id == report_id).with_for_update())
 
@@ -284,9 +264,9 @@ async def _lock_report_row(db: AsyncSession, report_id: uuid.UUID) -> None:
 async def _load_evaluation_inputs(db: AsyncSession, report: Report) -> list[tuple[EvaluationInput, Evaluation]]:
     """Every evaluation of ``report`` as a pure input, paired with its ORM row.
 
-    THE ONLY ORM-TOUCHING LOAD in this module. Three queries regardless of how many
-    evaluators or sections exist — evaluations, section definitions, then all grades at once.
-    A per-evaluation or per-section query here becomes an N+1 on every grade save.
+    THE ONLY ORM-TOUCHING LOAD in this module. Three queries regardless of how many evaluators
+    or sections exist — evaluations, section definitions, then all grades at once. A
+    per-evaluation or per-section query here becomes an N+1 on every grade save.
     """
     evaluations = (
         (await db.execute(select(Evaluation).where(Evaluation.report_id == report.id).order_by(Evaluation.created_at)))
@@ -345,7 +325,7 @@ async def _load_evaluation_inputs(db: AsyncSession, report: Report) -> list[tupl
 
 
 def evaluation_facts(ev: Evaluation) -> EvaluationFacts:
-    """Project one ORM row onto the narrow shape aggregation and the gate agree on (L7).
+    """Project one ORM row onto the narrow shape aggregation and the gate agree on.
 
     The single mapping site: ``unassigned_at IS NULL`` is translated to ``is_unassigned`` here
     and nowhere else, so the numerator and the gate can never disagree about who counts.
@@ -362,7 +342,7 @@ def evaluation_facts(ev: Evaluation) -> EvaluationFacts:
 async def load_evaluation_facts(db: AsyncSession, report_id: uuid.UUID) -> list[EvaluationFacts]:
     """Every evaluation of ``report_id`` as aggregation facts. One SELECT, shared with the gate.
 
-    Filters NOTHING: the L7 predicate decides what counts, not the SQL, so an admin-facing
+    Filters NOTHING: the counted predicate decides what counts, not the SQL, so an admin-facing
     breakdown can still show the unassigned rows this same query returns. Ordered by
     ``created_at`` so two callers see the same sequence.
     """
@@ -381,7 +361,7 @@ async def _timeline_for(
     *,
     is_manual: bool,
 ) -> GradeTimeline:
-    """Wrap the persisted state in the §6.10 shape. Imported here, not at module scope,
+    """Wrap the persisted state in the timeline shape. Imported here, not at module scope,
     because ``timeline`` imports this module."""
     from app.services.scoring.timeline import ReportMeta, build_timeline_entry
 
@@ -413,9 +393,9 @@ async def _timeline_for(
 async def load_evaluation_inputs(db: AsyncSession, report: Report) -> list[EvaluationInput]:
     """Every evaluation of ``report`` as a pure input, ORM rows dropped.
 
-    Unfiltered on purpose — each input carries its own ``contributes`` verdict, so a consumer
-    gets the L7 rules applied per field rather than losing the non-contributors it still needs
-    to count. ``aggregate_section_grades`` is what honours the flag.
+    Unfiltered on purpose: each input carries its own ``contributes`` verdict, so a consumer
+    keeps the non-contributors it still needs to count. ``aggregate_section_grades`` honours
+    the flag.
     """
     return [inp for inp, _row in await _load_evaluation_inputs(db, report)]
 
@@ -429,26 +409,19 @@ async def recompute_report_grade(
     ip: str | None = None,
     force_version_bump: bool = False,
 ) -> GradeTimeline:
-    """Recompute and persist grades for ``report``, returning its §6.10 timeline.
+    """Recompute and persist grades for ``report``, returning its timeline entry.
 
-    A7 SOLE WRITER of ``report.overall_grade``, ``evaluation.overall_grade`` and (D3)
-    ``report.grade_version``. Runs inside the CALLER'S transaction — never commits, so a
-    failure later in the request rolls the grade back with everything else.
+    SOLE WRITER of ``report.overall_grade``, ``evaluation.overall_grade`` and
+    ``report.grade_version``. Runs inside the CALLER'S transaction and never commits.
 
     Per-evaluator grades are always recomputed. The report-level grade is skipped when
-    ``report.overall_grade_is_manual`` is true (M9), and ``grade_version`` is then NOT
-    incremented (D3) because nothing new was published.
+    ``report.overall_grade_is_manual`` is true, and ``grade_version`` is then NOT incremented
+    because nothing new was published.
 
-    ``force_version_bump`` PUBLISHES A NEW VERSION EVEN WHEN THE NUMBER IS UNCHANGED. The
-    default is right for a grade save, where bumping on an unchanged aggregate would tell
-    consumers the grade moved when it did not. It is wrong for a reopen: two evaluators who
-    agreed exactly leave the aggregate untouched when one is reopened, yet the report has left
-    ``evaluated`` and its grade now rests on fewer evaluations. Without the bump the
-    supersession event announces that version N supersedes version N, which tells a consumer
-    nothing at all.
-
-    The decision stays here rather than at the call site because this function is the sole
-    writer of the counter; the caller supplies the intent, never the increment.
+    ``force_version_bump`` publishes a new version even when the number is unchanged. The
+    default (off) is right for a grade save; a reopen needs it, because the report left
+    ``evaluated`` and its grade now rests on fewer evaluations. The caller supplies the intent,
+    never the increment.
     """
     await _lock_report_row(db, report.id)
     evaluations = await _load_evaluation_inputs(db, report)
@@ -463,8 +436,7 @@ async def recompute_report_grade(
     # grades rather than the values the row held on load.
     new_grade = aggregate_overall_grade([evaluation_facts(row) for _, row in evaluations])
     # Numeric comparison, never str(): NUMERIC(5,2) round-trips as Decimal("8.00") while the
-    # fresh computation gives Decimal("8"). Those are ==; their str() forms are not, and
-    # comparing strings would bump grade_version on every single save.
+    # fresh computation gives Decimal("8"). Those are ==; their str() forms are not.
     if new_grade != report.overall_grade or force_version_bump:
         previous = report.overall_grade
         report.overall_grade = new_grade
@@ -498,11 +470,10 @@ async def set_manual_grade(
     reason: str,
     ip: str | None = None,
 ) -> GradeTimeline:
-    """Override ``report.overall_grade`` by hand, or clear the override (M9).
+    """Override ``report.overall_grade`` by hand, or clear the override.
 
-    Lives in this module so M2 holds literally: every write to ``overall_grade`` goes through
-    ``rollup``. ``value=None`` clears the override and hands control back to the computation,
-    recomputing immediately so the report never sits on a stale manual number.
+    Lives in this module so the sole-writer contract holds literally. ``value=None`` clears the
+    override and recomputes immediately, so the report never sits on a stale manual number.
     """
     if value is None:
         report.overall_grade_is_manual = False

@@ -1,12 +1,11 @@
-"""Grade-mode write validation (WP5 W5-1, L8).
+"""Grade-mode write validation.
 
-THE SOLE INTERPRETER OF ``grade_mode`` ON WRITE. W5-2's rollup imports this module rather
-than re-deriving the mode table; a second copy of these rules is how the two slices drift.
+THE SOLE INTERPRETER OF ``grade_mode`` ON WRITE. The rollup imports this module rather than
+re-deriving the mode table.
 
-Pure and DB-free: a function of ``(TemplateSectionDef, SectionGradeUpsert)`` only, so the
-whole table is unit-testable without a database. Raises :class:`GradeValidationError`; the
-route maps it to a 422 (repo convention — services raise domain errors, routes map them,
-matching ``state_machine.InvalidTransition``).
+Pure and DB-free: a function of ``(TemplateSectionDef, SectionGradeUpsert)`` only. Raises
+:class:`GradeValidationError`; the route maps it to a 422 (repo convention — services raise
+domain errors, routes map them).
 
 The mode table:
 
@@ -34,7 +33,7 @@ INVALID_FOR_MODE = "invalid_grade_for_mode"
 NOT_GRADED = "section_not_graded"
 NO_RUBRIC_CRITERIA = "section_has_no_rubric_criteria"
 
-# A4 — pass/fail is stored as 0/1; W5-2's rollup applies the grade_max scaling.
+# Pass/fail is stored as 0/1; the rollup applies the grade_max scaling.
 _PASS = Decimal("1")
 _FAIL = Decimal("0")
 
@@ -56,7 +55,7 @@ def _dec(v: object) -> Decimal | None:
 
 
 def _reject_other_channels(body: SectionGradeUpsert, allowed: str) -> None:
-    """One grading channel per row (§4.2) — every channel but ``allowed`` must be unset."""
+    """One grading channel per row — every channel but ``allowed`` must be unset."""
     for channel in ("grade", "pass_fail_result", "rubric_scores"):
         if channel != allowed and getattr(body, channel) is not None:
             raise GradeValidationError(INVALID_FOR_MODE)
@@ -82,7 +81,7 @@ def _validate_pass_fail(_defn: TemplateSectionDef, body: SectionGradeUpsert) -> 
 
 def _validate_rubric(defn: TemplateSectionDef, body: SectionGradeUpsert) -> ValidatedGrade:
     _reject_other_channels(body, "rubric_scores")
-    # Edge case 15 — a template misconfiguration WP3 does not forbid. 422, never a 500.
+    # A template misconfiguration the authoring layer does not forbid. 422, never a 500.
     if not defn.rubric_criteria:
         raise GradeValidationError(NO_RUBRIC_CRITERIA)
     if body.rubric_scores is None:
@@ -93,11 +92,10 @@ def _validate_rubric(defn: TemplateSectionDef, body: SectionGradeUpsert) -> Vali
         ceiling = maxima.get(entry.criterion)
         if ceiling is None or entry.score < 0 or entry.score > ceiling:
             raise GradeValidationError(INVALID_FOR_MODE)
-        # score as str, not float: JSONB has no Decimal and a float here would bite W5-2.
+        # score as str, not float: JSONB has no Decimal, and a float would lose precision.
         scored.append({"criterion": entry.criterion, "score": str(entry.score), "note": entry.note})
-    # M7 — pre-roll the criteria into the section's own grade and persist it alongside the
-    # scores, so the report rollup reads one number per section instead of re-deriving the
-    # rubric every time. rollup.compute_rubric_rollup is the sole owner of that formula.
+    # Pre-roll the criteria into the section's own grade and persist it alongside the scores,
+    # so the rollup reads one number per section. rollup.compute_rubric_rollup owns the formula.
     grade = rollup.compute_rubric_rollup(
         defn.rubric_criteria, scored, grade_min=_dec(defn.grade_min), grade_max=_dec(defn.grade_max)
     )
@@ -114,8 +112,8 @@ _VALIDATORS = {
 def validate_grade_payload(defn: TemplateSectionDef, body: SectionGradeUpsert) -> ValidatedGrade:
     """Return ``(grade, pass_fail_result, rubric_scores)`` to persist, or raise.
 
-    ``not_graded`` never yields a row: §7.2's finalize condition and §4.2's rollup rule both
-    read the *absence* of a ``section_grade``, so creating one would corrupt both.
+    ``not_graded`` never yields a row: both the finalize condition and the rollup rule read the
+    *absence* of a ``section_grade``, so creating one would corrupt both.
     """
     if defn.grade_mode == "not_graded":
         raise GradeValidationError(NOT_GRADED)

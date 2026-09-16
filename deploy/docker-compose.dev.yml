@@ -1,12 +1,10 @@
-# Dev-only overlay: the local OIDC provider plus the app wiring that points at
-# it. Kept out of docker-compose.yml deliberately — the prod overlay publishes
-# only Caddy's ports and must never run a static-password IdP.
+# Dev-only overlay: the local OIDC provider plus the app wiring that points at it.
 #
-# Never combine this file with docker-compose.prod.yml.
+# NEVER combine this file with docker-compose.prod.yml — prod must not run a
+# static-password IdP.
 #
-# `dex` has to resolve to the same name from both sides: discovery runs
-# server-side at boot, the login redirect is followed by the browser, and the
-# `iss` claim has to match either way. Compose DNS covers the in-network side.
+# `dex` has to resolve to the same name from both sides: discovery runs server-side at boot,
+# the login redirect is followed by the browser, and the `iss` claim has to match either way.
 services:
   dex:
     image: ghcr.io/dexidp/dex:v2.45.1
@@ -20,9 +18,8 @@ services:
       retries: 20
 
   backend:
-    # Merged with the base list, not replacing it. Discovery runs once at boot
-    # and a failure is only logged, so a backend that wins the race comes up
-    # permanently OIDC-less until restarted.
+    # Merged with the base list, not replacing it. Discovery runs once at boot and a failure
+    # is only logged, so a backend that starts before Dex stays OIDC-less until restarted.
     depends_on:
       dex: { condition: service_healthy }
     # Overrides the blank values in .env, which stays blank so the committed

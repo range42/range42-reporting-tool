@@ -8,10 +8,9 @@ from app.storage.local import LocalStorage
 
 
 def get_storage(s: Settings = Depends(get_settings)) -> StorageBackend:
-    """DI factory for the configured storage backend (guardrail #2: Protocol-pluggable).
+    """DI factory for the configured storage backend (Protocol-pluggable).
 
-    Only the local-FS backend ships in v1; ``s3`` is reserved in the Settings
-    Literal and lands with WP6 export work.
+    Only the local-FS backend is implemented; ``s3`` is reserved in the Settings Literal.
     """
     if s.storage_backend != "local":
         raise NotImplementedError(f"storage backend {s.storage_backend!r} not available in v1")

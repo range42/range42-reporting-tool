@@ -141,8 +141,8 @@ describe('SectionGradeCard', () => {
     vi.spyOn(store, 'errorFor').mockReturnValue('evaluation_finalized')
     await w.get('[data-test="grade-numeric-s1"]').setValue('8')
 
-    // Task 11 added evaluations.saveErrors.*, so the code is now translated for the user;
-    // the raw code only shows for a code with no message yet.
+    // Error codes are translated through evaluations.saveErrors.*; the raw code only shows
+    // for a code with no message yet.
     expect(w.get('[data-test="grade-error-s1"]').text()).toBe(
       en.evaluations.saveErrors.evaluation_finalized,
     )

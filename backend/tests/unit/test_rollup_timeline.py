@@ -1,4 +1,4 @@
-"""Task 6 — the §6.10 timeline shape (M15, M16)."""
+"""The timeline entry shape."""
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -123,7 +123,7 @@ def test_timeline_evaluated_at_is_max_completed_at_across_evaluations() -> None:
 
 
 def test_timeline_evaluated_at_is_none_while_any_evaluation_is_outstanding() -> None:
-    # M16 — "evaluated" means every assigned evaluator has finished.
+    # "evaluated" means every assigned evaluator has finished.
     entry = _entry(
         _ev(_s("8"), eid="done", completed=LATER),
         _ev(_s("6"), eid="still-going", completed=None),
@@ -136,7 +136,7 @@ def test_timeline_evaluated_at_is_none_without_evaluations() -> None:
 
 
 def test_timeline_carries_grade_version() -> None:
-    # D3 — lets a consumer detect that a reopen superseded published numbers.
+    # Lets a consumer detect that a reopen superseded published numbers.
     assert _entry(_ev(_s("8")), version=7).grade_version == 7
 
 
@@ -171,16 +171,15 @@ def test_grade_timeline_name_is_still_importable_from_rollup() -> None:
     assert timeline.entry is None
 
 
-# --- L7: section grades and overall_grade must describe the SAME evaluators -------------
+# --- section grades and overall_grade must describe the SAME evaluators -----------------
 #
-# One entry, two numbers, previously two different populations: ``overall_grade`` arrives
-# pre-computed by rollup over the L7 contributing set, while ``section_grades`` was averaged
-# over every row handed in — unassigned and unfinished evaluators included. An entry could
-# therefore report an overall 9.00 above a section 7.00 with no way for a consumer to tell
-# which one to believe.
+# ``overall_grade`` arrives pre-computed by rollup over the contributing set, so
+# ``section_grades`` must be aggregated over that same set — averaged over every row handed in
+# instead, an entry could report an overall 9.00 above a section 7.00 with no way for a consumer
+# to tell which one to believe.
 #
-# ``evaluated_at`` and ``evaluator_count`` still count EVERYONE on purpose (M16), which is why
-# the fix is a per-evaluation flag rather than a filtered input list: pre-filtering would make
+# ``evaluated_at`` and ``evaluator_count`` still count EVERYONE on purpose, which is why the fix
+# is a per-evaluation flag rather than a filtered input list: pre-filtering would make
 # ``evaluated_at`` report a completion date for a report still being graded.
 
 
@@ -206,8 +205,8 @@ def test_timeline_section_grades_reconcile_with_overall_grade_on_one_section() -
 
 
 def test_timeline_evaluated_at_still_counts_non_contributing_evaluations() -> None:
-    """M16 is unchanged: an outstanding evaluator keeps ``evaluated_at`` null even though they
-    contribute nothing to the grade. This is the field a filtered input list would have broken."""
+    """An outstanding evaluator keeps ``evaluated_at`` null even though they contribute nothing
+    to the grade. This is the field a filtered input list would have broken."""
     entry = _entry(
         _ev(_s("9"), eid="done", completed=LATER),
         _ev(_s("5"), eid="working", completed=None, contributes=False),

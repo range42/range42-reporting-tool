@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Per-section attachment list (WP3 S9). Presentational: the parent owns the
+ * Per-section attachment list. Presentational: the parent owns the
  * attachment collection and service calls; this panel only renders the slice
  * for its section and emits intents (upload/remove/download).
  */

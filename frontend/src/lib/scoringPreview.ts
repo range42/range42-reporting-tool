@@ -2,18 +2,16 @@ import type { GradeMode, RubricScoreEntry } from '@/services/evaluations'
 import type { RubricCriterion } from '@/services/templates'
 
 /**
- * PREVIEW ONLY — `backend/app/services/scoring/rollup.py` is canonical (D6).
+ * PREVIEW ONLY — `backend/app/services/scoring/rollup.py` is canonical.
  *
- * This mirrors the server's §4.2 arithmetic so an evaluator sees their overall grade move
- * as they type, without a round trip per keystroke. It is NEVER the number of record: the
- * server recomputes on every save and the store adopts the response, discarding whatever
- * this produced. Two rules keep the two implementations honest about their disagreement:
+ * Mirrors the server's arithmetic so an evaluator sees their overall grade move as they type,
+ * without a round trip per keystroke. It is NEVER the number of record: the server recomputes
+ * on every save and the store adopts the response. Two rules keep the two honest:
  *
  *   - Anything this cannot compute returns null rather than a guess.
  *   - The moment a server value arrives it wins, unconditionally.
  *
- * A drift between this and `rollup.py` is a display bug, never a grading bug — but it is
- * still a bug: `rollup.py` is the file to read when changing either.
+ * `rollup.py` is the file to read when changing either.
  */
 
 const CENTS = 100
@@ -66,13 +64,13 @@ export function scoringPreview(sections: readonly PreviewSection[]): number | nu
     weight += s.grade_weight
   }
   if (weight === 0) return null
-  // HALF_UP to the column's two places, matching `quantize_grade` (M11).
+  // HALF_UP to the column's two places, matching `quantize_grade`.
   return Math.round((weighted / weight) * CENTS) / CENTS
 }
 
 /**
  * Pre-roll rubric criteria into one section grade — the preview twin of
- * `compute_rubric_rollup` (D6 applies here too: the server's number is the one of record).
+ * `compute_rubric_rollup`; the server's number is still the one of record.
  *
  *     normalized = Σ((score / max_score) · weight) / Σ(weight)
  *     grade      = grade_min + normalized · (grade_max - grade_min)

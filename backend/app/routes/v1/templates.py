@@ -521,11 +521,10 @@ async def reorder_sections(
 
 
 # ---------------------------------------------------------------------------
-# Choice-value sub-resource (WP3 S4, #79) — the sanctioned mutations on a
-# published template's choice_config. Deprecation hides a code from new saves
-# without touching existing answers; deletion is allowed only while no
-# report_section references the code (409 otherwise). A DB trigger (0008)
-# backstops the invariant against non-route writes.
+# Choice-value sub-resource — the sanctioned mutations on a published template's
+# choice_config. Deprecation hides a code from new saves without touching existing
+# answers; deletion is allowed only while no report_section references the code
+# (409 otherwise). A DB trigger backstops the invariant against non-route writes.
 # ---------------------------------------------------------------------------
 
 
@@ -631,13 +630,12 @@ async def import_choice_values(
     actor: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[SectionOut]:
-    """Populate a choice section's values from a ``code,label`` CSV (WP3 S12, G-4).
+    """Populate a choice section's values from a ``code,label`` CSV.
 
-    Merge is strictly additive: new codes are appended in file order; an
-    existing code keeps its position and ``deprecated_at`` and only refreshes
-    its label. Nothing is removed or un-deprecated, so the S4 immutability
-    rules hold even on published templates whose codes are already referenced.
-    ``choice_config.catalog_binding`` passes through untouched (opaque in v1).
+    Merge is strictly additive: new codes are appended in file order; an existing code keeps
+    its position and ``deprecated_at`` and only refreshes its label. Nothing is removed or
+    un-deprecated, so the choice-code immutability rules hold even on published templates whose
+    codes are already referenced. ``choice_config.catalog_binding`` passes through untouched.
     """
     await _get_template(db, template_id)
     s = await _get_section(db, template_id, section_id)

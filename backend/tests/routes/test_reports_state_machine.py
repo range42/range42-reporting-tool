@@ -83,8 +83,8 @@ async def test_illegal_transition_raises_and_is_inert(migrated_db: async_session
 
 
 async def test_transition_to_under_evaluation_leaves_submitted_at_intact(migrated_db: async_sessionmaker) -> None:
-    # W5-S2's timeline compares submitted_at against the deadline (§7.3); the evaluation
-    # edges must neither set nor clear it.
+    # The timeline compares submitted_at against the deadline; the evaluation edges must
+    # neither set nor clear it.
     rid, uid = await _make_report(migrated_db)
     async with migrated_db() as s:
         report = (await s.execute(select(Report).where(Report.id == rid))).scalar_one()

@@ -1,4 +1,4 @@
-"""choice-code immutability trigger (WP3 S4 backstop)
+"""choice-code immutability trigger
 
 Revision ID: 0008
 Revises: 0007

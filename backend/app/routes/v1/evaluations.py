@@ -1,12 +1,11 @@
-"""Evaluation routes (WP5 W5-1).
+"""Evaluation CRUD routes.
 
-D1 — EVALUATOR ISOLATION: every read and write path scopes on ``evaluator_id``. A Global
-Admin bypasses; no other caller may reach an evaluation that is not theirs, at any
+EVALUATOR ISOLATION: every read and write path scopes on ``evaluator_id``. A Global Admin
+bypasses; no other caller may reach an evaluation that is not theirs, at any
 ``evaluation.status`` or ``report.status``. There is deliberately no peer visibility.
 
-Path shape (L3): nested under the report, not the flat ``/evaluations/{id}`` of §6.8, so the
-exercise-scoped permission dependency has an ``exercise_id`` to resolve against. Matches the
-attachments deviation already shipped in WP3.
+Routes are nested under the report so the exercise-scoped permission dependency has an
+``exercise_id`` to resolve against.
 """
 
 import uuid
@@ -58,17 +57,13 @@ router = APIRouter(tags=["evaluations"])
 
 _BASE = "/exercises/{exercise_id}/reports/{rid}/evaluations"
 
-# L4 — an evaluator is assignable while the report is awaiting or under evaluation. A second
-# evaluator may join a report already being graded (multi-evaluator, W5-3).
+# An evaluator is assignable while the report is awaiting or under evaluation; a second
+# evaluator may join a report already being graded.
 _ASSIGNABLE_STATUSES = ("submitted", "under_evaluation")
 
 
 async def _get_user(db: AsyncSession, raw_id: str) -> User:
-    """Resolve ``raw_id`` to a user; 404 on a malformed uuid as well as on a missing row.
-
-    ``EvaluationCreate.evaluator_id`` is typed ``str`` precisely so this handler owns the
-    response: a malformed id is a missing resource, not a schema violation.
-    """
+    """Resolve ``raw_id`` to a user; 404 on a malformed uuid as well as on a missing row."""
     try:
         uid = uuid.UUID(raw_id)
     except ValueError:
@@ -126,9 +121,9 @@ async def _get_evaluation(db: AsyncSession, report_id: uuid.UUID, evid: uuid.UUI
 
 
 def _assert_evaluation_access(ev: Evaluation, user: User) -> None:
-    """D1 (final): evaluators are isolated. Global Admin bypasses; every other caller must
+    """Evaluators are isolated. Global Admin bypasses; every other caller must
     BE the assigned evaluator. No peer visibility at any evaluation.status or report.status.
-    Relaxing this is a D1 violation — reject in review."""
+    Relaxing this breaks evaluator isolation — reject in review."""
     if user.is_global_admin:
         return
     if ev.evaluator_id != user.id:
@@ -138,18 +133,13 @@ def _assert_evaluation_access(ev: Evaluation, user: User) -> None:
 def _assert_evaluation_writable(ev: Evaluation) -> None:
     """Grades and feedback are immutable once finalized; only a Global-Admin reopen unlocks them.
 
-    THE NEGATIVE SURFACE. There is no evaluator self-revert and no edit-after-finalize:
-    evaluator isolation removes the reconciliation window that would justify either, so a
-    reopen is the only route back into grading. Relaxing this re-opens a surface that was
-    deliberately closed — reject in review.
+    There is no evaluator self-revert and no edit-after-finalize; relaxing this reopens a
+    surface that was deliberately closed.
 
-    An unassigned evaluation is never writable either. Its row survives so the dispute trail
-    does, but it is out of the reckoning, and a write that can never reach the aggregate should
-    fail loudly rather than be silently discarded.
+    An unassigned evaluation is never writable either: its row survives for the dispute trail,
+    but a write that can never reach the aggregate fails loudly rather than being discarded.
 
-    Reads in the same order as its siblings in ``evaluation_finalize``: unassigned first, then
-    status. A completed-then-unassigned evaluation is reported as unassigned, because that is
-    the condition a caller can do something about.
+    Checks unassigned first, then status, matching the guards in ``evaluation_finalize``.
     """
     if ev.unassigned_at is not None:
         raise HTTPException(status_code=409, detail={"error": "evaluation_unassigned"})
@@ -163,8 +153,7 @@ async def _gradable_sections(
     """Every section of the report with its template definition and *this* evaluation's grade.
 
     One query, LEFT OUTER on ``section_grade`` keyed on ``evaluation_id`` so an evaluator can
-    never see a peer's grade. Ordered by ``report_section.position``. Task 8 reuses this — a
-    per-section query here would multiply into an N+1 there.
+    never see a peer's grade. Ordered by ``report_section.position``.
     """
     rows = (
         await db.execute(
@@ -239,11 +228,11 @@ async def _begin_evaluation(
     actor_id: uuid.UUID,
     ip: str | None,
 ) -> None:
-    """L5 — §7.2's 'assigned AND begins evaluation'. Idempotent: no-op when already begun,
-    so no duplicate transition audit row is ever emitted.
+    """Move the report to ``under_evaluation`` on the first evaluator write.
 
-    Assignment does not begin evaluation; the first evaluator write does. Task 8's grade
-    upsert calls this same function, which is why it must stay idempotent.
+    Assignment does not begin evaluation; the first evaluator write does. Idempotent — a no-op
+    when already begun, so no duplicate transition audit row is emitted. Must stay idempotent:
+    the grade upsert calls it too.
     """
     if ev.status == "assigned":
         ev.status = "in_progress"
@@ -271,12 +260,8 @@ async def _reactivate_evaluation(
 ) -> EvaluationOut:
     """Undo a soft unassign, restoring the evaluator to the gate and the denominator.
 
-    ``status`` is left exactly as unassign found it — the evaluator resumes where they stopped,
-    and a ``completed`` one is contributing again the moment the row counts.
-
-    The recompute is not optional: re-entering the counted set changes the denominator, so
-    skipping it would leave ``overall_grade`` describing a set of evaluators that no longer
-    matches the report's.
+    ``status`` is left exactly as unassign found it, so the evaluator resumes where they
+    stopped. The recompute is not optional: re-entering the counted set changes the denominator.
     """
     ev.unassigned_at = None
     ev.unassigned_by = None
@@ -304,8 +289,7 @@ async def _reactivate_evaluation(
 async def _grade_counts_many(db: AsyncSession, evaluation_ids: list[uuid.UUID]) -> dict[uuid.UUID, tuple[int, int]]:
     """``{evaluation_id: (graded, gradable)}`` for many evaluations in ONE query.
 
-    The per-evaluation :func:`_grade_counts` run in a loop would be an N+1 across the queue,
-    which is the one place a caller holds every assignment they have at once.
+    Batched because :func:`_grade_counts` in a loop is an N+1 across the evaluator queue.
     """
     if not evaluation_ids:
         return {}
@@ -336,8 +320,7 @@ async def list_evaluator_candidates(
 
     Membership is by EXPLICIT exercise role granting ``evaluations:write``, resolved through
     ``role_definition`` so a custom role qualifies exactly as the seeded ``evaluator`` does.
-    A global admin clears the assign endpoint's own check without holding any such role, but
-    running an exercise is not evaluating in it, so admins are not offered as candidates.
+    Global admins are not offered as candidates: running an exercise is not evaluating in it.
     """
     grants = (await db.execute(select(RoleDefinition.role_key, RoleDefinition.permissions))).all()
     role_keys = [key for key, permissions in grants if EVALUATIONS_WRITE in permissions]
@@ -370,16 +353,13 @@ async def list_my_evaluations(
 ) -> DataEnvelope[list[EvaluationAssignmentOut]]:
     """The caller's own evaluation assignments in this exercise (the evaluator queue).
 
-    OWN ROWS ONLY, unconditionally — including for a Global Admin, who sees their own
-    assignments here and reads anyone else's through the report-scoped breakdown. There is no
-    ``assignee`` parameter on purpose: a queue that can be pointed at another evaluator is a
-    peer-visibility surface, and this route has no business being that.
+    OWN ROWS ONLY, unconditionally — including for a Global Admin, who reads anyone else's
+    through the report-scoped breakdown. There is no ``assignee`` parameter on purpose: a queue
+    that can be pointed at another evaluator is a peer-visibility surface.
 
-    Unassigned evaluations are excluded: the work is no longer the caller's, and leaving it in
-    the queue would invite grades the write path then refuses.
+    Unassigned evaluations are excluded — the work is no longer the caller's.
 
-    Ordered by deadline, undated last, so the client's deadline grouping renders in order
-    without re-sorting what the database already knows.
+    Ordered by deadline, undated last.
     """
     rows = (
         await db.execute(
@@ -428,8 +408,8 @@ async def assign_evaluator(
 ) -> DataEnvelope[EvaluationOut]:
     """Assign an evaluator to a submitted report (Global Admin only).
 
-    L5: assignment does NOT begin evaluation — ``report.status`` is untouched here. The
-    ``submitted -> under_evaluation`` transition fires on the evaluator's first write (Task 7).
+    Assignment does NOT begin evaluation — ``report.status`` is untouched here. The
+    ``submitted -> under_evaluation`` transition fires on the evaluator's first write.
     """
     report: Report = await _get_report(db, exercise_id, rid)
     if report.status not in _ASSIGNABLE_STATUSES:
@@ -441,9 +421,8 @@ async def assign_evaluator(
     if existing is not None:
         if existing.unassigned_at is None:
             raise HTTPException(status_code=409, detail={"error": "evaluator_already_assigned"})
-        # L8: the unassign was soft, so UNIQUE(report_id, evaluator_id) still holds their seat.
-        # Reviving it keeps their section_grade rows attached; inserting a second row is
-        # impossible, and deleting the first would destroy the dispute trail unassign preserved.
+        # The unassign was soft, so UNIQUE(report_id, evaluator_id) still holds their seat.
+        # Revive the row: it keeps their section_grade rows and their dispute trail attached.
         return DataEnvelope(
             data=await _reactivate_evaluation(db, existing, report, body, actor=user, ip=client_ip(request))
         )
@@ -481,22 +460,15 @@ async def report_evaluation_breakdown(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> DataEnvelope[EvaluationBreakdownOut]:
-    """The report's per-evaluator breakdown, D1-scoped (W5-3 Task 10).
+    """The report's per-evaluator breakdown, scoped to the caller.
 
-    THIS ROUTE GATES; IT DOES NOT MERELY FILTER — superseding #95. W5-1 shipped it as a list
-    that filtered to the caller's rows, so a non-participating evaluator got ``200 []``. That
-    was safe only because an empty list disclosed nothing. Task 10 adds ``aggregate`` — the
-    report's grade, its ``grade_version`` and its evaluator headcount — to the SAME body, so an
-    empty ``evaluations[]`` would now hand all three to someone with no evaluation on this
-    report. The premise of #95's asymmetry expired with the old response shape; the rule did
-    not survive it. See #122.
+    THIS ROUTE GATES; IT DOES NOT MERELY FILTER. The body carries ``aggregate`` — the report's
+    grade, its ``grade_version`` and its evaluator headcount — so a non-participant must be
+    refused outright rather than handed an empty ``evaluations[]``.
 
-    THE GATE IS ROW EXISTENCE, NOT THE L7 COUNTED PREDICATE. A soft-unassigned evaluator keeps
-    their row (L8) so their dispute trail outlives their removal — gating on ``counts()`` would
-    lock them out of it precisely when a dispute needs reading. Do not "tidy" this into
-    ``counts()``; that is the regression
-    ``test_unassigned_evaluator_can_still_read_the_breakdown_for_their_dispute_trail`` exists
-    to catch.
+    THE GATE IS ROW EXISTENCE, NOT THE COUNTED PREDICATE. A soft-unassigned evaluator keeps
+    their row so their dispute trail outlives their removal; gating on ``counts()`` would lock
+    them out of it. Do not "tidy" this into ``counts()``.
 
     The 403 body is the generic denial every other route uses, so this cannot be turned into an
     oracle for enumerating which reports a caller is assigned to.
@@ -517,9 +489,9 @@ async def get_evaluation(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> DataEnvelope[EvaluationDetailOut]:
-    """One evaluation with the sections to grade (D1-gated).
+    """One evaluation with the sections to grade, scoped to the caller.
 
-    L12: ``GradableSectionOut`` is the only place the evaluator-only template fields
+    ``GradableSectionOut`` is the only place the evaluator-only template fields
     (grade_mode/min/max, weight, rubric and evaluation criteria) are exposed. They must never
     migrate onto ``ReportSectionOut``.
     """
@@ -552,13 +524,13 @@ async def update_evaluation(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> DataEnvelope[EvaluationOut]:
-    """Update the evaluation's overall feedback; the first write begins evaluation (L5).
+    """Update the evaluation's overall feedback; the first write begins evaluation.
 
-    Authorize before mutating: the D1 gate runs ahead of every write and audit call, so a
-    rejected caller leaves no trace behind (Task 11 pins that).
+    Authorize before mutating: the isolation gate runs ahead of every write and audit call, so
+    a rejected caller leaves no trace behind.
 
-    A7 / D3 sole-writer guards: this handler never touches ``report.overall_grade``,
-    ``evaluation.overall_grade`` or ``report.grade_version`` — the W5-2 rollup owns those.
+    Sole-writer guard: this handler never touches ``report.overall_grade``,
+    ``evaluation.overall_grade`` or ``report.grade_version`` — the rollup owns those.
     """
     report: Report = await _get_report(db, exercise_id, rid)
     ev = await _get_evaluation(db, report.id, evid)
@@ -593,10 +565,10 @@ async def upsert_section_grade(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> DataEnvelope[SectionGradeOut]:
-    """Create or replace the caller's grade for one section (L8).
+    """Create or replace the caller's grade for one section.
 
     Every rejection — 403, 404, 409, 422 — is raised before the first mutation and before
-    ``record_audit``, so a refused write leaves no row and no audit trail (Task 11 asserts it).
+    ``record_audit``, so a refused write leaves no row and no audit trail.
     """
     report: Report = await _get_report(db, exercise_id, rid)
     ev = await _get_evaluation(db, report.id, evid)
@@ -618,7 +590,7 @@ async def upsert_section_grade(
         details={"evaluation_id": str(ev.id), "report_section_id": str(section.id), "grade_mode": defn.grade_mode},
         ip=client_ip(request),
     )
-    # A7: rollup is the sole writer of report.overall_grade / evaluation.overall_grade /
+    # rollup is the sole writer of report.overall_grade / evaluation.overall_grade /
     # grade_version, and runs inside THIS transaction so a grade write and its rollup are atomic.
     await rollup.recompute_report_grade(
         db, report, actor_id=user.id, trigger="section_grade.saved", ip=client_ip(request)
@@ -638,8 +610,8 @@ async def list_section_grades(
 ) -> DataEnvelope[list[SectionGradeOut]]:
     """The evaluation's own grades, ordered by section position.
 
-    No separate filter: "own grades" falls out of the D1 gate on "own evaluation". A Global
-    Admin reads any evaluation's grades, one evaluation at a time.
+    No separate filter: "own grades" falls out of the isolation gate on "own evaluation". A
+    Global Admin reads any evaluation's grades, one evaluation at a time.
     """
     report: Report = await _get_report(db, exercise_id, rid)
     ev = await _get_evaluation(db, report.id, evid)
@@ -670,12 +642,10 @@ async def delete_section_grade(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> None:
-    """Remove the caller's grade for one section and recompute (edge case 3).
+    """Remove the caller's grade for one section and recompute.
 
-    NOT IN §6.8 — see ambiguity B6. It exists because a grade has to be retractable and PUT
-    cannot express it: L8's numeric branch REQUIRES ``grade``, so there is no payload meaning
-    "un-grade this". Overloading PUT with null semantics would collide with the mode table, so
-    the retraction gets its own verb.
+    A separate verb because PUT cannot express a retraction: the numeric branch REQUIRES
+    ``grade``, so there is no payload meaning "un-grade this".
 
     Deleting the last grade returns the report to an ungraded state — overall_grade goes back
     to NULL, not 0, and grade_version still advances because the published number changed.
@@ -710,11 +680,10 @@ async def delete_section_grade(
     )
 
 
-# --- M9: manual overall-grade override ------------------------------------------------
+# --- manual overall-grade override ----------------------------------------------------
 #
-# ROUTER HOME (locked): the path is report-scoped, so ``reports.py`` would be the obvious host,
-# but the handler has to reach ``rollup`` and every grade-writing route belongs in ONE file so
-# the sole-writer surface (M2) can be audited by reading a single module. Hence it lives here.
+# ROUTER HOME (locked): the path is report-scoped, but every grade-writing route belongs in ONE
+# file so the sole-writer surface can be audited by reading a single module.
 
 
 @router.put("/exercises/{exercise_id}/reports/{rid}/overall-grade")
@@ -727,16 +696,16 @@ async def set_overall_grade(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(require_permission(EVALUATIONS_WRITE)),
 ) -> DataEnvelope[ReportGradeOut]:
-    """Set ``report.overall_grade`` by hand, or clear the override (M9, §4.2).
+    """Set ``report.overall_grade`` by hand, or clear the override.
 
     Authorization: Global Admin, or an evaluator ASSIGNED TO THIS REPORT. Holding
-    ``evaluations:write`` in the exercise is not enough — D1 (E1) applies to the report-level
-    number exactly as it does to a peer's evaluation, so an unassigned evaluator 403s. Every
-    rejection precedes the first write, so a refused call leaves no row and no audit trail.
+    ``evaluations:write`` in the exercise is not enough — evaluator isolation applies to the
+    report-level number too, so an unassigned evaluator 403s. Every rejection precedes the
+    first write, so a refused call leaves no row and no audit trail.
 
     ``overall_grade=None`` clears the flag and recomputes at once, so the report never sits on a
-    stale hand-set number. Both branches go through ``rollup.set_manual_grade`` (M2) and both
-    bump ``grade_version`` (D3) because either way a new number is published.
+    stale hand-set number. Both branches go through ``rollup.set_manual_grade`` and both bump
+    ``grade_version`` because either way a new number is published.
     """
     report: Report = await _get_report(db, exercise_id, rid)
     if not user.is_global_admin and await _existing_evaluation(db, report.id, user.id) is None:

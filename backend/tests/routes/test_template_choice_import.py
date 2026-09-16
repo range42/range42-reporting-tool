@@ -1,10 +1,10 @@
-"""WP3 S12 (#82) — CSV import of choice values (G-4 resolution).
+"""CSV import of choice values.
 
 CSV is the only v1 path for populating a choice field from a catalog:
 ``choice_config.catalog_binding`` stays opaque metadata — preserved, never
 interpreted. Import merges: new codes are appended in file order, existing
 codes keep their position and ``deprecated_at`` and only refresh their label.
-Nothing is ever removed, so the S4 immutability rules hold even on published
+Nothing is ever removed, so the immutability rules hold even on published
 templates with referenced codes.
 """
 
@@ -18,7 +18,7 @@ from tests.routes._helpers import client, make_user_token
 
 pytestmark = pytest.mark.integration
 
-BINDING = {"source": "service_catalog", "ref": "core-services"}  # opaque in v1 (G-4)
+BINDING = {"source": "service_catalog", "ref": "core-services"}  # opaque in v1
 
 CFG = {
     "selection": "multiple",
@@ -133,7 +133,7 @@ async def test_non_admin_rejected_403(migrated_db: async_sessionmaker) -> None:
 
 
 async def test_import_on_published_template_with_referenced_codes(migrated_db: async_sessionmaker) -> None:
-    """Additive import must survive the S4 immutability trigger on a published, answered template."""
+    """Additive import must survive the immutability trigger on a published, answered template."""
     ah = await _ga(migrated_db)
     async with client(migrated_db) as c:
         tid, sid = await _choice_template(c, ah, publish=True)

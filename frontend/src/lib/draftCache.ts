@@ -2,10 +2,9 @@
  * The localStorage draft mechanics both draft caches share: key building, JSON round-trip,
  * and the "is my unsaved work newer than the server's copy?" comparison.
  *
- * Only the KEY SHAPE differs between callers, so that is the one thing injected. Report
- * drafts are keyed by report+section, grade drafts by evaluation+section; everything else
- * — including the decision to treat an unreadable payload as absent — is identical, and
- * duplicating it is how the two drift into disagreeing about a corrupt entry.
+ * Only the KEY SHAPE differs between callers, so that is the one thing injected: report
+ * drafts are keyed by report+section, grade drafts by evaluation+section. Everything else,
+ * including treating an unreadable payload as absent, is identical.
  */
 
 export interface DraftEntry<T> {
@@ -39,9 +38,8 @@ export function createDraftCache<T>(keyFor: (id: string) => string): DraftCache<
   /**
    * The stored draft, or null.
    *
-   * A corrupt or foreign payload returns null rather than throwing: this runs on the render
-   * path of a view whose whole job is to recover unsaved work, and a parse error there would
-   * take down the editor over a cache entry nobody can use anyway.
+   * A corrupt or foreign payload returns null rather than throwing: this runs on a render
+   * path, and a parse error there would take down the editor over an unusable cache entry.
    */
   function read(id: string): DraftEntry<T> | null {
     const raw = localStorage.getItem(keyFor(id))

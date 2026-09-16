@@ -44,7 +44,7 @@ async def test_evaluator_list_returns_only_their_own_evaluation(migrated_db: asy
 async def test_evaluator_list_omits_peer_evaluations_even_when_report_is_evaluated(
     migrated_db: async_sessionmaker,
 ) -> None:
-    # D1: no peer visibility at ANY evaluation.status or report.status.
+    # No peer visibility at ANY evaluation.status or report.status.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
@@ -60,11 +60,10 @@ async def test_evaluator_list_omits_peer_evaluations_even_when_report_is_evaluat
 
 
 async def test_evaluator_not_assigned_to_this_report_is_refused(migrated_db: async_sessionmaker) -> None:
-    """403, NOT the ``200 []`` W5-1 shipped — the route gates now (W5-3 Task 10, #122).
+    """403, NOT ``200 []`` — the route gates rather than filters.
 
     The response carries the report's aggregate, so an empty ``evaluations[]`` would still hand
-    a non-participant the grade, the grade_version and the evaluator headcount. #95's "scoping
-    is a filter, not a gate" held only while the body was nothing but the caller's own rows.
+    a non-participant the grade, the grade_version and the evaluator headcount.
     """
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
@@ -96,7 +95,7 @@ async def test_evaluator_getting_a_peer_evaluation_returns_403(migrated_db: asyn
 
 
 async def test_detail_includes_evaluator_only_template_fields(migrated_db: async_sessionmaker) -> None:
-    # L12 — these fields are excluded from every ReportSectionOut and surface here for the first time.
+    # These fields are excluded from every ReportSectionOut and surface here for the first time.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
@@ -153,7 +152,7 @@ async def test_detail_orders_sections_by_position(migrated_db: async_sessionmake
 
 
 async def test_detail_reports_grade_version_zero_before_any_rollup(migrated_db: async_sessionmaker) -> None:
-    # D3 — rollup.py owns the increment; nothing in W5-1 touches it.
+    # rollup.py owns the increment; no evaluation route touches it.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
@@ -183,7 +182,7 @@ async def test_detail_for_evaluation_of_another_report_returns_404(migrated_db: 
 
 @pytest.mark.parametrize("role_key", ["team_writer", "team_admin", "team_approver", "observer"])
 async def test_non_evaluator_roles_are_denied_both_reads(migrated_db: async_sessionmaker, role_key: str) -> None:
-    # L13 — EVALUATIONS_READ_OWN holders get 403 on every W5-1 evaluation route.
+    # EVALUATIONS_READ_OWN holders get 403 on every evaluation route.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)

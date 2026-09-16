@@ -8,7 +8,7 @@ from app.models.base import Base, MetadataMixin, TimestampMixin, UUIDMixin
 
 
 class Campaign(Base, UUIDMixin, TimestampMixin, MetadataMixin):
-    """A grouping of reports across teams/time within an exercise (WP3 S10).
+    """A grouping of reports across teams/time within an exercise.
 
     Membership lives in ``campaign_report`` (M2M) — a report may appear in
     several campaigns and campaign membership never mutates the report row.

@@ -5,19 +5,12 @@ Run INSIDE the backend container, AFTER each persona's first SSO login::
     docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml \
         exec -T backend uv run --no-sync python -m app.seed_grants
 
-Why this is a separate step from ``app.seed_demo``: a Dex subject is a base64
-protobuf of ``{userID, connectorID}`` and is not knowable from the IdP config,
-so a role cannot be pre-assigned to a subject that has never logged in. Email is
-the join key instead — it is also IdP-agnostic, so pointing this at a production
-IdP later needs no change here.
+Email is the join key for *seeding only*. The login path (``upsert_user``) must
+keep linking on ``{provider}:{subject}``: email is a mutable claim, and matching
+on it there would turn control of an email at any configured IdP into account
+takeover.
 
-Matching happens on ``User.email`` for *seeding only*. The login path
-(``upsert_user``) must keep linking on ``{provider}:{subject}``: email is a
-mutable claim, and matching on it there would turn control of an email at any
-configured IdP into account takeover.
-
-Idempotent, and safe to re-run as more personas log in — a persona who has not
-logged in yet is reported as skipped, not an error.
+Idempotent: a persona who has not logged in yet is reported as skipped, not an error.
 """
 
 import asyncio
@@ -107,9 +100,7 @@ async def seed_grants(session: AsyncSession) -> dict[str, Any]:
                 raise RuntimeError(f"team {grant.team_name!r} missing from {exercise.name!r} — re-run the demo seed")
             await _ensure_team_member(session, team_id=team.id, user_id=user.id)
 
-        # Reconcile on update, never clear: the row already exists by the time
-        # this runs, and neither upsert_user() nor the demo seed's insert-only
-        # branch will ever set this flag for a persona who logged in first.
+        # Reconcile on update, never clear.
         if grant.is_global_admin and not user.is_global_admin:
             user.is_global_admin = True
             promoted.append(grant.email)

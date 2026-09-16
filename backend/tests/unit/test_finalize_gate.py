@@ -1,11 +1,11 @@
-"""W5-3 Task 5 — the finalize gate (ARCHITECTURE §7.2).
+"""The finalize gate.
 
 Pure: a list of :class:`EvaluationFacts` plus a mode string. No database, no fixtures.
 
 The gate answers one question — may this report move from ``under_evaluation`` to
-``evaluated`` right now — and it answers it from the same L7 predicates the aggregate uses,
-so a report can never be declared evaluated on a different set of evaluations than the one
-its grade was computed from.
+``evaluated`` right now — and it answers it from the same "counted" predicates the aggregate
+uses, so a report can never be declared evaluated on a different set of evaluations than the
+one its grade was computed from.
 """
 
 from decimal import Decimal
@@ -56,7 +56,7 @@ def test_all_must_finalize_gate_is_closed_when_one_counted_evaluation_is_in_prog
 
 
 def test_all_must_finalize_gate_ignores_unassigned_evaluations() -> None:
-    """The mandated edge case: an evaluator removed mid-exercise must not block the report."""
+    """An evaluator removed mid-exercise must not block the report."""
     # Arrange: one finished evaluator, one unassigned who never started.
     evaluations = [
         _facts(evaluation_id="finished"),
@@ -127,8 +127,8 @@ def test_gate_is_closed_when_there_are_no_evaluations_at_all() -> None:
 def test_gate_is_closed_when_a_counted_evaluation_has_no_grade() -> None:
     """``completed`` with no grade satisfies neither mode.
 
-    §7.2 requires every gradeable section populated before an evaluation may complete; this is
-    the backstop for a row that got there anyway.
+    An evaluation may only complete with every gradeable section populated; this is the
+    backstop for a row that got there anyway.
     """
     # Arrange
     evaluations = [_facts(grade=None, evaluation_id="empty")]

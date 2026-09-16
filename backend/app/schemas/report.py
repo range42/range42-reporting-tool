@@ -17,7 +17,7 @@ KNOWN_REPORT_STATUSES = ("draft", "pending_approval", "submitted", "under_evalua
 
 
 class ApprovalChainEntry(BaseModel):
-    """One ordered step of a multi-step approval chain (ARCHITECTURE §7).
+    """One ordered step of a multi-step approval chain.
 
     Exactly one of ``role_key``/``user_id`` identifies who may approve the step.
     ``required`` steps must all be approved before the report leaves
@@ -71,7 +71,7 @@ class ReportUpdate(BaseModel):
 
 
 class ApproveRequest(BaseModel):
-    # step/on_behalf_of drive multi-step chains (#38) and admin override (#39);
+    # step/on_behalf_of drive multi-step chains and admin override;
     # ignored on the single-step path.
     step: int | None = Field(default=None, ge=1)
     on_behalf_of: str | None = None
@@ -181,14 +181,13 @@ def _two_dp(v: Decimal | None) -> str | None:
 
 
 class _GatedGradeFields(BaseModel):
-    """M17 — the report-level grade, visible only to callers the route has cleared.
+    """The report-level grade, visible only to callers the route has cleared.
 
-    Adding ``overall_grade`` to ``ReportOut`` unconditionally would leak it to every team member
-    who can read the report, including while ``scoring_config.teams_see_own_scores`` is false.
-    So the three fields are ``None`` unless the route passes ``grade_visible=True``: Global
-    Admin, ``scoring:read:all`` holders, and team members once the report is ``evaluated`` and
-    the config allows it. ``None`` therefore means "not shown to you", not "not graded" — a
-    cleared caller sees an ungraded report as ``overall_grade=None`` with ``grade_version=0``.
+    The three fields are ``None`` unless the route passes ``grade_visible=True``: Global Admin,
+    ``scoring:read:all`` holders, and team members once the report is ``evaluated`` and
+    ``scoring_config.teams_see_own_scores`` allows it. ``None`` therefore means "not shown to
+    you", not "not graded" — a cleared caller sees an ungraded report as ``overall_grade=None``
+    with ``grade_version=0``.
     """
 
     overall_grade: Decimal | None = None

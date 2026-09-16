@@ -29,7 +29,7 @@ const props = defineProps<{
   /** A server-side error for this section, shown in place of the local range message. */
   error?: string | null
   /** Set once the evaluation is finalized: the server refuses writes, so the controls
-   *  must stop inviting them (D-W5-4 — there is no edit-after-finalize). */
+   *  must stop inviting them — there is no edit-after-finalize. */
   disabled?: boolean
 }>()
 const emit = defineEmits<{ update: [GradeUpsertInput] }>()

@@ -32,7 +32,7 @@ const name = ref('')
 const dueAtLocal = ref('')
 const approvalRequired = ref(false)
 
-// L7 writer assignment: members of the selected team; '' = anyone on the team.
+// Writer assignment: members of the selected team; '' = anyone on the team.
 const members = ref<TeamMemberSummary[]>([])
 const assignedWriterId = ref('')
 
@@ -76,9 +76,8 @@ async function submit(): Promise<void> {
       approval_required: approvalRequired.value,
       assigned_writer_id: assignedWriterId.value || null,
     })
-    // Creating a report IS the assignment: it lands in draft, owned by the
-    // assigned writer. Land on the list, not the editor — an admin dropped
-    // into the editor reads it as "now fill this in", which is the writer's job.
+    // Creating a report IS the assignment: it lands in draft, owned by the assigned writer.
+    // Land on the list, not the editor — filling it in is the writer's job.
     await router.push(`/exercises/${exerciseId}/reports`)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('reports.createError')

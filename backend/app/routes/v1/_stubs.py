@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 
-# Reserved, intentionally empty routers — one per deferred endpoint group (design §8.2).
-# Implemented in WP2–WP6.
+# Reserved, intentionally empty routers — one per deferred endpoint group.
 GROUPS = [
     "templates",
     "reports",

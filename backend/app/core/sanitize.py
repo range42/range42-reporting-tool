@@ -1,13 +1,11 @@
 """Server-authoritative HTML sanitization + plain-text extraction (nh3).
 
-The writer editor (TipTap StarterKit) produces a constrained HTML subset.
 ``sanitize_html`` is the trust boundary for stored ``report_section.content``;
 ``html_to_plain`` derives ``content_plain`` / ``char_count`` for char-limit
 enforcement and search.
 
-The allowlist is NOT redefined here — it is sourced from
-``app.core.sanitize_policy`` (the single source of truth, mirrored in
-``frontend/src/services/sanitize.ts``). This module only wires nh3 to it.
+The allowlist is NOT redefined here — it is sourced from ``app.core.sanitize_policy``, the
+single source of truth, mirrored in ``frontend/src/services/sanitize.ts``.
 """
 
 import re

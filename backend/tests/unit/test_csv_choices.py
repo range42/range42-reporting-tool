@@ -1,4 +1,4 @@
-"""WP3 S12 (#82) — CSV → choice-value parsing.
+"""CSV → choice-value parsing.
 
 The import gate: a well-formed ``code,label`` CSV parses to ordered rows;
 anything malformed (bad encoding, missing header, empty codes, duplicate

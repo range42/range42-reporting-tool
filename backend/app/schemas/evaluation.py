@@ -39,11 +39,11 @@ class RubricScoreEntry(BaseModel):
 
 
 class SectionGradeUpsert(BaseModel):
-    """One grading channel per row (§4.2).
+    """One grading channel per row.
 
-    WHICH channel is legal depends on the source section's ``grade_mode``; that check needs
-    the DB and therefore lives at the route layer (L8). Here we only forbid the combination
-    the DB backstop ``ck_section_grade_shape`` also refuses.
+    WHICH channel is legal depends on the source section's ``grade_mode``; that check needs the
+    DB and lives at the route layer. Here we only forbid the combination the DB backstop
+    ``ck_section_grade_shape`` also refuses.
     """
 
     grade: Decimal | None = None
@@ -78,7 +78,7 @@ class SectionGradeOut(BaseModel):
 
     @field_serializer("grade")
     def _two_dp(self, v: Decimal | None) -> str | None:
-        """Pin NUMERIC(5,2) to one wire form so W5-2 and the frontend agree."""
+        """Pin NUMERIC(5,2) to one wire form so the backend and the frontend agree."""
         return None if v is None else f"{v:.2f}"
 
     @classmethod
@@ -98,7 +98,7 @@ class SectionGradeOut(BaseModel):
 
 class GradableSectionOut(BaseModel):
     """Evaluator-facing section view — the ONLY place the evaluator-only template fields are
-    exposed (L12). Never merge these into ``ReportSectionOut``."""
+    exposed. Never merge these into ``ReportSectionOut``."""
 
     report_section_id: str
     section_def_id: str
@@ -154,7 +154,7 @@ class EvaluationOut(BaseModel):
     evaluator_id: str
     status: str
     overall_feedback: str | None
-    # A7 sole-writer: rollup.py computes this; no route sets it directly.
+    # Sole writer: rollup.py computes this; no route sets it directly.
     overall_grade: Decimal | None
     completed_at: datetime | None
     reopen_count: int
@@ -163,7 +163,7 @@ class EvaluationOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    # aggregated_weight is deliberately absent (L11): admin-only, surfaced by W5-3's breakdown.
+    # aggregated_weight is deliberately absent: admin-only, surfaced by the breakdown.
 
     @classmethod
     def from_model(cls, e: Evaluation, *, graded: int, gradable: int) -> EvaluationOut:
@@ -186,9 +186,8 @@ class EvaluationOut(BaseModel):
 class EvaluationDetailOut(EvaluationOut):
     report_name: str
     report_status: str
-    # The evaluator's own view of the report they are grading. Both come from the report row,
-    # which an evaluator who is not a member of that team may NOT read, so they are served
-    # here instead of leaving the client to fetch a row it would be refused.
+    # The evaluator's own view of the report they are grading. Served here because an
+    # evaluator who is not a member of that team may NOT read the report row itself.
     team_name: str
     submitted_at: datetime | None
     # E3 — exposed so a client can detect that a reopen invalidated published numbers.
@@ -199,13 +198,9 @@ class EvaluationDetailOut(EvaluationOut):
 class EvaluationAssignmentOut(BaseModel):
     """One row of the evaluator's own queue: their evaluation plus the report context.
 
-    Deliberately NOT ``EvaluationBreakdownRow``: that row answers "who graded this report"
-    for one report and carries the dispute-trail columns, while this answers "what do I have
-    to grade" across reports and carries none of them. Sharing one model between the two is
-    how an evaluator ends up holding a peer's weight.
-
-    Every row is the CALLER'S OWN — the route never returns another evaluator's assignment,
-    at any report status.
+    Deliberately NOT ``EvaluationBreakdownRow``, which carries the dispute-trail columns and a
+    peer's weight. Every row here is the CALLER'S OWN — the route never returns another
+    evaluator's assignment, at any report status.
     """
 
     id: str
@@ -223,12 +218,12 @@ class EvaluationAssignmentOut(BaseModel):
 
 
 class ManualGradeRequest(BaseModel):
-    """Body of ``PUT .../reports/{rid}/overall-grade`` (M9).
+    """Body of ``PUT .../reports/{rid}/overall-grade``.
 
     ``overall_grade=None`` clears the override and hands the number back to the rollup.
-    ``reason`` is mandatory and lands in the audit row — the §6.8 reopen precedent.
-    The bounds mirror ``report.overall_grade``'s NUMERIC(5,2): anything the column could not
-    store is refused here, with the caller's own digits, instead of surfacing as a DB error.
+    ``reason`` is mandatory and lands in the audit row. The bounds mirror
+    ``report.overall_grade``'s NUMERIC(5,2), so anything the column could not store is refused
+    here with the caller's own digits rather than surfacing as a DB error.
     """
 
     overall_grade: Decimal | None = Field(default=None, ge=0, max_digits=5, decimal_places=2)
@@ -236,7 +231,7 @@ class ManualGradeRequest(BaseModel):
 
 
 class ReportGradeOut(BaseModel):
-    """The report-level grade state after a manual set/clear — what the M9 route returns."""
+    """The report-level grade state after a manual set/clear."""
 
     report_id: str
     overall_grade: Decimal | None
@@ -251,10 +246,10 @@ class ReportGradeOut(BaseModel):
 class FinalizeRequest(BaseModel):
     """Body of ``POST .../evaluations/{evid}/finalize``. Both fields are optional.
 
-    An evaluator finalizing their own work sends nothing. ``on_behalf_of`` is D2's deadlock
-    exit: a Global Admin finalizes in an absent evaluator's name, and ``comment`` — mandatory
-    in that case, enforced in the handler rather than here so the error is
-    ``comment_required`` instead of a generic 422 shape — records why.
+    An evaluator finalizing their own work sends nothing. ``on_behalf_of`` is the deadlock exit:
+    a Global Admin finalizes in an absent evaluator's name, and ``comment`` records why —
+    mandatory in that case, enforced in the handler so the error is ``comment_required`` rather
+    than a generic 422 shape.
     """
 
     on_behalf_of: str | None = None
@@ -262,39 +257,37 @@ class FinalizeRequest(BaseModel):
 
 
 class UnassignRequest(BaseModel):
-    """Body of ``POST .../evaluations/{evid}/unassign`` (D2, half two).
+    """Body of ``POST .../evaluations/{evid}/unassign``.
 
-    ``reason`` defaults to empty rather than being declared required so a missing body and a
-    whitespace-only one land on the SAME handler check and the same ``reason_required`` error,
-    instead of one of them escaping as a generic Pydantic 422. Mirrors ``FinalizeRequest``.
+    ``reason`` defaults to empty rather than being declared required, so a missing body and a
+    whitespace-only one land on the SAME handler check and the same ``reason_required`` error
+    instead of one escaping as a generic Pydantic 422.
     """
 
     reason: str = ""
 
 
 class ReopenRequest(BaseModel):
-    """Body of ``POST .../evaluations/{evid}/reopen`` (W5-4).
+    """Body of ``POST .../evaluations/{evid}/reopen``.
 
     ``reason`` is mandatory and defaults to empty rather than being declared required, so an
     absent body, an empty string and a whitespace-only one all land on the SAME handler check
-    and the same ``reason_required`` error. Mirrors ``UnassignRequest`` — a reopen is the other
-    Global-Admin intervention on a finalized evaluation, and the two should not answer the same
-    mistake with different payloads.
+    and the same ``reason_required`` error. Mirrors ``UnassignRequest``.
     """
 
     reason: str = ""
 
 
 class EvaluationBreakdownRow(BaseModel):
-    """One evaluator's line in the breakdown (W5-3 Task 10).
+    """One evaluator's line in the breakdown.
 
     Distinct from ``EvaluationOut`` on purpose: this carries the dispute-trail columns
     (``finalized_by``, ``finalize_is_admin_override``, ``unassigned_at``, ``unassign_reason``)
-    and ``aggregated_weight``, which W5-1's L11 deliberately kept OFF the evaluator-facing
-    ``EvaluationOut``. Sharing one model between the two audiences is how a weight leaks.
+    and ``aggregated_weight``, which are deliberately kept OFF the evaluator-facing
+    ``EvaluationOut``.
 
     ``evaluator_display_name`` is None for a non-admin caller: the evaluator path never joins
-    ``user`` at all, so there is no name for a future eager-load to expose.
+    ``user`` at all.
     """
 
     id: str
@@ -315,9 +308,8 @@ class BreakdownAggregate(BaseModel):
     """The report-level numbers, identical for every caller who may see the breakdown at all.
 
     ``counted_evaluator_count`` is deliberately NOT suppressed for evaluators: a cardinality is
-    not an identity, and an evaluator who cannot tell whether their grade is one of one or one
-    of five cannot read ``overall_grade`` honestly. Names, ids, weights and timestamps of peers
-    are suppressed; the headcount is not.
+    not an identity, and it is needed to read ``overall_grade`` honestly. Names, ids, weights
+    and timestamps of peers are suppressed; the headcount is not.
     """
 
     overall_grade: Decimal | None
@@ -332,12 +324,12 @@ class BreakdownAggregate(BaseModel):
 
 
 class EvaluationBreakdownOut(BaseModel):
-    """``GET …/reports/{rid}/evaluations`` (W5-3 Task 10), replacing W5-1's plain list.
+    """Response of ``GET …/reports/{rid}/evaluations``.
 
-    The aggregate is why this route gates rather than filters — see the route docstring and
-    #122. A caller who may not see the report's grade is refused outright; there is no
-    "authorized but nulled" variant, because ``aggregate.overall_grade is None`` already means
-    something else (nothing has been finalized yet) and one field cannot carry both meanings.
+    The aggregate is why this route gates rather than filters — see the route docstring. A
+    caller who may not see the report's grade is refused outright; there is no "authorized but
+    nulled" variant, because ``aggregate.overall_grade is None`` already means nothing has been
+    finalized yet.
     """
 
     report_id: str

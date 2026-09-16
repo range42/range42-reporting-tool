@@ -1,13 +1,12 @@
-"""The ARCHITECTURE §6.10 timeline shape (WP5 W5-2, M15/M16).
+"""The grade-timeline entry shape.
 
-DELIBERATELY ORM-FREE. Nothing here imports a model or a session, so W5-S2 (#49) can build the
-same entry shape for historical reports without dragging in the rollup's persistence
-dependencies. Inputs are the plain dataclasses from ``rollup``.
+DELIBERATELY ORM-FREE: nothing here imports a model or a session, so the same entry shape can
+be built for historical reports without the rollup's persistence dependencies. Inputs are the
+plain dataclasses from ``rollup``.
 
-M16 — ``evaluated_at`` PROVENANCE. There is no ``report.evaluated_at`` column (B5), so it is
-derived: the latest ``completed_at`` across the report's evaluations, and NULL while any
-evaluation is still outstanding. "Evaluated" therefore means every assigned evaluator has
-finished, not merely that a grade exists.
+``evaluated_at`` PROVENANCE: there is no ``report.evaluated_at`` column, so it is derived as
+the latest ``completed_at`` across the report's evaluations, and NULL while any evaluation is
+outstanding. "Evaluated" therefore means every assigned evaluator has finished.
 """
 
 from __future__ import annotations
@@ -48,12 +47,10 @@ class SectionGradeEntry:
 
 @dataclass(frozen=True)
 class TimelineEntry:
-    """One evaluated report, in the ARCHITECTURE §6.10 timeline shape.
+    """One evaluated report, in the timeline shape endpoints serialize directly.
 
-    Fields beyond §6.10 (grade_version, is_manual, mixed_scale, evaluator_count) are
-    additive — the documented §6.10 field set is present and unchanged, so W5-S2's
-    endpoints can serialize this directly. W5-S2 suppresses the additive ones for non-GA
-    callers; they are exposed here because the rollup knows them and a second query would not.
+    ``grade_version``, ``is_manual``, ``mixed_scale`` and ``evaluator_count`` are additive to
+    the documented field set and are suppressed for non-admin callers by the endpoints.
     """
 
     report_id: str
@@ -73,7 +70,7 @@ class TimelineEntry:
 
 
 def compute_evaluated_at(evaluations: Sequence[EvaluationInput]) -> datetime | None:
-    """M16 — the latest completion across evaluations, or None while any is outstanding.
+    """The latest completion across evaluations, or None while any is outstanding.
 
     An empty evaluation set is also None: an unassigned report has not been evaluated.
     """
@@ -88,18 +85,15 @@ def compute_evaluated_at(evaluations: Sequence[EvaluationInput]) -> datetime | N
 def aggregate_section_grades(evaluations: Sequence[EvaluationInput]) -> list[SectionGradeEntry]:
     """Per-section grades, aggregated across evaluators by ``aggregated_weight``.
 
-    ``not_graded`` sections are omitted entirely — they are not part of the grading surface.
-    A gradable section nobody has marked yet is listed with a null grade, so a client can
-    render the row and show it as outstanding rather than silently dropping it.
+    ``not_graded`` sections are omitted entirely. A gradable section nobody has marked yet is
+    listed with a null grade, so a client can render it as outstanding.
 
-    Values are the SCALED contributions (pass/fail already stretched onto its range, rubric
-    pre-rolled), never the raw stored 0/1.
+    Values are the SCALED contributions (pass/fail stretched onto its range, rubric pre-rolled),
+    never the raw stored 0/1.
 
-    L7 — only evaluations with ``contributes`` set feed a value, so these numbers describe the
-    SAME evaluator set as ``report.overall_grade``. Averaging over every row instead produced an
-    entry whose section grades contradicted its own overall grade (9.00 overall above a 7.00
-    section, with an unassigned evaluator dragging the section down). ``evaluated_at`` and
-    ``evaluator_count`` deliberately still count everyone — see ``EvaluationInput.contributes``.
+    Only evaluations with ``contributes`` set feed a value, so these numbers describe the SAME
+    evaluator set as ``report.overall_grade``. ``evaluated_at`` and ``evaluator_count``
+    deliberately still count everyone — see ``EvaluationInput.contributes``.
     """
     definitions: dict[str, SectionGradeInput] = {}
     contributions: dict[str, list[tuple[Decimal, Decimal]]] = {}
@@ -138,10 +132,10 @@ def build_timeline_entry(
     grade_version: int,
     is_manual: bool,
 ) -> TimelineEntry:
-    """Assemble one §6.10 entry from the report's facts and its evaluations.
+    """Assemble one timeline entry from the report's facts and its evaluations.
 
     ``overall_grade`` is passed in rather than recomputed: the caller has already run the
-    rollup, and a manual override (M9) must survive into the entry untouched.
+    rollup, and a manual override must survive into the entry untouched.
     """
     all_sections = [s for ev in evaluations for s in ev.sections]
     return TimelineEntry(

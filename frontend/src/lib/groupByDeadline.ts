@@ -1,5 +1,5 @@
 /**
- * Bucket queue entries by the deadline they share (EV-01).
+ * Bucket queue entries by the deadline they share.
  *
  * The evaluator's working unit is a DEADLINE, not a report: several teams file against the
  * same due time, and those are the reports to grade together — which is also why the compare

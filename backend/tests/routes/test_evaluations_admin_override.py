@@ -1,8 +1,8 @@
-"""W5-3 Task 8 — finalize-on-behalf-of (D2, half one).
+"""Finalize-on-behalf-of.
 
 THE DEADLOCK THIS EXISTS FOR: under ``all_must_finalize`` one absent evaluator holds a report
-hostage forever. §4.2's exit is an audited Global Admin override — the admin presses Finalize
-in the evaluator's name.
+hostage forever. The exit is an audited Global Admin override — the admin presses Finalize in
+the evaluator's name.
 
 CREDIT AND ACTOR ARE DIFFERENT FIELDS, and getting them backwards makes the dispute trail lie:
 
@@ -164,7 +164,7 @@ async def test_finalizing_your_own_evaluation_is_not_an_override(migrated_db: as
 
 
 async def test_finalize_on_behalf_of_requires_a_comment(migrated_db: async_sessionmaker) -> None:
-    """A mandatory reason is §4.2's deadlock-resolution contract, not a nicety."""
+    """A mandatory reason is the deadlock-resolution contract, not a nicety."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -182,7 +182,7 @@ async def test_finalize_on_behalf_of_requires_a_comment(migrated_db: async_sessi
 
 
 async def test_finalize_on_behalf_of_rejects_a_non_admin_caller(migrated_db: async_sessionmaker) -> None:
-    # Arrange: the evaluator's OWN evaluation, so D1 access passes and only the admin rule bites.
+    # Arrange: the evaluator's OWN evaluation, so access passes and only the admin rule bites.
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
         ex, rid, sid, [(h, evid, uid)] = await _world(migrated_db, c, ah)
@@ -282,7 +282,7 @@ async def test_finalize_on_behalf_of_writes_an_audit_row_with_the_override_flag_
     assert str(rows[0].user_id) == ga_id
 
 
-# --- the mandated edge case -----------------------------------------------------------
+# --- any_can_finalize combined with the override --------------------------------------
 
 
 async def test_any_can_finalize_combined_with_admin_override_transitions_and_records_the_override(
@@ -327,17 +327,16 @@ async def test_any_can_finalize_combined_with_admin_override_transitions_and_rec
 
 
 # ======================================================================================
-# W5-3 Task 9 — POST .../unassign (D2, half two).
+# POST .../unassign — the other half of the same deadlock exit.
 #
-# THE OTHER HALF OF THE SAME DEADLOCK: half one finalizes IN the absent evaluator's name.
-# Half two removes them from the reckoning entirely — used when the admin has no grade to
-# publish on their behalf, only an empty seat to clear.
+# Finalize-on-behalf-of publishes a grade in the absent evaluator's name; unassign removes them
+# from the reckoning entirely, for when the admin has no grade to publish, only an empty seat.
 #
-# L8 — UNASSIGN IS SOFT. The row and its section_grade rows survive; ``unassigned_at IS NULL``
-# is the whole L7 "counted" predicate. Nothing is deleted, ``status`` is not rewritten, and the
-# dispute trail stays readable. Several tests below exist only to hold that line.
+# UNASSIGN IS SOFT. The row and its section_grade rows survive; ``unassigned_at IS NULL`` is the
+# whole "counted" predicate. Nothing is deleted, ``status`` is not rewritten, and the dispute
+# trail stays readable. Several tests below exist only to hold that line.
 #
-# L5 — RENORMALIZATION, not rescaling: the dropped evaluator leaves the denominator, and the
+# RENORMALIZATION, not rescaling: the dropped evaluator leaves the denominator, and the
 # survivors' weights are re-divided among themselves.
 # ======================================================================================
 
@@ -363,7 +362,7 @@ async def _unassign_row(migrated_db, evid):
 
 
 async def _grade_state(migrated_db, rid):
-    """(status, overall_grade, grade_version) — the three fields L5/L9 move together."""
+    """(status, overall_grade, grade_version) — the three fields that move together."""
     async with migrated_db() as s:
         return (
             await s.execute(
@@ -427,7 +426,7 @@ async def test_unassign_requires_a_non_blank_reason(migrated_db: async_sessionma
 
 
 async def test_unassign_is_rejected_for_non_admin_callers(migrated_db: async_sessionmaker) -> None:
-    """Including the evaluation's OWN evaluator — self-removal is not a thing (§4.2)."""
+    """Including the evaluation's OWN evaluator — self-removal is not a thing."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -443,7 +442,7 @@ async def test_unassign_is_rejected_for_non_admin_callers(migrated_db: async_ses
 
 
 async def test_unassign_of_an_already_unassigned_evaluation_is_rejected(migrated_db: async_sessionmaker) -> None:
-    """A double-clicked button must not re-bump grade_version (L9)."""
+    """A double-clicked button must not re-bump grade_version."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -461,11 +460,11 @@ async def test_unassign_of_an_already_unassigned_evaluation_is_rejected(migrated
     assert (await _grade_state(migrated_db, rid))[2] == version_after_first
 
 
-# --- L5: renormalization --------------------------------------------------------------
+# --- renormalization ------------------------------------------------------------------
 
 
 async def test_unassign_evaluator_renormalizes_aggregated_weight(migrated_db: async_sessionmaker) -> None:
-    """THE canonical D2 assertion.
+    """THE canonical renormalization assertion.
 
     Weights 1.0/1.5 over grades 8.0/6.0 average (8.0 + 9.0) / 2.5 == 6.80. Dropping the 1.5
     leaves 8.00 — the survivor's own grade, NOT 6.80 rescaled by 1.0/2.5 (which would be 2.72).
@@ -499,7 +498,7 @@ async def test_unassign_evaluator_renormalizes_aggregated_weight(migrated_db: as
 async def test_unassign_does_not_delete_the_evaluation_or_its_section_grades(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """L8: soft. The row, its grades and its status all survive the removal."""
+    """Unassign is soft: the row, its grades and its status all survive the removal."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -520,7 +519,7 @@ async def test_unassign_does_not_delete_the_evaluation_or_its_section_grades(
 async def test_unassigning_an_evaluator_who_had_already_finalized_removes_their_grade_from_the_aggregate(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """EDGE CASE: they were completed and contributing.
+    """The unassigned evaluator was completed and contributing.
 
     Afterwards they contribute neither numerator nor denominator, yet ``completed_at`` and
     ``finalized_by`` stay readable — that pair IS the dispute trail.
@@ -548,13 +547,13 @@ async def test_unassigning_an_evaluator_who_had_already_finalized_removes_their_
     assert row.finalized_by is not None
 
 
-# --- L6: the gate settles on unassign too ---------------------------------------------
+# --- the gate settles on unassign too -------------------------------------------------
 
 
 async def test_unassigning_the_last_unfinalized_evaluator_auto_transitions_the_report_to_evaluated(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """EDGE CASE, L6 — the whole point of D2 half two.
+    """The deadlock exit in full.
 
     ``all_must_finalize`` with one absent evaluator is the deadlock. Removing them leaves a
     fully-finalized counted set, so the gate opens and the report crosses on the way out.
@@ -579,9 +578,9 @@ async def test_unassigning_the_last_unfinalized_evaluator_auto_transitions_the_r
     status_after, grade_after, version_after = await _grade_state(migrated_db, rid)
     assert status_after == "evaluated"
     assert grade_after == Decimal("8.00")
-    # D3: the version identifies the PUBLISHED grade, and the removed evaluator never
-    # contributed a value — the gate opened without the number moving, so nothing was
-    # republished. Bumping here would invalidate a consumer's cache over a non-event.
+    # The version identifies the PUBLISHED grade, and the removed evaluator never contributed a
+    # value — the gate opened without the number moving, so nothing was republished. Bumping
+    # here would invalidate a consumer's cache over a non-event.
     assert version_after == version_before
     evaluated = [row for row in await _audit_rows(migrated_db, rid) if row.action == "report.evaluated"]
     assert len(evaluated) == 1
@@ -591,7 +590,7 @@ async def test_unassigning_the_last_unfinalized_evaluator_auto_transitions_the_r
 async def test_unassigning_the_only_evaluator_does_not_transition_the_report(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """THE COUNTERPART that stops L6 over-firing.
+    """THE COUNTERPART that stops the gate over-firing.
 
     Zero counted evaluations is a CLOSED gate, not a vacuously open one — a report with nobody
     left to grade it wants a human, so it stays ``under_evaluation`` with a NULL grade and the
@@ -645,13 +644,13 @@ async def test_unassign_writes_an_audit_row_with_the_reason_and_the_new_aggregat
     assert str(rows[0].user_id) == ga_id
 
 
-# --- L8: the row survives to be reused ------------------------------------------------
+# --- the row survives to be reused ----------------------------------------------------
 
 
 async def test_reassigning_a_previously_unassigned_evaluator_reactivates_the_existing_row(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """L8 exists so ``UNIQUE(report_id, evaluator_id)`` survives a change of mind.
+    """The soft unassign exists so ``UNIQUE(report_id, evaluator_id)`` survives a change of mind.
 
     Re-assigning the same evaluator must revive their row — with their old section grades still
     attached — not collide with it and not create a second one.

@@ -1,4 +1,4 @@
-"""L7 assignment-based write-locking on section saves (WP4 #27 Task L7).
+"""Assignment-based write-locking on section saves.
 
 When a report has an ``assigned_writer_id``, only the assigned writer, a team
 admin (holder of ``reports:recall``), or a global admin may edit its sections.

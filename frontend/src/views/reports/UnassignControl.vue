@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Global-Admin removal of an assigned evaluator (D2, half two).
+ * Global-Admin removal of an assigned evaluator.
  *
  * A reason is MANDATORY and blocked locally as well as server-side, exactly as ReopenControl
  * does it: `UnassignRequest.reason` defaults to empty so a missing body, an empty string and

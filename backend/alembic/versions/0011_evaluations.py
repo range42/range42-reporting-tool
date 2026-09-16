@@ -1,4 +1,4 @@
-"""evaluation + section_grade + grade rollup columns (WP5 W5-1)
+"""evaluation + section_grade + grade rollup columns
 
 Revision ID: 0011
 Revises: 0010
@@ -74,7 +74,7 @@ def upgrade() -> None:
         "CHECK (pass_fail_result IS NULL OR rubric_scores IS NULL)"
     )
 
-    # --- report: A7 rollup targets + E3 grade_version ---------------------
+    # --- report: rollup targets + grade_version ---------------------------
     op.add_column("report", sa.Column("overall_feedback", sa.Text(), nullable=True))
     op.add_column("report", sa.Column("overall_grade", sa.Numeric(5, 2), nullable=True))
     op.add_column(
@@ -91,7 +91,7 @@ def upgrade() -> None:
         "('draft','pending_approval','submitted','under_evaluation','evaluated'))"
     )
 
-    # --- G-6: scoring_config.finalize_policy ------------------------------
+    # --- scoring_config.finalize_policy -----------------------------------
     op.add_column(
         "scoring_config",
         sa.Column("finalize_policy", sa.String(20), nullable=False, server_default=sa.text("'all_must_finalize'")),
@@ -105,11 +105,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("ALTER TABLE scoring_config DROP CONSTRAINT ck_scoring_config_finalize_policy")
     op.drop_column("scoring_config", "finalize_policy")
-    # The pre-WP5 constraint has no room for the evaluation statuses, so any row still holding
-    # one must be normalized before it is re-added. Downgrade is dev/test-only (ARCHITECTURE
-    # §9.7) and this step is lossy by design: 'submitted' is the state those rows came from.
-    # Without it the integration fixture's per-test `downgrade base` fails as soon as any test
-    # drives a report into under_evaluation/evaluated.
+    # The old constraint has no room for the evaluation statuses, so any row still holding one
+    # must be normalized before it is re-added. LOSSY by design, and downgrade is dev/test-only:
+    # 'submitted' is the state those rows came from.
     op.execute("UPDATE report SET status = 'submitted' WHERE status IN ('under_evaluation','evaluated')")
     op.execute("ALTER TABLE report DROP CONSTRAINT ck_report_status")
     op.execute(

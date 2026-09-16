@@ -1,4 +1,4 @@
-"""WP3 S10 (#81) — campaigns CRUD + timeline/compare reads.
+"""Campaigns CRUD + timeline/compare reads.
 
 A campaign groups reports across teams/time within an exercise (M2M — a report
 may appear in several campaigns). Writes are GA-only like the other authoring

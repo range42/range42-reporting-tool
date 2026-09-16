@@ -1,4 +1,4 @@
-"""WP3 S9 (#80) — section attachments + inline images.
+"""Section attachments + inline images.
 
 Uploads are draft-only and writer-gated; the stored content type comes from
 magic-byte sniffing (spoofed client MIME rejected, 415); size is capped (413);
@@ -187,7 +187,7 @@ async def test_upload_and_delete_write_audit_rows(migrated_db: async_sessionmake
 
 
 async def test_storage_protocol_swap(migrated_db: async_sessionmaker) -> None:
-    """The routes must work against any StorageBackend impl (guardrail #2)."""
+    """The routes must work against any StorageBackend impl."""
     from app.storage import get_storage
 
     class MemoryStorage:

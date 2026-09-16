@@ -49,16 +49,14 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Security"]
 strict = true
 plugins = ["pydantic.mypy"]
 
-# W5-3 Task 13 — the first backend coverage gate. Branch coverage, because the correctness
-# argument in this work package lives in the branches: a finalize mode taken one way, a gate
-# open or closed, an evaluation counted or not. Line coverage alone reports those as covered
-# after exercising a single side.
+# Branch coverage, not line coverage: the correctness argument lives in the branches — a
+# finalize mode taken one way, a gate open or closed, an evaluation counted or not.
 [tool.coverage.run]
 source = ["app"]
 branch = true
 omit = [
-  # Reserved, intentionally empty routers (design §8.2) — nothing to cover until WP2-WP6
-  # implement them, and counting them drags the gate down for no signal.
+  # Reserved, intentionally empty routers — nothing to cover, and counting them drags the
+  # gate down for no signal.
   "app/routes/v1/_stubs.py",
 ]
 

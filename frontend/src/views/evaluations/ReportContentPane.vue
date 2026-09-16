@@ -2,9 +2,9 @@
 /**
  * Read-only renderer for one report section's submitted content.
  *
- * Presentational and prop-driven on purpose — no store access, no service calls — because
- * W5-6 and W5-7 mount it several times on one screen (campaign pairing, cross-team compare)
- * and a component that reached for the evaluation store could only ever show one section.
+ * Presentational and prop-driven on purpose — no store access, no service calls — because it
+ * is mounted several times on one screen (campaign pairing, cross-team compare), and a
+ * component that reached for the evaluation store could only ever show one section.
  *
  * SECURITY: section content is writer-authored HTML, i.e. untrusted. It reaches `v-html`
  * only through `sanitize()`, never raw. `choice_values` are rendered as TEXT: they arrive as

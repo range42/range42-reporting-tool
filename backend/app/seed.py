@@ -1,6 +1,6 @@
 """Idempotent seed of the built-in system roles (``just seed``).
 
-Upserts the five §5.2 ``role_definition`` rows by ``role_key`` (safe to re-run).
+Upserts the five ``role_definition`` rows by ``role_key`` (safe to re-run).
 Invoked by ``just seed`` (``python -m app.seed``) and reused by tests.
 """
 

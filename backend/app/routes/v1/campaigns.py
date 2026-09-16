@@ -1,9 +1,8 @@
-"""Campaigns (WP3 S10, #81) — grouping of reports across teams/time for an exercise.
+"""Campaigns — grouping of reports across teams/time for an exercise.
 
-Writes are GA-only (like every authoring surface). Reads reuse the report
-visibility rules — own team, or ``reports:read:all`` — resolved server-side on
-every query (guardrail #6, default-deny). The timeline/compare endpoints feed
-the WP5 evaluator two-pane / N-pane views.
+Writes are GA-only, like every authoring surface. Reads reuse the report visibility rules —
+own team, or ``reports:read:all`` — resolved server-side on every query (default-deny). The
+timeline/compare endpoints feed the evaluator two-pane / N-pane views.
 """
 
 import uuid
@@ -262,7 +261,7 @@ async def remove_campaign_report(
     )
 
 
-# --- timeline + compare (WP5 evaluator feeds) -------------------------------------
+# --- timeline + compare (evaluator feeds) -----------------------------------------
 
 
 @router.get("/exercises/{exercise_id}/campaigns/{cid}/timeline")

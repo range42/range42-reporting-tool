@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { formatGrade, parseGrade } from '@/lib/decimal'
 
-describe('decimal grade helpers (D18)', () => {
+describe('decimal grade helpers', () => {
   it('parses a two-decimal string grade into a number', () => {
     expect(parseGrade('7.50')).toBe(7.5)
     expect(parseGrade('0.00')).toBe(0)

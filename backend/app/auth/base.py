@@ -1,9 +1,7 @@
-"""Auth provider boundary (shape reservation — no implementation yet).
+"""Auth provider boundary.
 
-Parity with ``app.storage.base.StorageBackend``: defines the structural contract
-every OIDC/OAuth provider adapter must satisfy. Concrete providers and the token
-exchange / JWKS validation land in WP2; this module only locks the interface so
-later work does not retrofit it.
+Parity with ``app.storage.base.StorageBackend``: the structural contract every OIDC/OAuth
+provider adapter must satisfy.
 """
 
 from dataclasses import dataclass

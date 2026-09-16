@@ -1,8 +1,8 @@
 """The evaluator's own assignment listing, and the report context on one evaluation.
 
-Both exist for the evaluator queue and the single-evaluation header: before this, the queue
-had no cross-report source at all, and the header could only learn the team and submission
-time by reading the report row — which a non-member evaluator is refused.
+They serve the evaluator queue, which needs a cross-report source, and the single-evaluation
+header, which needs the team and submission time without reading the report row a non-member
+evaluator is refused.
 """
 
 import pytest

@@ -1,7 +1,7 @@
-"""Task 8 — the grade write and its rollup are ONE transaction, plus the B6 delete route.
+"""The grade write and its rollup are ONE transaction, plus the grade-delete route.
 
-M13's whole point: a saved grade whose rollup failed would leave the report advertising a
-stale overall_grade with no way to notice. Either both land or neither does.
+A saved grade whose rollup failed would leave the report advertising a stale overall_grade with
+no way to notice. Either both land or neither does.
 """
 
 from decimal import Decimal
@@ -68,7 +68,7 @@ async def test_grade_save_and_rollup_commit_atomically(migrated_db: async_sessio
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah)
         assert (await c.put(_grade_url(ex, rid, evid, sid), json={"grade": "8"}, headers=h)).status_code == 200
-        # W5-3 L7: the grade is published by the finalize, in that request's transaction.
+        # The grade is published by the finalize, in that request's transaction.
         await finalize(c, h, ex, rid, evid)
     assert await _scalar(migrated_db, "SELECT count(*) FROM section_grade") == 1
     assert await _overall(migrated_db, rid) == Decimal("8.00")
@@ -103,7 +103,7 @@ async def test_evaluation_out_exposes_overall_grade(migrated_db: async_sessionma
     assert after["overall_grade"] == "8.00"
 
 
-# --- B6 delete route ------------------------------------------------------------
+# --- the grade-delete route -----------------------------------------------------
 
 
 async def test_delete_grade_recomputes_the_report_grade(migrated_db: async_sessionmaker) -> None:
@@ -117,8 +117,8 @@ async def test_delete_grade_recomputes_the_report_grade(migrated_db: async_sessi
         await finalize(c, h1, ex, rid, evid1)
         await finalize(c, h2, ex, rid, evid2)
         assert await _overall(migrated_db, rid) == Decimal("7.00")
-        # A finalized evaluation refuses grade edits, so ev2 is reopened by hand (W5-4 owns
-        # the real route) to prove the delete still drives a recompute.
+        # A finalized evaluation refuses grade edits, so ev2 is reopened by hand to prove the
+        # delete still drives a recompute.
         async with migrated_db() as s2:
             await s2.execute(
                 text("UPDATE evaluation SET status = 'in_progress' WHERE id = CAST(:i AS uuid)"), {"i": evid2}
@@ -149,7 +149,7 @@ async def test_delete_grade_by_a_peer_evaluator_returns_403(migrated_db: async_s
         h2, uid2 = await evaluator(migrated_db, c, ah, ex, "ev2")
         evid2 = await assign(c, ah, ex, rid, uid2)
         await c.put(_grade_url(ex, rid, evid2, sid), json={"grade": "5"}, headers=h2)
-        # D1 still holds on the new verb.
+        # Evaluator isolation still holds on the new verb.
         assert (await c.delete(_grade_url(ex, rid, evid2, sid), headers=h1)).status_code == 403
     assert await _scalar(migrated_db, "SELECT count(*) FROM section_grade") == 1
 

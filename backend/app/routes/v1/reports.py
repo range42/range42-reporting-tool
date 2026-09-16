@@ -133,16 +133,15 @@ async def _assert_report_access(
 
 
 class _GradeGate:
-    """M17 — decides, per report, whether the caller may see the report-level grade.
+    """Decides, per report, whether the caller may see the report-level grade.
 
     The caller-level facts (Global Admin, ``scoring:read:all``, the exercise's
-    ``teams_see_own_scores``) are resolved ONCE per request; ``allows`` then costs nothing per
-    row, so the list route stays free of an N+1 over the page.
+    ``teams_see_own_scores``) are resolved ONCE per request, so ``allows`` costs nothing per row
+    and the list route stays free of an N+1.
 
     Rule: Global Admin and ``scoring:read:all`` holders always see it. A team member sees it
-    only once the report is ``evaluated`` AND ``teams_see_own_scores`` is true — before that
-    a half-graded number would be published to the team being graded. Anyone else (a caller
-    with ``reports:read:all`` but no scoring read, should such a role ever exist) sees nothing.
+    only once the report is ``evaluated`` AND ``teams_see_own_scores`` is true, so a half-graded
+    number is never published to the team being graded. Anyone else sees nothing.
     """
 
     def __init__(self, *, reads_all_scores: bool, teams_see_own_scores: bool) -> None:
@@ -164,7 +163,7 @@ class _GradeGate:
 
 
 async def _assert_section_write_access(db: AsyncSession, exercise_id: uuid.UUID, report: Report, user: User) -> None:
-    """L7 write-lock: an assigned report's sections are editable only by the assigned
+    """Write-lock: an assigned report's sections are editable only by the assigned
     writer, a team admin (holder of ``reports:recall``), or a global admin.
 
     Layered on top of ``_assert_report_access`` (team scoping); unassigned reports
@@ -243,8 +242,7 @@ async def _approved_steps(db: AsyncSession, report: Report) -> set[int]:
     """Steps approved in the report's CURRENT submission cycle.
 
     Earlier cycles are superseded, not deleted: a recall or rejection bumps the cycle, so the
-    rows stay readable for the audit trail while stopping short of counting towards this
-    submission. Without this, a recalled report could never be approved again.
+    rows stay readable for the audit trail without counting towards this submission.
     """
     rows = (
         await db.execute(
@@ -337,10 +335,9 @@ async def _resolve_on_behalf_of(
 ) -> tuple[uuid.UUID, bool]:
     """Resolve the approver identity for an approve action.
 
-    Without ``on_behalf_of`` the actor approves as themselves. With it, only a
-    global admin may record the approval on behalf of another (existing) user —
-    an audited admin override for a stalled chain (W4-8). Returns
-    ``(approver_id, is_admin_override)``.
+    Without ``on_behalf_of`` the actor approves as themselves. With it, only a global admin may
+    record the approval on behalf of another (existing) user — an audited admin override for a
+    stalled chain. Returns ``(approver_id, is_admin_override)``.
     """
     if on_behalf_of is None:
         return actor.id, False
@@ -629,7 +626,7 @@ async def save_section(
     ).scalar_one()
 
     if body.version != section.version:
-        # 409 carries the current section state so the client can resolve the conflict (spec §6.1)
+        # 409 carries the current section state so the client can resolve the conflict
         raise HTTPException(
             status_code=409,
             detail={
@@ -722,10 +719,10 @@ async def submit_report(
 
 
 # --- approval: approve / reject --------------------------------------------
-# Authorized on the reports:approve permission alone (exercise-scoped) — an
-# approver need not be a member of the report's team. A report stays in
-# pending_approval until all *required* chain steps are approved, then the state
-# machine finalizes it to submitted. No chain (or a single entry) = single step 1.
+# Authorized on the reports:approve permission alone (exercise-scoped) — an approver need not
+# be a member of the report's team. A report stays in pending_approval until all *required*
+# chain steps are approved, then the state machine finalizes it to submitted. No chain (or a
+# single entry) = single step 1.
 
 
 @router.post("/exercises/{exercise_id}/reports/{rid}/approve")
@@ -846,16 +843,14 @@ async def reject_report(
 
 
 async def _evaluation_started(db: AsyncSession, report: Report) -> bool:
-    """Whether evaluation of ``report`` has begun — recall is blocked once it has (§7.2).
+    """Whether evaluation of ``report`` has begun — recall is blocked once it has.
 
     'Begun' means at least one evaluation is ``in_progress`` or ``completed``. A merely
     ``assigned`` evaluator does NOT block recall: assignment is not the start of work.
 
-    ``unassigned_at`` IS DELIBERATELY IGNORED, and this is NOT an oversight to tidy up. The
-    grade aggregate excludes unassigned evaluations because it is asking whose grade counts
-    toward the number; this guard is asking whether anyone has looked at the content yet, and
-    an unassigned evaluator's completed grades answer yes. Letting the team pull the report
-    back to ``draft`` would hand them content that has already been assessed.
+    ``unassigned_at`` IS DELIBERATELY IGNORED, not an oversight to tidy up. The grade aggregate
+    excludes unassigned evaluations because it asks whose grade counts; this guard asks whether
+    anyone has looked at the content, and an unassigned evaluator's completed grades answer yes.
 
     A reopened evaluation is ``in_progress``, so a reopen is not a back door to recall either.
     """
@@ -884,9 +879,9 @@ async def recall_report(
     _require_status(report, "submitted")
     if await _evaluation_started(db, report):
         raise HTTPException(status_code=409, detail={"error": "evaluation_in_progress"})
-    # Recall is not an approval action -> no approval_record, just the state transition.
-    # It DOES supersede this cycle's approvals: the report goes back to draft to be changed,
-    # and an approval of the withdrawn submission must not carry over to the next one.
+    # Recall is not an approval action -> no approval_record, just the state transition. It
+    # DOES supersede this cycle's approvals: an approval of the withdrawn submission must not
+    # carry over to the next one.
     recalled_cycle = report.approval_cycle
     report.approval_cycle += 1
     await _apply_transition(

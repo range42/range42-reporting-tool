@@ -11,10 +11,10 @@ from app.models.base import Base, UUIDMixin
 class ApprovalRecord(Base, UUIDMixin):
     """One approval/rejection decision on a report (append-only fact).
 
-    Only ``created_at`` — no ``TimestampMixin``/``MetadataMixin`` (a decision is
-    never updated). ``step`` is 1-based (``approval_chain[step-1]``); ``step=1`` is
-    the single-step default. ``is_admin_override`` marks a Global-Admin approval
-    made on behalf of an unavailable approver (WP4 deadlock resolution).
+    Only ``created_at`` — no ``TimestampMixin``/``MetadataMixin``, since a decision is never
+    updated. ``step`` is 1-based (``approval_chain[step-1]``); ``step=1`` is the single-step
+    default. ``is_admin_override`` marks a Global-Admin approval made on behalf of an
+    unavailable approver.
     """
 
     __tablename__ = "approval_record"

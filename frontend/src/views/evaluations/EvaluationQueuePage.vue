@@ -2,8 +2,8 @@
 /**
  * Route-level wrapper that gives the evaluator queue the same page frame as every other view.
  *
- * The frame lives here rather than in `EvaluationQueue.vue` because that component is mounted
- * as a CHILD by W5-6 and W5-7 against rows they already hold — wrapping it directly would nest
+ * The frame lives here rather than in `EvaluationQueue.vue` because that component is also
+ * mounted as a CHILD against rows the parent already holds — wrapping it directly would nest
  * one AppShell inside another.
  */
 import { useI18n } from 'vue-i18n'

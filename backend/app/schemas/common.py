@@ -17,9 +17,7 @@ class ErrorEnvelope(BaseModel):
 class ConflictDetail(BaseModel):
     """Payload carried in ``ErrorBody.details[]`` for 409 (optimistic-lock) responses.
 
-    When a write loses an optimistic-concurrency race, the 409 error envelope's
-    ``details`` array carries one of these so the client can reconcile against the
-    current server state. Shape reservation — emitted by WP4+ write paths.
+    Carries the current server state so a client that lost a concurrency race can reconcile.
     """
 
     current_version: int

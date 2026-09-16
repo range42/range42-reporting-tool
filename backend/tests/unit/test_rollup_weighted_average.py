@@ -1,9 +1,9 @@
-"""Task 4 — the heart of A7: sections folded into one evaluator's grade.
+"""Sections folded into one evaluator's grade.
 
 The exclusion rule is what most of this file defends. A section contributing ``None`` — either
-``not_graded`` (M4) or gradable-but-ungraded (M5) — leaves BOTH the numerator and the weight
-denominator. Counting it as zero, or keeping its weight in the denominator, silently punishes
-a team for work an evaluator simply has not marked yet.
+``not_graded`` or gradable-but-ungraded — leaves BOTH the numerator and the weight denominator.
+Counting it as zero, or keeping its weight in the denominator, silently punishes a team for
+work an evaluator simply has not marked yet.
 """
 
 from decimal import Decimal
@@ -55,7 +55,7 @@ def test_rollup_with_a_single_section_returns_that_sections_value() -> None:
     assert compute_evaluation_grade(_ev(_s(grade=Decimal("6.5")))) == Decimal("6.50")
 
 
-# --- M4 / M5 exclusion --------------------------------------------------------
+# --- exclusion of ungraded sections -------------------------------------------
 
 
 def test_rollup_excludes_not_graded_sections_from_denominator() -> None:
@@ -71,7 +71,7 @@ def test_rollup_excludes_not_graded_sections_from_numerator() -> None:
 
 
 def test_rollup_excludes_ungraded_sections_from_denominator() -> None:
-    # M5 — a heavy ungraded section must not drag the grade down before it is marked.
+    # A heavy ungraded section must not drag the grade down before it is marked.
     ev = _ev(_s(grade=Decimal("8")), _s(grade=None, grade_weight=Decimal("9")))
     assert compute_evaluation_grade(ev) == Decimal("8.00")
 
@@ -102,7 +102,7 @@ def test_rollup_returns_none_for_an_evaluation_with_no_sections() -> None:
     assert compute_evaluation_grade(_ev()) is None
 
 
-# --- M11 arithmetic -----------------------------------------------------------
+# --- Decimal arithmetic -------------------------------------------------------
 
 
 def test_rollup_quantizes_to_two_decimal_places() -> None:
@@ -150,12 +150,12 @@ def test_rollup_handles_degenerate_grade_scale() -> None:
     assert got == Decimal("5")
 
 
-# --- M12: raw weighted average, no cross-section normalization ----------------
+# --- raw weighted average, no cross-section normalization ---------------------
 
 
 def test_rollup_flags_mixed_grade_max_across_sections() -> None:
     # Averaging a 0-10 section with a 0-100 one is arithmetically valid but almost never
-    # intended, so the caller can warn. M12 keeps the raw average rather than normalizing.
+    # intended, so the caller can warn. The raw average is kept rather than normalized.
     assert has_mixed_grade_max([_s(grade_max=Decimal("10")), _s(grade_max=Decimal("100"))]) is True
     assert has_mixed_grade_max([_s(grade_max=Decimal("10")), _s(grade_max=Decimal("10"))]) is False
 
@@ -167,7 +167,7 @@ def test_mixed_grade_max_ignores_sections_that_contribute_nothing() -> None:
 
 
 def test_rollup_does_not_normalize_across_mixed_scales() -> None:
-    # M12 — the raw weighted average, even when the scales differ. (80 + 8) / 2 = 44.
+    # The raw weighted average, even when the scales differ. (80 + 8) / 2 = 44.
     ev = _ev(_s(grade=Decimal("80"), grade_max=Decimal("100")), _s(grade=Decimal("8")))
     assert compute_evaluation_grade(ev) == Decimal("44.00")
 
@@ -178,17 +178,14 @@ def test_rollup_does_not_normalize_across_mixed_scales() -> None:
 def test_golden_path_single_evaluator_overall_grade_is_8_22() -> None:
     """One evaluator, every grading mode, both exclusion rules — lands on 8.22.
 
-    Constructed here rather than copied: the plan's worked example lives in the gitignored
-    docs/superpowers tree. The arithmetic is spelled out so a future reader can re-derive it.
+    Executive Summary   numeric    8.5            weight 2 -> 17.0
+    Detection Timeline  numeric    7.8            weight 1 ->  7.8
+    SOC notified        pass_fail  pass on 0-10   weight 1 -> 10.0
+    Report quality      rubric     6.3 pre-rolled weight 1 ->  6.3
+    Service status      not_graded                weight 1 -> excluded
+    Lessons learned     numeric    ungraded       weight 3 -> excluded
 
-        Executive Summary   numeric    8.5            weight 2 -> 17.0
-        Detection Timeline  numeric    7.8            weight 1 ->  7.8
-        SOC notified        pass_fail  pass on 0-10   weight 1 -> 10.0
-        Report quality      rubric     6.3 pre-rolled weight 1 ->  6.3
-        Service status      not_graded                weight 1 -> excluded (M4)
-        Lessons learned     numeric    ungraded       weight 3 -> excluded (M5)
-
-        41.1 / 5 = 8.22
+    41.1 / 5 = 8.22
     """
     ev = _ev(
         _s(section_def_id="exec", grade=Decimal("8.5"), grade_weight=Decimal("2")),

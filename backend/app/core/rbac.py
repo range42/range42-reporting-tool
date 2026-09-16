@@ -1,10 +1,5 @@
 """Permission-based RBAC dependency factories.
 
-``get_current_user``, ``get_auth_context``, ``require_permission``,
-``require_global_admin``, and ``require_team_membership`` are all fully
-implemented (WP2 Phase D). ``require_team_membership`` reads the ``team_member``
-table to assert the caller belongs to a team.
-
 Resolver chain (how a permission string is checked):
 
     JWT  ->  user  ->  exercise_role  ->  role_definition.permissions  ->  string
@@ -15,10 +10,8 @@ of permission *strings*; ``require_permission`` asserts ``perm`` is in that set.
 The check is exercise-scoped: only rows whose ``exercise_id`` matches the path
 parameter are considered, so a role in exercise A never grants access in exercise B.
 
-NOTE: the architecture doc §5.3 ``require_role(role_names)`` example is
-**SUPERSEDED** by this permission-based model. Gating on hard-coded role *names*
-breaks custom/operator-defined roles (a role the operator invents would never
-match a name allowlist). Authorize on *permissions*, never on role names.
+AUTHORIZE ON PERMISSIONS, NEVER ON ROLE NAMES: a name allowlist would never match a role the
+operator invents.
 """
 
 import uuid
@@ -100,7 +93,7 @@ def require_permission(perm: str) -> Callable[..., Awaitable[None]]:
     Global admins bypass. Otherwise resolves the caller's ``exercise_role`` rows for
     the path ``exercise_id``, ORs their ``role_definition`` permission sets, and 403s
     if ``perm`` is absent. Exercise-scoped only — global strings are guarded by
-    ``require_global_admin`` (design §4.3).
+    ``require_global_admin``.
     """
 
     async def _dependency(

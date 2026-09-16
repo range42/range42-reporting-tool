@@ -10,17 +10,11 @@ from app.schemas.common import ErrorBody, ErrorEnvelope
 
 
 def _sanitize_item(obj: object) -> object:
-    """Recursively replace Exception instances with their string representation.
+    """Recursively replace non-JSON-serialisable values with their string representation.
 
-    Pydantic ``field_validator`` errors place the raw exception in ``ctx["error"]``,
-    which is not JSON-serialisable.  This walk converts those to strings before
-    the payload is handed to ``JSONResponse``.
-
-    The ``isinstance(Exception)`` guard is checked first so it applies uniformly
-    regardless of nesting depth — top-level, dict value, or list item.
-
-    ``Decimal`` gets the same treatment: a ``ge``/``le``/``max_digits`` constraint on a
-    ``Decimal`` field is echoed into ``ctx`` as a ``Decimal``, which ``json`` refuses too.
+    Pydantic ``field_validator`` errors place the raw exception in ``ctx["error"]``, and a
+    constraint on a ``Decimal`` field echoes a ``Decimal`` into ``ctx``; ``json`` refuses both.
+    The ``isinstance(Exception)`` guard runs first so it applies at any nesting depth.
     """
     if isinstance(obj, Exception | Decimal):
         return str(obj)
@@ -47,10 +41,9 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http(_: Request, exc: StarletteHTTPException) -> JSONResponse:
         detail = exc.detail
-        # Structured detail (dict/list): carry it in ``details[]`` so JSON clients
-        # can read it, instead of flattening it to a Python-repr string in
-        # ``message`` (which destroyed the 409 stale-version ``section`` payload).
-        # String details keep their existing behaviour (message = the string).
+        # Structured detail (dict/list): carry it in ``details[]`` so JSON clients can read
+        # it, rather than flattening it to a Python-repr string in ``message``. String details
+        # keep their existing behaviour (message = the string).
         if isinstance(detail, dict):
             message = str(detail.get("error", "error"))
             return _envelope("HTTP_ERROR", message, [_sanitize_item(detail)], exc.status_code)

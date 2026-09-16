@@ -1,8 +1,7 @@
-"""evaluation admin-override/unassign columns (WP5 W5-3, D2)
+"""evaluation admin-override/unassign columns
 
-G-6's scoring_config.finalize_policy and D3's report.grade_version are NOT here —
-both are created by 0011 (W5-1 L9/L10). This revision adds only the D2 deadlock-exit
-columns, mirroring approval_record's is_admin_override/comment pattern (§4.2).
+Adds only the deadlock-exit columns, mirroring approval_record's is_admin_override/comment
+pattern. ``scoring_config.finalize_policy`` and ``report.grade_version`` are created by 0011.
 
 Revision ID: 0012
 Revises: 0011
@@ -35,7 +34,7 @@ def upgrade() -> None:
         sa.Column("unassigned_by", pg.UUID(as_uuid=True), sa.ForeignKey("user.id", ondelete="RESTRICT"), nullable=True),
     )
     op.add_column("evaluation", sa.Column("unassign_reason", sa.Text(), nullable=True))
-    # L7: every gate and aggregate query filters on exactly this shape — partial, not plain.
+    # Every gate and aggregate query filters on exactly this shape — partial, not plain.
     op.create_index(
         "ix_evaluation_report_active",
         "evaluation",

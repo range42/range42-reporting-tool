@@ -1,4 +1,4 @@
-"""Arrange helpers shared by the W5-1 evaluation route tests (Tasks 5-11)."""
+"""Arrange helpers shared by the evaluation route tests."""
 
 from sqlalchemy import text
 
@@ -19,7 +19,7 @@ async def submitted_report(c, ah):
     """Template (one required, numeric-graded section) -> exercise -> team -> report -> submitted.
 
     Returns (exercise_id, report_id, section_id). grade_mode is 'numeric' so
-    gradable_section_count is 1 — Tasks 6-8 grade this section.
+    gradable_section_count is 1.
     """
     tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()["data"][
         "id"
@@ -88,10 +88,10 @@ async def assign(c, ah, ex, rid, uid, **body):
 
 
 async def finalize(c, headers, ex, rid, evid):
-    """Press the real W5-3 Finalize button, returning the response payload.
+    """Press the real Finalize button, returning the response payload.
 
-    Grades only reach ``report.overall_grade`` once an evaluation is ``completed`` (L7), so any
-    test that wants a published grade has to come through here. Grading after this point is a
+    Grades only reach ``report.overall_grade`` once an evaluation is ``completed``, so any test
+    that wants a published grade has to come through here. Grading after this point is a
     409 — finalize last.
     """
     r = await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/evaluations/{evid}/finalize", headers=headers)

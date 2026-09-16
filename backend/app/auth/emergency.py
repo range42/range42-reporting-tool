@@ -1,4 +1,4 @@
-"""Emergency local-admin path (OIDC-downtime backstop, ARCHITECTURE §5.1.1).
+"""Emergency local-admin path: the break-glass backstop for OIDC downtime.
 
 A single account whose bcrypt hash lives in ``EMERGENCY_ADMIN_PASSWORD_HASH``.
 Produces the same ``NormalizedClaims`` shape every other adapter does, with a

@@ -56,7 +56,7 @@ class CampaignOut(BaseModel):
 
 
 class TimelineEntryOut(BaseModel):
-    """One campaign report on the evaluator timeline (WP5 two-pane/N-pane feed)."""
+    """One campaign report on the evaluator timeline (two-pane/N-pane feed)."""
 
     report_id: str
     name: str

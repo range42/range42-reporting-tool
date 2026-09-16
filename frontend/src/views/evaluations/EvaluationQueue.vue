@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * The evaluator's work queue (EV-01): what to grade, grouped by the deadline it shares.
+ * The evaluator's work queue: what to grade, grouped by the deadline it shares.
  *
- * Rows come from `GET /exercises/{id}/evaluations`, which returns the CALLER'S OWN
- * assignments and nobody else's. An `entries` prop still overrides the fetch, so W5-6 and
- * W5-7 can mount the same table against rows they already hold.
+ * Rows come from `GET /exercises/{id}/evaluations`, which returns the CALLER'S OWN assignments
+ * and nobody else's. An `entries` prop overrides the fetch, so a parent can mount the same
+ * table against rows it already holds.
  *
- * The AI pre-check column is opt-in via `aiAvailable`: `GET /ai/status` is W5-8's, so the
- * column stays hidden rather than showing a permanently blank slot.
+ * The AI pre-check column is opt-in via `aiAvailable`: there is no `GET /ai/status` endpoint
+ * yet, so the column stays hidden rather than showing a permanently blank slot.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

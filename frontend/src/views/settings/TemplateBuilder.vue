@@ -254,7 +254,7 @@ async function addChoiceValue(s: Section): Promise<void> {
   await patchSection(s, { choice_config: { ...config, values: newValues } })
 }
 
-// CSV import (WP3 S12): additive merge server-side; the returned section replaces ours.
+// CSV import: additive merge server-side; the returned section replaces ours.
 const csvInput = ref<HTMLInputElement | null>(null)
 const csvTarget = ref<Section | null>(null)
 

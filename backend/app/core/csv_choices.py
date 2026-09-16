@@ -1,10 +1,9 @@
-"""CSV → choice-value parsing for template choice sections (WP3 S12, #82).
+"""CSV → choice-value parsing for template choice sections.
 
-v1 resolves the G-4 doc gap by importing choice values from CSV only:
-``choice_config.catalog_binding`` stays opaque metadata and is never
-interpreted here. The expected shape is a UTF-8 CSV with a ``code,label``
-header (case-insensitive; extra columns ignored). Every malformed input is
-rejected with ``CsvChoiceError`` — the route maps it to a 422.
+Choice values are imported from CSV only; ``choice_config.catalog_binding`` stays opaque
+metadata and is never interpreted here. The expected shape is a UTF-8 CSV with a ``code,label``
+header (case-insensitive; extra columns ignored). Every malformed input is rejected with
+``CsvChoiceError``, which the route maps to a 422.
 """
 
 import csv

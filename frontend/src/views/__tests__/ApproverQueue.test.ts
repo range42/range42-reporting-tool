@@ -147,8 +147,7 @@ describe('ApproverQueue.vue', () => {
   })
 
   // A recall or rejection bumps the report's cycle, superseding the approvals of the withdrawn
-  // submission. Counting them would mark step 1 done and skip it on the resubmission — the
-  // client-side half of the same bug the backend cycle fixes.
+  // submission. Counting them would mark step 1 done and skip it on the resubmission.
 
   /** The first chain step's markup; the dot class carries its state. */
   function firstStep(w: ReturnType<typeof mountQueue>): string {

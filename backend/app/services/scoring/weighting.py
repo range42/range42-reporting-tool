@@ -1,8 +1,7 @@
 """The Decimal primitives every scoring path shares: rounding and the weighted mean.
 
-They live below ``rollup`` and ``aggregate`` so both can import them without a cycle. There is
-deliberately ONE implementation of each — two evaluators grading the same report must not be
-able to reach different numbers because two modules rounded differently.
+They live below ``rollup`` and ``aggregate`` so both import them without a cycle. There is
+deliberately ONE implementation of each, so two scoring paths cannot round differently.
 """
 
 from collections.abc import Sequence
@@ -18,11 +17,9 @@ class RollupOverflow(Exception):
 
 
 def quantize_grade(value: Decimal) -> Decimal:
-    """Round to the column's 2 decimal places, HALF_UP (M11). Only called on persist.
+    """Round to the column's 2 decimal places, HALF_UP. Only called on persist.
 
-    HALF_UP, not Python's default banker's rounding: 8.125 becomes 8.13, not 8.12. Repeatedly
-    rounding half-to-even would bias a long run of grades downward, and it surprises anyone
-    checking the arithmetic by hand.
+    HALF_UP, not Python's default banker's rounding: 8.125 becomes 8.13, not 8.12.
     """
     if value > _MAX_NUMERIC_5_2 or value < -_MAX_NUMERIC_5_2:
         raise RollupOverflow(f"grade {value} exceeds NUMERIC(5,2)")
@@ -30,7 +27,7 @@ def quantize_grade(value: Decimal) -> Decimal:
 
 
 def compute_weighted_average(pairs: Sequence[tuple[Decimal, Decimal]]) -> Decimal | None:
-    """Σ(value × weight) / Σ weight (§4.2).
+    """Σ(value × weight) / Σ weight.
 
     None when the denominator is zero — callers must persist that as SQL NULL, never as 0.
     Shared by section rollup, report rollup and multi-evaluator aggregation.

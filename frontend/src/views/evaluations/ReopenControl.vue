@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Global-Admin reopen for a finalized evaluation (W5-4).
+ * Global-Admin reopen for a finalized evaluation.
  *
  * A reason is MANDATORY and enforced here as well as server-side: `ReopenRequest.reason`
  * defaults to empty so an absent body, an empty string and whitespace all land on the same

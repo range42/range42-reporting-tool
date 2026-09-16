@@ -1,16 +1,14 @@
-"""Task 7 — the sole-writer persistence path (M2, M9, M10, M14).
+"""The sole-writer persistence path.
 
-State is built through the real W5-1 API so these exercise the actual rows and transaction,
-then ``recompute_report_grade`` is called directly — Task 8 is what wires it into the
-grade-save handler, so nothing calls it implicitly yet.
+State is built through the real API so these exercise the actual rows and transaction, then
+``recompute_report_grade`` is called directly.
 
 Two sole-writer contracts must not collide: ``state_machine`` owns ``report.status``,
 ``rollup`` owns ``report.overall_grade`` / ``evaluation.overall_grade`` / ``grade_version``.
 
-W5-3 L7: only a COMPLETED evaluation feeds ``report.overall_grade``, so grading alone no longer
-publishes anything. These tests drive ``rollup`` directly rather than through a request, so they
-complete their evaluations with :func:`mark_completed` — the route-level equivalent is the
-finalize endpoint, covered in ``test_evaluations_finalize.py``.
+Only a COMPLETED evaluation feeds ``report.overall_grade``, so these tests complete their
+evaluations with :func:`mark_completed`; the route-level equivalent is the finalize endpoint,
+covered in ``test_evaluations_finalize.py``.
 """
 
 import uuid
@@ -79,7 +77,7 @@ async def _grade(c, ex, rid, evid, sid, value, headers):
 
 
 async def _complete(migrated_db, *evids):
-    """Complete these evaluations so their grades count toward the report (L7)."""
+    """Complete these evaluations so their grades count toward the report."""
     await mark_completed(migrated_db, *evids)
 
 
@@ -112,7 +110,7 @@ async def test_recompute_persists_report_overall_grade(migrated_db: async_sessio
         h, evid = graders[0]
         await _grade(c, ex, rid, evid, sids[0], "8", h)
         await _grade(c, ex, rid, evid, sids[1], "6", h)
-    # The saves published nothing: the evaluation is still in progress (L7).
+    # The saves published nothing: the evaluation is still in progress.
     assert await _report_row(migrated_db, rid) == (None, 0)
     await _complete(migrated_db, evid)
     await _recompute(migrated_db, rid)
@@ -173,7 +171,7 @@ async def test_recompute_on_report_with_no_evaluations_leaves_overall_grade_null
     assert version == 0  # nothing published, so nothing to version
 
 
-# --- idempotence + D3 versioning ----------------------------------------------
+# --- idempotence + versioning -------------------------------------------------
 
 
 async def test_recompute_is_idempotent_when_called_twice_with_no_change(migrated_db: async_sessionmaker) -> None:
@@ -213,7 +211,7 @@ async def test_recompute_bumps_grade_version_only_when_the_grade_changes(migrate
     assert version == 2
 
 
-# --- audit (M14) ---------------------------------------------------------------
+# --- audit ---------------------------------------------------------------------
 
 
 async def test_recompute_emits_report_grade_recomputed_audit_row(migrated_db: async_sessionmaker) -> None:
@@ -315,7 +313,7 @@ async def test_recompute_report_grade_issues_a_bounded_number_of_queries(migrate
     assert large == small, f"query count grew from {small} to {large} — N+1"
 
 
-# --- M9 manual override ---------------------------------------------------------
+# --- manual override -------------------------------------------------------------
 
 
 async def test_manual_override_suppresses_report_grade_recomputation(migrated_db: async_sessionmaker) -> None:

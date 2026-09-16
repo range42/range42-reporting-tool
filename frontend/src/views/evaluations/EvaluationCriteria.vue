@@ -3,7 +3,7 @@
  * The template's evaluation criteria for one section — the guidance the evaluator grades
  * against.
  *
- * EVALUATOR-ONLY (L12). This field reaches the client on `GradableSection` and nowhere else;
+ * EVALUATOR-ONLY. This field reaches the client on `GradableSection` and nowhere else;
  * it is deliberately absent from the writer-facing `ReportSectionOut`, so this component must
  * never be reused on a writer surface. It is free text in the database, not HTML, and is
  * rendered as text: no `v-html` here, on purpose.

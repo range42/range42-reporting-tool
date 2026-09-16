@@ -1,18 +1,17 @@
-"""Task 9 — D3: ``report.grade_version`` monotonicity (M10).
+"""``report.grade_version`` monotonicity.
 
 WHAT THE COUNTER IS FOR. Anything that publishes a grade outward — a ``report.evaluated``
-webhook (§11.3), an export, a leaderboard row — carries the version it was computed at. A
-consumer compares the version it holds against the current one to tell whether its number has
-been superseded. That only works if the counter rises on every published change and never,
-ever goes backwards, which is what this module pins.
+webhook, an export, a leaderboard row — carries the version it was computed at. A consumer
+compares the version it holds against the current one to tell whether its number has been
+superseded. That only works if the counter rises on every published change and never goes
+backwards, which is what this module pins.
 
 Tests only: a failure here is a bug in the rollup, never a reason to soften an assertion.
 
-W5-3 MOVED WHEN THE COUNTER TICKS. Under W5-2 every changed grade save published immediately,
-so the ladder was driven by re-saving one grade. L7 now excludes an in-progress evaluation from
-the report aggregate, so publication happens on FINALIZE. The ladder below is therefore driven
-by successive evaluators finalizing under ``all_must_finalize``: each one joins the numerator
-and changes the published number, and only the last closes the gate.
+Publication happens on FINALIZE, because an in-progress evaluation is excluded from the report
+aggregate. The ladder below is therefore driven by successive evaluators finalizing under
+``all_must_finalize``: each one joins the numerator and changes the published number, and only
+the last closes the gate.
 """
 
 import uuid
@@ -92,7 +91,7 @@ async def _exec(migrated_db, sql, **params):
 
 
 async def _reopen(migrated_db, rid, evid):
-    """W5-4's reopen, by hand: the report is gradeable again and the evaluation is not done."""
+    """Reopen by hand: the report is gradeable again and the evaluation is not done."""
     await _exec(migrated_db, "UPDATE report SET status = 'under_evaluation' WHERE id = CAST(:i AS uuid)", i=rid)
     await _exec(
         migrated_db,
@@ -169,7 +168,7 @@ async def test_grade_version_increments_when_grade_transitions_from_null(migrate
 async def test_grade_version_increments_when_grade_transitions_to_null(migrated_db: async_sessionmaker) -> None:
     # Losing the last contributor is itself a published change: consumers holding 8.00 must be
     # able to tell it no longer stands. Retracting the grade is impossible once finalized (409),
-    # so the route in is unassignment — W5-3 Task 9's endpoint, driven here by hand.
+    # so the route in is unassignment, driven here by hand.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _arrange(migrated_db, c, ah)
@@ -189,7 +188,7 @@ async def test_grade_version_increments_when_grade_transitions_to_null(migrated_
     assert await _version(migrated_db, rid) == 2
 
 
-# --- manual override (M9) --------------------------------------------------------
+# --- manual override -------------------------------------------------------------
 
 
 async def test_grade_version_increments_when_a_manual_grade_is_set(migrated_db: async_sessionmaker) -> None:
@@ -206,8 +205,8 @@ async def test_grade_version_increments_when_a_manual_grade_is_set(migrated_db: 
 
 
 async def test_grade_version_not_incremented_while_overall_grade_is_manual(migrated_db: async_sessionmaker) -> None:
-    # M9 — the computed number is suppressed, so nothing new is published and the counter
-    # must hold still no matter how much the evaluators change underneath.
+    # The computed number is suppressed by the manual override, so nothing new is published and
+    # the counter must hold still no matter how much the evaluators change underneath.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, graders = await _arrange_many(migrated_db, c, ah, 3)
@@ -230,7 +229,7 @@ async def test_grade_version_not_incremented_while_overall_grade_is_manual(migra
 
 
 async def test_grade_version_never_decreases_across_a_reopen_cycle(migrated_db: async_sessionmaker) -> None:
-    """Simulates W5-4's reopen: a regraded report must never reuse an old version number.
+    """A regraded report must never reuse an old version number.
 
     Without this, a consumer holding version 2 could receive a corrected grade also stamped 2
     and silently keep the stale one.
@@ -242,7 +241,7 @@ async def test_grade_version_never_decreases_across_a_reopen_cycle(migrated_db: 
         await finalize(c, h, ex, rid, evid)
         seen = [await _version(migrated_db, rid)]
         for value in ("4", "6"):
-            # W5-4 has no reopen route yet; drive both rows back to a gradeable state.
+            # Drive both rows back to a gradeable state, as a reopen would.
             await _reopen(migrated_db, rid, evid)
             await c.put(_grade_url(ex, rid, evid, sid), json={"grade": value}, headers=h)
             await finalize(c, h, ex, rid, evid)

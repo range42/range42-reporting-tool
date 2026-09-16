@@ -6,7 +6,7 @@
  * "content-{testId}") is the deterministic surface component tests drive.
  * Tests mock @tiptap/vue-3 so no real ProseMirror DOM is required.
  *
- * Inline images (WP3 S9): the document model keeps the canonical
+ * Inline images: the document model keeps the canonical
  * `/api/v1/.../attachments/{id}/download` src (the only form the shared
  * sanitize policy allows). The API is bearer-authenticated, so a plain <img>
  * cannot load it — the AuthedImage node view fetches the blob with the token

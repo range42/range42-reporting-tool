@@ -6,13 +6,10 @@ Run INSIDE the backend container (where ``deploy/.env`` is already loaded and th
     docker compose -f deploy/docker-compose.yml exec -T backend \
         uv run --no-sync python -m app.seed_demo
 
-Seeds the *world* only. Persona users are deliberately absent: their rows are
-created by their first SSO login, and ``app.seed_grants`` attaches roles and team
-membership afterwards, matched by email. Seeding a persona here would key it to a
-subject no login can ever match.
+Seeds the *world* only. Persona users are deliberately absent: their rows are created by their
+first SSO login, and ``app.seed_grants`` attaches roles and team membership afterwards.
 
-Idempotent: every entity is looked up by its natural key before insert, so
-re-running never creates duplicates. It seeds:
+Idempotent: every entity is looked up by its natural key before insert. It seeds:
 
 * the 5 built-in system roles (reuses ``app.seed.seed_system_roles``);
 * a global-admin user matching the emergency-login subject (``emergency:admin``),
@@ -47,9 +44,8 @@ from app.models.user import User
 from app.seed import seed_exercise_defaults, seed_system_roles
 
 # --- the emergency admin (external_id is namespaced "{provider}:{subject}") ---
-# Mirrors emergency_claims() (provider="emergency", subject="admin") so
-# start_session()'s upsert on emergency-login reuses this very row. It needs no
-# exercise role: require_permission() lets global admins bypass.
+# Must mirror emergency_claims() (provider="emergency", subject="admin") so
+# start_session()'s upsert on emergency-login reuses this row. Needs no exercise role.
 ADMIN_EXTERNAL_ID = "emergency:admin"
 
 

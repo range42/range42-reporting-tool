@@ -1,8 +1,7 @@
-"""Session lifecycle: mint app-JWT + server-side ``user_session`` row (design L1).
+"""Session lifecycle: mint app-JWT + server-side ``user_session`` row.
 
 Every login path (OIDC, emergency, later SAML) funnels through ``start_session``;
-``revoke_session`` powers logout; ``refresh_session`` (B11) re-issues within the
-max-session window. Audit emission for ``user.login`` lands in Phase E.
+``revoke_session`` powers logout; ``refresh_session`` re-issues within the max-session window.
 """
 
 import secrets
@@ -82,11 +81,10 @@ class RefreshDenied(Exception):
 
 
 async def any_exercise_active(db: AsyncSession) -> bool:
-    """Whether some exercise is currently ``active`` (ARCH §5.1.1 refresh gate).
+    """Whether some exercise is currently ``active`` — the refresh gate.
 
-    Phase D backport: query ``exercise.status == 'active'`` once the table exists.
-    Until then there is no exercise table, so this returns ``True`` and refresh is
-    governed purely by the auth-time max-session window (issue #1 acceptance).
+    Returns ``True`` unconditionally today, so refresh is governed purely by the auth-time
+    max-session window.
     """
     return True
 
@@ -102,14 +100,12 @@ async def refresh_session(
 
     Keeps the same ``jti`` and original ``auth_time``; extends ``expires_at``.
 
-    The ``expires_at <= stamp`` guard is intentionally absent: refresh exists
-    precisely to renew a token whose per-token TTL has lapsed or is about to.
-    Time-based denial is instead governed exclusively by the max-session window
-    (``jwt_exercise_max_session_hours``), which bounds the total lifetime of an
-    authentication event regardless of how many times the token is refreshed.
+    There is deliberately no ``expires_at <= stamp`` guard: refresh exists to renew a token
+    whose per-token TTL has lapsed. Time-based denial is governed exclusively by the
+    max-session window (``jwt_exercise_max_session_hours``).
 
-    Raises ``RefreshDenied`` if the session is revoked, the max-session window is
-    exceeded, or no exercise is active.
+    Raises ``RefreshDenied`` if the session is revoked, the max-session window is exceeded, or
+    no exercise is active.
     """
     stamp = now or datetime.now(UTC)
     if session.revoked_at is not None:

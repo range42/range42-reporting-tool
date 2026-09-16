@@ -13,8 +13,7 @@ class ExerciseRole(Base, UUIDMixin):
     __table_args__ = (UniqueConstraint("exercise_id", "user_id", "role_key", name="uq_exercise_role"),)
 
     # exercise_id: FK to exercise.id — the DB-level constraint fk_exercise_role_exercise
-    # (ondelete CASCADE) was added in migration 0004 and is authoritative. An ORM-level
-    # ForeignKey() is simply not declared here; the constraint lives in the migration.
+    # (ondelete CASCADE) is authoritative and lives in the migration, not in the ORM.
     exercise_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False

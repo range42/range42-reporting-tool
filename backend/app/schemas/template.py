@@ -64,9 +64,7 @@ def section_invariant_error(
     if grade_mode == "pass_fail":
         # Bounds are OPTIONAL and declare what a pass is worth: a pass scales to grade_max and
         # a fail to grade_min (rollup.py::_scale_pass_fail). Without them the section scales
-        # onto [0, 1], which under-scores it next to numeric siblings on a mixed template —
-        # so a mixed template should set them. Optional, not required, because sections
-        # authored before this rule have neither and must stay valid.
+        # onto [0, 1], which under-scores it beside numeric siblings on a mixed template.
         if (grade_min is None) != (grade_max is None):
             return "pass_fail grading needs both grade_min and grade_max, or neither"
         if grade_min is not None and grade_max is not None and grade_min >= grade_max:

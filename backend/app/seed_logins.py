@@ -1,24 +1,17 @@
 """Log every demo persona in once, headlessly, so their user rows exist.
 
-Run INSIDE the backend container, BEFORE ``app.seed_grants``::
+DEV ONLY: depends on Dex static passwords, which the prod overlay never runs.
+
+Run INSIDE the backend container, BEFORE ``app.seed_grants``, which can only
+grant roles to user rows that an SSO login has already created::
 
     docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml \
         exec -T backend uv run --no-sync python -m app.seed_logins
 
-Why this exists: ``app.seed_grants`` joins personas to roles by email, but it can
-only grant to a row that already exists, and only a real SSO login creates one
-(see that module on why a Dex subject cannot be pre-computed). That used to mean
-hand-typing five browser logins after every volume rebuild.
+Drives the ordinary authorization-code flow over HTTP instead of a browser; the
+backend still mints state + PKCE and exchanges the code itself.
 
-This drives the ordinary authorization-code flow over HTTP instead of a browser.
-The backend still mints state + PKCE, and still exchanges the code itself, so no
-application code takes part in this and nothing here is reachable from a running
-deployment -- it is an HTTP client that happens to not be Firefox.
-
-DEV ONLY. It depends on Dex static passwords, which the prod overlay never runs.
-
-Idempotent: a persona who already exists is simply logged in again, which only
-refreshes ``last_login_at``.
+Idempotent: an existing persona is logged in again, refreshing ``last_login_at``.
 """
 
 import asyncio
@@ -37,9 +30,7 @@ API_PREFIX = "/api/v1"
 # Every Dex staticPasswords entry in deploy/dex/config.yaml shares this password.
 DEV_PERSONA_PASSWORD = "changeme"
 
-# Where Dex sends the browser once login succeeds (OIDC_REDIRECT_URI). We only
-# ever read the code + state off this URL -- the frontend route behind it is not
-# fetched, and need not be running.
+# Where Dex sends the browser once login succeeds; must match OIDC_REDIRECT_URI.
 CALLBACK_URL_PREFIX = "http://localhost:5173/auth/callback"
 
 REQUEST_TIMEOUT_SECONDS = 15.0
@@ -96,8 +87,7 @@ async def _submit_credentials(client: httpx.AsyncClient, authorize_url: str, ema
         follow_redirects=False,
     )
 
-    # Walk the post-login hops (approval is skipped by config, but not by
-    # contract) until Dex hands control back to the app's redirect URI.
+    # Walk the post-login hops until Dex hands control back to the app's redirect URI.
     for _ in range(MAX_REDIRECT_HOPS):
         if response.status_code == 200:
             raise RuntimeError(f"Dex rejected the credentials for {email} -- it re-served the login form")

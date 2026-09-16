@@ -1,4 +1,4 @@
-"""WP3 S4 (#79) — per-value deprecate/delete endpoints + choice-code immutability.
+"""Per-value deprecate/delete endpoints + choice-code immutability.
 
 Published templates are frozen by policy (all section edits are draft-only), but
 deprecating a choice value must remain possible without breaking reports that

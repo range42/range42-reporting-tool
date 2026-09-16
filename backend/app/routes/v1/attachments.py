@@ -1,12 +1,11 @@
-"""Section attachments + inline images (WP3 S9, #80).
+"""Section attachments + inline images.
 
-Uploads are draft-only and follow the section write-lock; the stored
-``content_type`` comes from magic-byte sniffing (the client claim is never
-trusted — spoofed types get 415); size is capped by ``ATTACHMENT_MAX_BYTES``
-(413). Downloads reuse the report read-scoping rules (default-deny) and are
-served with ``X-Content-Type-Options: nosniff``; only image types render
-inline (they back the TipTap ``<img>`` flow), everything else downloads as an
-attachment. Blobs live behind the StorageBackend Protocol (guardrail #2).
+Uploads are draft-only and follow the section write-lock; the stored ``content_type`` comes
+from magic-byte sniffing (the client claim is never trusted — spoofed types get 415); size is
+capped by ``ATTACHMENT_MAX_BYTES`` (413). Downloads reuse the report read-scoping rules
+(default-deny) and are served with ``X-Content-Type-Options: nosniff``; only image types render
+inline, everything else downloads as an attachment. Blobs live behind the StorageBackend
+Protocol.
 """
 
 import posixpath

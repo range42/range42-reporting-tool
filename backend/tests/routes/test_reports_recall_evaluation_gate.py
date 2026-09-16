@@ -1,4 +1,4 @@
-"""The L14 recall gate: recall is blocked once evaluation has begun (§7.2).
+"""The recall gate: recall is blocked once evaluation has begun.
 
 Every test here keeps ``report.status`` at ``submitted`` on purpose. Once ``_begin_evaluation``
 has fired the report is ``under_evaluation`` and ``_require_status`` rejects the recall first,
@@ -44,7 +44,7 @@ async def test_recall_succeeds_when_no_evaluator_is_assigned(migrated_db: async_
 
 
 async def test_recall_succeeds_when_evaluation_is_only_assigned(migrated_db: async_sessionmaker) -> None:
-    # Pins §7.2's wording: 'assigned' alone does NOT block recall.
+    # 'assigned' alone does NOT block recall.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)

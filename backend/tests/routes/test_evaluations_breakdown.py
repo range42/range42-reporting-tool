@@ -1,24 +1,20 @@
-"""W5-3 Task 10 — the per-evaluator breakdown, D1-scoped, with D4a ``completed_at``.
+"""The per-evaluator breakdown, scoped to the caller.
 
 ONE ROUTE, TWO AUDIENCES. ``GET …/evaluations`` answers two different questions depending on
-who asks, and the difference is the whole security surface of this slice:
+who asks, and the difference is the whole security surface:
 
 * Global Admin — every evaluator row, including soft-unassigned ones, with names and weights.
   This is the dispute-resolution view.
 * Evaluator — **exactly one row, their own**, plus the report's shared aggregate. Never a peer
-  row, never a peer id, never a peer name (D1/E1, locked).
+  row, never a peer id, never a peer name.
 
-WHY THIS ROUTE STOPPED BEING A FILTER AND BECAME A GATE. W5-1 (#95) shipped this as a list
-that merely filtered to the caller's rows, so an evaluator with no evaluation on the report got
-``200 []`` — harmless, because an empty list disclosed nothing. Task 10 adds the report-level
-``aggregate`` to the SAME response, and an empty ``evaluations[]`` no longer means an empty
-body: it would hand a non-participant the report's grade, its grade_version and its evaluator
-headcount. The premise of #95's asymmetry expired, so the route now gates. See #122.
+The route GATES rather than filters: the response carries the report-level ``aggregate``, so an
+empty ``evaluations[]`` would still hand a non-participant the report's grade, its grade_version
+and its evaluator headcount.
 
-THE ONE THING THAT MUST NOT REGRESS: gating on row EXISTENCE, not on the L7 counted predicate.
-An unassigned evaluator keeps their row (L8, soft unassign) precisely so the dispute trail
-survives — gating on ``counts()`` would blind them to the report they graded, destroying the
-guarantee W5-3 Task 9 exists to provide.
+THE ONE THING THAT MUST NOT REGRESS: the gate is row EXISTENCE, not the counted predicate. An
+unassigned evaluator keeps their row so the dispute trail survives — gating on ``counts()``
+would blind them to the report they graded.
 """
 
 import pytest
@@ -87,7 +83,7 @@ async def test_global_admin_breakdown_lists_every_evaluator_row(migrated_db: asy
 async def test_global_admin_breakdown_exposes_completed_at_per_evaluator(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """D4a — a response-shape change only, for dispute auditability of who finalized when."""
+    """``completed_at`` per evaluator, for dispute auditability of who finalized when."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -109,7 +105,7 @@ async def test_global_admin_breakdown_exposes_completed_at_per_evaluator(
 async def test_global_admin_breakdown_includes_unassigned_rows_with_their_reason(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """L8: the removed evaluator stays visible to the admin — that IS the dispute trail."""
+    """The removed evaluator stays visible to the admin — that IS the dispute trail."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -135,11 +131,11 @@ async def test_global_admin_breakdown_includes_unassigned_rows_with_their_reason
     assert rows[uid_b]["unassign_reason"] == "left the org"
 
 
-# --- D1: the evaluator view -----------------------------------------------------------
+# --- the evaluator view ---------------------------------------------------------------
 
 
 async def test_evaluator_breakdown_returns_only_their_own_row(migrated_db: async_sessionmaker) -> None:
-    """D1 negative case 2."""
+    """An evaluator sees their own row and no other."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)
@@ -160,7 +156,7 @@ async def test_evaluator_breakdown_returns_only_their_own_row(migrated_db: async
 async def test_evaluator_breakdown_response_contains_no_peer_identifiers(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """D1 negative case 3 — whole-body string scan.
+    """No peer identifiers anywhere in the body — whole-body string scan.
 
     A field-level assertion misses a nested-relationship leak; serializing the entire body and
     searching it does not. The peer's display name is asserted too, because a name is an
@@ -187,7 +183,7 @@ async def test_evaluator_breakdown_response_contains_no_peer_identifiers(
 async def test_evaluator_breakdown_includes_the_shared_aggregate_and_counted_count(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """A cardinality is not an identity (plan §5).
+    """A cardinality is not an identity.
 
     The evaluator is told their judgment is one of N, because otherwise they cannot read the
     aggregate honestly. They are NOT told who the other N-1 are.
@@ -266,11 +262,11 @@ async def test_breakdown_aggregate_is_null_before_any_evaluation_is_completed(
 async def test_evaluator_cannot_read_breakdown_for_unassigned_report(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """D1 negative case 7 — 403, NOT an empty list.
+    """403, NOT an empty list.
 
-    This reverses W5-1/#95's ``200 []``. The response now carries the report's aggregate, so
-    letting a non-participant through would disclose the grade, the grade_version and the
-    evaluator headcount for a report they have nothing to do with.
+    The response carries the report's aggregate, so letting a non-participant through would
+    disclose the grade, the grade_version and the evaluator headcount for a report they have
+    nothing to do with.
     """
     # Arrange
     async with client(migrated_db) as c:
@@ -290,9 +286,9 @@ async def test_unassigned_evaluator_can_still_read_the_breakdown_for_their_dispu
 ) -> None:
     """THE REGRESSION THIS FILE EXISTS TO PREVENT.
 
-    The gate is row EXISTENCE, not the L7 counted predicate. A soft-unassigned evaluator keeps
-    their row (L8) so the dispute trail survives; gating on ``counts()`` would lock them out of
-    the very record W5-3 Task 9 preserved for them, and the lockout would be invisible until a
+    The gate is row EXISTENCE, not the counted predicate. A soft-unassigned evaluator keeps
+    their row so the dispute trail survives; gating on ``counts()`` would lock them out of the
+    very record the unassign preserved for them, and the lockout would be invisible until a
     dispute arrived.
     """
     # Arrange
@@ -324,7 +320,7 @@ async def test_unassigned_evaluator_can_still_read_the_breakdown_for_their_dispu
 async def test_team_roles_cannot_read_evaluation_breakdown_before_evaluated(
     migrated_db: async_sessionmaker, role_key: str
 ) -> None:
-    """D1 negative case 6 — §5.2 grants team roles the evaluated RESULT, never the breakdown."""
+    """Team roles are granted the evaluated RESULT, never the per-evaluator breakdown."""
     # Arrange
     async with client(migrated_db) as c:
         ah, _ = await ga_headers(migrated_db)

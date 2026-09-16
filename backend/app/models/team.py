@@ -15,8 +15,8 @@ class Team(Base, UUIDMixin, TimestampMixin, MetadataMixin):
         UUID(as_uuid=True), ForeignKey("exercise.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    # team_type: soft reference to team_type_config.type_key — no DB FK because
-    # team_type_config uniqueness is composite (exercise_id, type_key); a single-
-    # column FK can't express it. Validated at the service layer (route handlers).
+    # team_type: soft reference to team_type_config.type_key. No DB FK — team_type_config
+    # uniqueness is composite (exercise_id, type_key), which a single-column FK cannot express.
+    # Validated at the service layer (route handlers).
     team_type: Mapped[str] = mapped_column(String(50), nullable=False, default="blue", server_default=text("'blue'"))
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)

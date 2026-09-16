@@ -2,13 +2,12 @@
 /**
  * Neutral landing for an exercise: works out where the caller belongs, then replaces itself.
  *
- * Evaluators are exercise direction, not players. They go straight to their own queue and never
+ * Evaluators are exercise direction, not players: they go straight to their own queue and never
  * touch the team report list, which their role is refused by design. The decision keys on the
- * `evaluations:write` capability and deliberately NOT on `auth.isAdmin`: a global admin carries
- * every capability, so admins would otherwise be diverted out of the report list they run.
+ * `evaluations:write` capability and deliberately NOT on `auth.isAdmin` — a global admin carries
+ * every capability, and must not be diverted out of the report list they run.
  *
- * Capabilities are loaded HERE because the decision needs them one step earlier than the report
- * list, which used to be the only place that fetched them.
+ * Capabilities are loaded HERE because the decision needs them before the report list runs.
  */
 import { onMounted } from 'vue'
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'

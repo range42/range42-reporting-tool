@@ -1,17 +1,17 @@
-"""Task 3 — folding a rubric's criterion scores into one section grade (M7).
+"""Folding a rubric's criterion scores into one section grade.
 
-THE RULE (operator decision, 2026-09-01): each criterion is scored as a percentage of its OWN
-maximum, those percentages are averaged using the criterion weights, and the result is
-stretched onto the section's [grade_min, grade_max] range.
+THE RULE: each criterion is scored as a percentage of its OWN maximum, those percentages are
+averaged using the criterion weights, and the result is stretched onto the section's
+[grade_min, grade_max] range.
 
     normalized = Σ((score / max_score) · weight) / Σ(weight)
     grade      = grade_min + normalized · (grade_max - grade_min)
 
-This deviates from #103's written formula, Σ(score·weight) / Σ(max_score·weight), which lets a
-criterion with a larger max_score quietly carry more influence than its weight says. Under the
-rule below, ``weight`` is the only thing that controls influence and ``max_score`` only sets
-the scoring granularity. test_rubric_rollup_weight_not_max_score_controls_influence pins the
-difference — it is the test that fails if anyone reverts to the other formula.
+``weight`` is the only thing that controls influence; ``max_score`` only sets the scoring
+granularity. A points-based formula, Σ(score·weight) / Σ(max_score·weight), would let a
+criterion with a larger max_score quietly carry more influence than its weight says —
+test_rubric_rollup_weight_not_max_score_controls_influence is the test that fails if anyone
+switches to it.
 """
 
 from decimal import Decimal
@@ -95,7 +95,7 @@ def test_rubric_rollup_ignores_scores_for_unknown_criteria() -> None:
 
 
 def test_rubric_rollup_defaults_missing_criterion_weight_to_one() -> None:
-    # §4.2's rubric_criteria shape does not mark weight required.
+    # The rubric_criteria shape does not mark weight required.
     criteria = [{"name": "Clarity", "max_score": 5}, {"name": "Depth", "max_score": 10}]
     scores = [{"criterion": "Clarity", "score": "5"}, {"criterion": "Depth", "score": "0"}]
     assert _roll(criteria, scores) == Decimal("5")

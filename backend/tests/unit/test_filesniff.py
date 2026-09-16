@@ -1,4 +1,4 @@
-"""WP3 S9 (#80) — magic-byte content sniffing.
+"""Magic-byte content sniffing.
 
 The client-supplied MIME type is never trusted: the stored ``content_type`` is
 whatever ``sniff()`` derives from the first bytes, and uploads whose bytes match

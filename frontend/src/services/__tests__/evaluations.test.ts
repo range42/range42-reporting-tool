@@ -51,8 +51,8 @@ describe('evaluations service', () => {
     expect(body.grade).toBeUndefined()
   })
 
-  // The route returns the whole W5-3 breakdown, not the single evaluation: finalize settles
-  // the report-level gate, so the caller needs the new aggregate too.
+  // The route returns the whole breakdown, not the single evaluation: finalize settles the
+  // report-level gate, so the caller needs the new aggregate too.
   it('finalizeEvaluation POSTs the nested finalize path and returns the updated evaluation', async () => {
     const fetchMock = vi
       .fn()

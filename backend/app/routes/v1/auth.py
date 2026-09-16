@@ -1,10 +1,9 @@
-"""Authentication endpoints (design §4.5 / §6.1).
+"""Authentication endpoints.
 
-OIDC Auth-Code + PKCE: ``/auth/login`` stashes ``state`` + ``code_verifier`` in the
-signed session cookie (SessionMiddleware) and redirects to the IdP; ``/auth/callback``
-validates ``state``, exchanges the code, verifies the id_token, and issues an
-app-JWT + ``user_session`` row. Refresh/logout/me and emergency-login land in
-B14/B15.
+OIDC Auth-Code + PKCE: ``/auth/login`` stashes ``state`` + ``code_verifier`` in the signed
+session cookie (SessionMiddleware) and redirects to the IdP; ``/auth/callback`` validates
+``state``, exchanges the code, verifies the id_token, and issues an app-JWT + ``user_session``
+row.
 """
 
 from authlib.common.security import generate_token
@@ -62,12 +61,10 @@ async def callback(
         details={"provider": claims.provider},
         ip=client_ip(request),
     )
-    # Durability-before-token: get_db commits post-yield (after the response is
-    # sent, in modern FastAPI), so a client that calls an authed endpoint the
-    # instant it receives this token can race the session-row commit and get a
-    # 401 "session invalid". Commit here so the session row is durable before the
-    # token leaves the server. Deliberate exception to the "get_db owns the
-    # commit" rule, justified only for the session-minting login paths.
+    # Durability-before-token: get_db commits post-yield, after the response is sent, so a
+    # client calling an authed endpoint immediately can race the session-row commit and get a
+    # 401. Commit here instead. A deliberate exception to the "get_db owns the commit" rule,
+    # for the session-minting login paths only.
     await db.commit()
     return DataEnvelope(data=TokenResponse(access_token=issued.token, user=UserOut.from_model(issued.user)))
 

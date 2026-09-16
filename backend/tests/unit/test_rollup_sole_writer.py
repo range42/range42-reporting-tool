@@ -1,4 +1,4 @@
-"""Task 10 — the A7/M2 sole-writer contract, enforced against the source itself.
+"""The sole-writer contract, enforced against the source itself.
 
 Docstrings claiming "only rollup.py writes this" are not enforcement; the next person adding a
 route will not read them. These walk every module under ``app/`` with ``ast`` and fail if any
@@ -74,7 +74,7 @@ def test_only_rollup_module_assigns_overall_grade_is_manual() -> None:
 
 
 def test_grade_version_is_incremented_in_exactly_one_place() -> None:
-    """D3 depends on the counter only ever going up by one, from a single site.
+    """The counter must only ever go up by one, from a single site.
 
     Two increment sites is how a version gets skipped or reused, and a consumer that uses the
     version to detect a superseded grade then silently keeps a stale number.
@@ -87,8 +87,8 @@ def test_grade_version_is_incremented_in_exactly_one_place() -> None:
 def test_rollup_module_never_calls_session_commit() -> None:
     """The transaction boundary belongs to ``get_db``, as with record_audit and state_machine.
 
-    A commit inside the rollup would break the atomicity Task 8 relies on: a grade write and
-    its rollup must roll back together.
+    A commit inside the rollup would break atomicity: a grade write and its rollup must roll
+    back together.
     """
     tree = ast.parse((BACKEND / ROLLUP).read_text())
     commits = [

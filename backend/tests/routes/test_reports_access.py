@@ -62,8 +62,8 @@ async def test_writer_sees_only_own_team(migrated_db: async_sessionmaker) -> Non
 
 
 async def test_widened_status_filter_does_not_bypass_team_scoping(migrated_db: async_sessionmaker) -> None:
-    # W5-1 Task 3 widened KNOWN_REPORT_STATUSES; the new values are AND-ed with the team
-    # filter, so a writer cannot reach another team's report by filtering on one.
+    # The evaluation statuses are AND-ed with the team filter, so a writer cannot reach another
+    # team's report by filtering on one.
     await _seed(migrated_db)
     ga, _ = await make_user_token(migrated_db, jti="ga2", admin=True)
     ah = {"Authorization": f"Bearer {ga}"}

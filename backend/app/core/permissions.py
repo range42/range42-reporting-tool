@@ -1,11 +1,10 @@
 """Permission catalogue + built-in role definitions (single source of truth).
 
-The 19 permission strings (ARCHITECTURE §4.2) and the five seeded system roles
-(§5.2 matrix). Consumed by the seed (``app.seed``), the ``require_permission``
-resolver (``core.rbac``), and later the frontend Roles editor. Global-only strings
-(``exercises:write``, ``teams:write``, ``templates:write``, ``scoring:config:write``,
-``audit:read``) are granted to Global Admin via ``require_global_admin`` and are
-carried by no exercise-scoped system role (design §4.3).
+The 19 permission strings and the five seeded system roles. Consumed by the seed
+(``app.seed``), the ``require_permission`` resolver (``core.rbac``), and the frontend Roles
+editor. Global-only strings (``exercises:write``, ``teams:write``, ``templates:write``,
+``scoring:config:write``, ``audit:read``) are granted to Global Admin via
+``require_global_admin`` and are carried by no exercise-scoped system role.
 """
 
 from dataclasses import dataclass

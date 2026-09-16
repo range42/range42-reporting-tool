@@ -38,7 +38,7 @@ def _url(ex, rid):
 
 
 async def _set_report_status(migrated_db, rid, status):
-    """Drive report.status directly — no route reaches these states until W5-3/W5-4."""
+    """Drive report.status directly — no route reaches these states from here."""
     async with migrated_db() as s:
         await s.execute(text("UPDATE report SET status = :st WHERE id = CAST(:i AS uuid)"), {"st": status, "i": rid})
         await s.commit()
@@ -64,7 +64,7 @@ async def test_assign_returns_data_envelope_with_evaluation_id(migrated_db: asyn
         assert d["evaluator_id"] == uid
         assert d["gradable_section_count"] == 1
         assert d["graded_section_count"] == 0
-        assert "aggregated_weight" not in d  # L11 — admin-only, surfaced by W5-3
+        assert "aggregated_weight" not in d  # admin-only
 
 
 async def test_assign_sets_evaluation_status_to_assigned(migrated_db: async_sessionmaker) -> None:
@@ -92,7 +92,7 @@ async def test_assign_records_assigned_by_as_the_calling_admin(migrated_db: asyn
 
 
 async def test_assign_leaves_report_status_submitted(migrated_db: async_sessionmaker) -> None:
-    # L5 — assignment alone does not begin evaluation; only a grade/feedback write does (Task 7).
+    # Assignment alone does not begin evaluation; only a grade/feedback write does.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
@@ -154,7 +154,7 @@ async def test_assign_to_evaluated_report_returns_409(migrated_db: async_session
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)
         _, uid = await evaluator(migrated_db, c, ah, ex, "ev1")
-        # No finalize endpoint until W5-3; drive the terminal state directly.
+        # Drive the terminal state directly rather than through the finalize endpoint.
         await _set_report_status(migrated_db, rid, "evaluated")
         r = await c.post(_url(ex, rid), json={"evaluator_id": uid}, headers=ah)
         assert r.status_code == 409
@@ -162,7 +162,7 @@ async def test_assign_to_evaluated_report_returns_409(migrated_db: async_session
 
 
 async def test_assign_second_evaluator_to_under_evaluation_report_succeeds(migrated_db: async_sessionmaker) -> None:
-    # A second evaluator may join once grading has begun (multi-evaluator, W5-3).
+    # A second evaluator may join once grading has begun.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _ = await submitted_report(c, ah)

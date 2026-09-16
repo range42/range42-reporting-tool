@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Who has graded this report, and how their work aggregates (W5-3's breakdown).
+ * Who has graded this report, and how their work aggregates.
  *
  * TWO AUDIENCES, ONE ENDPOINT. `GET .../reports/{rid}/evaluations` is scoped server-side:
  * a Global Admin's response carries every evaluator's row, an evaluator's carries exactly
@@ -10,7 +10,7 @@
  * THE SERVER IS THE REAL BOUNDARY. The client-side filter to `evaluator_id === me` is UI
  * hygiene, not the security control: it protects against rendering a peer's row if a future
  * endpoint change ever widens the payload, and nothing more. Never move an isolation rule
- * (D1/E1) here — a check that lives only in the client is a check an API call walks past.
+ * here — a check that lives only in the client is a check an API call walks past.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

@@ -1,16 +1,14 @@
-"""The per-evaluator breakdown response (WP5 W5-3 Task 10).
+"""The per-evaluator breakdown response.
 
 THE SINGLE RESPONSE BUILDER used by ``GET …/evaluations``, ``POST …/finalize`` and
-``POST …/unassign``. Three hand-rolled builders would be three chances to leak; there is one,
-and D1 scoping lives inside it.
+``POST …/unassign``. Evaluator-isolation scoping lives inside it.
 
-It sits in the service layer rather than in either route module because both
-``routes/v1/evaluations.py`` and ``routes/v1/evaluation_finalize.py`` need it, and importing it
-from either one into the other would close an import cycle.
+It sits in the service layer because both route modules need it and importing it from either
+into the other would close an import cycle.
 
-D1 — the rows are FILTERED BEFORE the Pydantic model is constructed, never excluded during
-serialization. A scoping rule expressed as a serializer exclusion is one ``model_dump()`` away
-from leaking, and the leak would be silent.
+Rows are FILTERED BEFORE the Pydantic model is constructed, never excluded during
+serialization: a scoping rule expressed as a serializer exclusion is one ``model_dump()`` away
+from leaking silently.
 """
 
 import uuid
@@ -29,8 +27,8 @@ from app.services.scoring.rollup import evaluation_facts
 async def _rows_for(db: AsyncSession, report_id: uuid.UUID) -> list[Evaluation]:
     """Every evaluation of the report, unfiltered and deterministically ordered.
 
-    Unfiltered is deliberate — the admin breakdown must show soft-unassigned rows (L8), and the
-    aggregate's denominator is decided by the L7 predicate, not by the SQL.
+    Unfiltered is deliberate: the admin breakdown must show soft-unassigned rows, and the
+    aggregate's denominator is decided by the counted predicate, not by the SQL.
     """
     return list(
         (await db.execute(select(Evaluation).where(Evaluation.report_id == report_id).order_by(Evaluation.created_at)))
@@ -42,9 +40,8 @@ async def _rows_for(db: AsyncSession, report_id: uuid.UUID) -> list[Evaluation]:
 async def _display_names(db: AsyncSession, rows: list[Evaluation]) -> dict[uuid.UUID, str]:
     """Evaluator id -> display name. ADMIN PATH ONLY — never called for an evaluator caller.
 
-    Kept as a separate query rather than a join on ``_rows_for`` so the evaluator path does not
-    touch ``user`` at all: there is then no relationship for a later eager-load or a stray
-    ``selectinload`` to walk into a peer's name.
+    A separate query rather than a join on ``_rows_for``, so the evaluator path never touches
+    ``user`` and no eager-load can walk into a peer's name.
     """
     if not rows:
         return {}
@@ -71,12 +68,10 @@ def _row_out(ev: Evaluation, display_name: str | None) -> EvaluationBreakdownRow
 
 
 def caller_owns_a_row(rows: list[Evaluation], caller: User) -> bool:
-    """Whether ``caller`` may see this report's breakdown at all.
+    """Whether ``caller`` may see this report's breakdown at all. Global Admin bypasses.
 
-    ROW EXISTENCE, NOT THE L7 COUNTED PREDICATE. A soft-unassigned evaluator keeps their row
-    (L8) precisely so the dispute trail outlives their removal — gating on ``counts()`` would
-    lock them out of the record W5-3 Task 9 preserved for them, at the exact moment a dispute
-    needs it. Global Admin bypasses.
+    ROW EXISTENCE, NOT THE COUNTED PREDICATE. A soft-unassigned evaluator keeps their row so
+    their dispute trail outlives their removal; gating on ``counts()`` would lock them out.
     """
     return caller.is_global_admin or any(ev.evaluator_id == caller.id for ev in rows)
 
@@ -88,11 +83,12 @@ async def build(
     *,
     exercise_id: uuid.UUID,
 ) -> EvaluationBreakdownOut:
-    """Build the D1-scoped breakdown. Caller access is the route's to check, not this builder's.
+    """Build the caller-scoped breakdown. Caller access is the route's to check, not this
+    builder's.
 
-    The aggregate is computed over EVERY row (the L7 predicate decides what counts), then the
-    rows themselves are narrowed to the caller. That order is what lets an evaluator read an
-    honest aggregate over N evaluators while seeing only their own line.
+    The aggregate is computed over EVERY row (the counted predicate decides what counts), then
+    the rows are narrowed to the caller. That order lets an evaluator read an honest aggregate
+    over N evaluators while seeing only their own line.
     """
     rows = await _rows_for(db, report.id)
     facts = [evaluation_facts(ev) for ev in rows]

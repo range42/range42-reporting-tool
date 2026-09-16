@@ -1,4 +1,4 @@
-"""Integration tests: audit rows are recorded on successful login (WP2 E5)."""
+"""Integration tests: audit rows are recorded on successful login."""
 
 from typing import Any
 from urllib.parse import parse_qs, urlparse

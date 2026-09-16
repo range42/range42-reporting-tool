@@ -2,10 +2,9 @@
 /**
  * Single ↔ Campaign switch for one evaluation.
  *
- * The campaign target is passed in rather than built here, and is null when the route does
- * not exist: W5-6 registers `evaluation-campaign`, and a `RouterLink` pointing at an
- * unregistered name throws while resolving, taking the whole view down. Null renders a
- * disabled control with a reason instead.
+ * The campaign target is passed in rather than built here, and is null while the
+ * `evaluation-campaign` route is unregistered: a `RouterLink` pointing at an unregistered name
+ * throws while resolving, taking the whole view down. Null renders a disabled control instead.
  */
 import { useI18n } from 'vue-i18n'
 import { RouterLink, type RouteLocationNamedRaw } from 'vue-router'

@@ -11,7 +11,7 @@ async def upsert_user(session: AsyncSession, claims: NormalizedClaims, *, now: d
     """Map normalized claims to a User row (insert on miss, update on hit).
 
     ``external_id`` is namespaced ``{provider}:{subject}`` so OIDC/SAML/emergency
-    subjects cannot collide on the UNIQUE column (design §2.1). ``is_global_admin``
+    subjects cannot collide on the UNIQUE column. ``is_global_admin``
     is intentionally not touched here — it is managed by us, not provider claims.
     """
     external_id = f"{claims.provider}:{claims.subject}"

@@ -1,10 +1,10 @@
-"""Task 11 — manual overall-grade override endpoint (M9) + gated grade visibility (M17).
+"""The manual overall-grade override endpoint and gated grade visibility.
 
 ``PUT /exercises/{ex}/reports/{rid}/overall-grade`` is the ONE write to ``report.overall_grade``
 from outside the computed path, and it still goes through ``rollup.set_manual_grade`` so the
-sole-writer contract (M2) holds literally.
+sole-writer contract holds literally.
 
-M17: ``ReportOut`` / ``ReportDetailOut`` carry ``overall_grade`` / ``overall_grade_is_manual`` /
+``ReportOut`` / ``ReportDetailOut`` carry ``overall_grade`` / ``overall_grade_is_manual`` /
 ``grade_version`` only for Global Admin, ``scoring:read:all`` holders, and team members once the
 report is ``evaluated`` AND ``scoring_config.teams_see_own_scores`` is true. Otherwise ``None``.
 """
@@ -52,7 +52,7 @@ async def _grade_section(c, ex, rid, evid, sid, value, headers):
 
 
 async def _publish_grade(c, ex, rid, evid, sid, value, headers):
-    """Grade a section AND finalize, which is what publishes report.overall_grade under W5-3."""
+    """Grade a section AND finalize, which is what publishes report.overall_grade."""
     await _grade_section(c, ex, rid, evid, sid, value, headers)
     await finalize(c, headers, ex, rid, evid)
 
@@ -77,7 +77,7 @@ async def _sql(migrated_db, stmt, **params):
 
 
 async def _team_member(migrated_db, c, ah, ex, rid, jti):
-    """A team_writer who is also a member of the report's team — the M17 'team' persona."""
+    """A team_writer who is also a member of the report's team — the 'team' persona."""
     h, uid = await role_holder(migrated_db, c, ah, ex, jti, "team_writer")
     team_id = (await c.get(_report_url(ex, rid), headers=ah)).json()["data"]["team_id"]
     r = await c.post(f"/api/v1/exercises/{ex}/teams/{team_id}/members", json={"user_id": uid}, headers=ah)
@@ -125,8 +125,8 @@ async def test_manual_grade_increments_grade_version(migrated_db: async_sessionm
 
 
 async def test_manual_grade_survives_a_subsequent_section_grade_save(migrated_db: async_sessionmaker) -> None:
-    """M9's whole point: a later section grade must neither overwrite the hand-set number nor
-    bump grade_version, because nothing new was published."""
+    """A later section grade must neither overwrite the hand-set number nor bump grade_version,
+    because nothing new was published."""
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, sid, h, evid = await _world(migrated_db, c, ah)
@@ -150,8 +150,8 @@ async def test_assigned_evaluator_can_set_a_manual_overall_grade(migrated_db: as
 
 
 async def test_peer_evaluator_setting_a_manual_grade_returns_403(migrated_db: async_sessionmaker) -> None:
-    """D1 (E1) applies: holding evaluations:write is not enough — the caller must be assigned
-    to THIS report. A refused write leaves no row behind."""
+    """Holding evaluations:write is not enough — the caller must be assigned to THIS report.
+    A refused write leaves no row behind."""
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _sid, _h, _evid = await _world(migrated_db, c, ah)
@@ -251,14 +251,14 @@ async def test_manual_grade_route_rejects_an_outsider(migrated_db: async_session
     assert r.status_code == 403, r.text
 
 
-# --- M17: gated visibility on report reads ---------------------------------------------
+# --- gated visibility on report reads --------------------------------------------------
 
 
 async def _graded_world(migrated_db, c, ah):
     """A report with a computed 9.00 grade, still under_evaluation.
 
     Two evaluators, one finalized: that publishes 9.00 while leaving the finalize gate closed,
-    so the report stays ``under_evaluation`` and the M17 status branches below stay meaningful.
+    so the report stays ``under_evaluation`` and the status branches below stay meaningful.
     """
     ex, rid, sid, h, evid = await _world(migrated_db, c, ah)
     _h2, uid2 = await evaluator(migrated_db, c, ah, ex, "ev-b")
@@ -276,7 +276,7 @@ async def _hide_scores_from_teams(migrated_db, ex):
 
 
 async def _mark_evaluated(migrated_db, rid):
-    """W5-3 owns the real transition; until it lands the status is set directly."""
+    """Set the status directly rather than through the finalize gate."""
     await _sql(migrated_db, "UPDATE report SET status = 'evaluated' WHERE id = CAST(:i AS uuid)", i=rid)
 
 
@@ -312,7 +312,7 @@ async def test_report_out_hides_overall_grade_from_team_when_teams_see_own_score
 async def test_report_out_shows_overall_grade_to_team_once_evaluated_and_allowed(
     migrated_db: async_sessionmaker,
 ) -> None:
-    """The positive branch of M17: evaluated + teams_see_own_scores (default true) -> visible."""
+    """The positive branch: evaluated + teams_see_own_scores (default true) -> visible."""
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid = await _graded_world(migrated_db, c, ah)

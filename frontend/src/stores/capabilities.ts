@@ -24,7 +24,7 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
   const canApproveReports = (exerciseId: string): boolean => has(exerciseId, REPORTS_APPROVE)
 
   /** Coarse gate only: this says the caller grades SOMETHING in the exercise, never that
-   *  they may grade a particular report — D1 (E1) scoping is the server's call. */
+   *  they may grade a particular report — that scoping is the server's call. */
   const canEvaluate = (exerciseId: string): boolean => has(exerciseId, EVALUATIONS_WRITE)
 
   /** Fetch and cache the caller's capabilities for an exercise (idempotent to re-call). */

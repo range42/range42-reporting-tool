@@ -15,9 +15,8 @@ class Settings(BaseSettings):
     storage_local_path: str = Field("/data/attachments", alias="STORAGE_LOCAL_PATH")
     attachment_max_bytes: int = Field(10 * 1024 * 1024, alias="ATTACHMENT_MAX_BYTES")
     tls_mode: Literal["acme", "internal", "custom"] = Field("acme", alias="TLS_MODE")
-    # Reserved: the one-shot `migrate` compose service is the canonical
-    # migration path. This flag is honored by the app lifespan only if you
-    # choose to wire alembic there (not wired today).
+    # Reserved. The one-shot `migrate` compose service is the canonical migration path; this
+    # flag is not wired into the app lifespan today.
     run_migrations_on_start: bool = Field(False, alias="RUN_MIGRATIONS_ON_START")
     cors_origins: str = Field("", alias="CORS_ORIGINS")
     app_version: str = Field("0.1.0", alias="APP_VERSION")

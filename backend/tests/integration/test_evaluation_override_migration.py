@@ -1,8 +1,8 @@
-"""W5-3 Task 1 — migration 0012 (D2 unassign/override columns) + the W5-1 prerequisite guards.
+"""Migration 0012 — the unassign/override columns, plus two prerequisite guards.
 
-The two guards are verification tests, not creation tests: G-6's ``scoring_config.finalize_policy``
-and D3's ``report.grade_version`` come from W5-1's ``0011``. If either goes missing, W5-1 is what
-needs fixing — 0012 must never add them (duplicate-migration failure, conflicting CHECK names).
+The guards are verification tests, not creation tests: ``scoring_config.finalize_policy`` and
+``report.grade_version`` come from ``0011``. If either goes missing, ``0011`` is what needs
+fixing — 0012 must never add them (duplicate-migration failure, conflicting CHECK names).
 """
 
 import pytest
@@ -19,22 +19,22 @@ async def _columns(migrated_db: async_sessionmaker, table: str) -> dict[str, dic
 
 
 async def test_scoring_config_finalize_policy_is_available_from_w5_1(migrated_db: async_sessionmaker) -> None:
-    """G-6 guard: this slice's gate is unimplementable without W5-1's column (L2)."""
+    """Guard: the finalize gate is unimplementable without this column."""
     cols = await _columns(migrated_db, "scoring_config")
     assert "finalize_policy" in cols
     assert cols["finalize_policy"]["nullable"] is False
 
 
 async def test_report_grade_version_is_available_from_w5_1(migrated_db: async_sessionmaker) -> None:
-    """D3 / L9 guard: the monotonic publish counter must already exist."""
+    """Guard: the monotonic publish counter must already exist."""
     cols = await _columns(migrated_db, "report")
     assert "grade_version" in cols
     assert cols["grade_version"]["nullable"] is False
 
 
 async def test_evaluation_has_unassign_and_override_columns(migrated_db: async_sessionmaker) -> None:
-    """The six §4.2 D2 columns, with the right nullability. Only finalize_is_admin_override is
-    NOT NULL (server default false); the rest are NULL until an override/unassign happens."""
+    """The six unassign/override columns, with the right nullability. Only
+    finalize_is_admin_override is NOT NULL (server default false)."""
     cols = await _columns(migrated_db, "evaluation")
     expected_nullable = {
         "finalized_by": True,
@@ -87,7 +87,7 @@ async def test_evaluation_active_partial_index_exists(migrated_db: async_session
 
 
 async def test_evaluation_status_enum_is_unchanged(migrated_db: async_sessionmaker) -> None:
-    """§9-A3: no 'unassigned' status. Unassignment is orthogonal to progress; an unassigned but
+    """No 'unassigned' status. Unassignment is orthogonal to progress; an unassigned but
     completed evaluation keeps 'completed' for the audit trail."""
     async with migrated_db() as s:
         clause = (

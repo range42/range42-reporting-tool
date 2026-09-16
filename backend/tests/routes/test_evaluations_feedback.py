@@ -52,7 +52,7 @@ async def test_first_feedback_write_moves_evaluation_to_in_progress(migrated_db:
 
 
 async def test_first_feedback_write_moves_report_to_under_evaluation(migrated_db: async_sessionmaker) -> None:
-    # L5 — the transition fires on evaluator *work*, never on assignment.
+    # The transition fires on evaluator *work*, never on assignment.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _, h, evid = await _assigned(migrated_db, c, ah)
@@ -95,7 +95,7 @@ async def test_feedback_write_on_already_under_evaluation_report_leaves_status_u
 
 
 async def test_feedback_write_does_not_touch_grade_version(migrated_db: async_sessionmaker) -> None:
-    # D3 sole-writer guard: only rollup.py (W5-2) increments grade_version.
+    # Sole-writer guard: only rollup.py increments grade_version.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _, h, evid = await _assigned(migrated_db, c, ah)
@@ -104,7 +104,7 @@ async def test_feedback_write_does_not_touch_grade_version(migrated_db: async_se
 
 
 async def test_feedback_write_does_not_set_report_overall_grade(migrated_db: async_sessionmaker) -> None:
-    # A7 sole-writer guard. NOTE: this assertion FLIPS in W5-2 Task 8, which wires the rollup in.
+    # Sole-writer guard: a feedback write publishes no grade.
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _, h, evid = await _assigned(migrated_db, c, ah)
@@ -132,7 +132,7 @@ async def test_global_admin_patching_an_evaluation_feedback_succeeds(migrated_db
 
 
 async def test_patch_explicit_null_feedback_returns_422(migrated_db: async_sessionmaker) -> None:
-    # Repo convention (WP2 Phase D FIX PASS): explicit null on a PATCH field is 422, not "clear it".
+    # Repo convention: explicit null on a PATCH field is 422, not "clear it".
     ah, _ = await ga_headers(migrated_db)
     async with client(migrated_db) as c:
         ex, rid, _, h, evid = await _assigned(migrated_db, c, ah)

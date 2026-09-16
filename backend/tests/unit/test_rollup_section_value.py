@@ -1,8 +1,8 @@
-"""Task 1 — the per-section value that feeds the rollup.
+"""The per-section value that feeds the rollup.
 
 ``None`` is the load-bearing return value: it means EXCLUDED FROM BOTH the numerator and the
-weight denominator (§4.2), which is what M4 (``not_graded``) and M5 (gradable but ungraded)
-both require. Returning 0 instead would silently drag every average down.
+weight denominator, which is what ``not_graded`` and gradable-but-ungraded sections both
+require. Returning 0 instead would silently drag every average down.
 """
 
 from decimal import Decimal
@@ -30,23 +30,23 @@ def test_section_value_for_numeric_mode_returns_the_stored_grade() -> None:
 
 
 def test_section_value_for_numeric_mode_with_null_grade_returns_none() -> None:
-    # M5 — gradable but not yet graded: excluded from both sides, not scored zero.
+    # Gradable but not yet graded: excluded from both sides, not scored zero.
     assert compute_section_value(_section(grade=None)) is None
 
 
 def test_section_value_for_not_graded_mode_returns_none() -> None:
-    # M4 — the section contributes nothing at all.
+    # A not_graded section contributes nothing at all.
     assert compute_section_value(_section(grade_mode="not_graded", grade=None)) is None
 
 
 def test_section_value_for_not_graded_mode_ignores_a_stray_stored_grade() -> None:
-    # M4 belt-and-braces: no section_grade row should exist for a not_graded section, but if
+    # Belt-and-braces: no section_grade row should exist for a not_graded section, but if
     # one ever does, grade_mode wins over the stored value.
     assert compute_section_value(_section(grade_mode="not_graded", grade=Decimal("9"))) is None
 
 
 def test_section_value_returns_decimal_not_float() -> None:
-    # A float anywhere in this path defeats M11's exact ROUND_HALF_UP arithmetic.
+    # A float anywhere in this path defeats the exact ROUND_HALF_UP arithmetic.
     assert isinstance(compute_section_value(_section()), Decimal)
 
 
@@ -56,7 +56,7 @@ def test_section_value_for_unknown_grade_mode_raises_value_error() -> None:
         compute_section_value(_section(grade_mode="holographic"))
 
 
-# --- pass_fail scaling (M6) --------------------------------------------------
+# --- pass_fail scaling -------------------------------------------------------
 #
 # A pass_fail section MAY declare grade_min/grade_max (operator decision, 2026-09-01), which
 # is what makes a pass worth full marks beside numeric siblings. Sections authored before that
@@ -88,7 +88,7 @@ def test_pass_fail_with_null_grade_returns_none() -> None:
 
 
 def test_pass_fail_with_out_of_range_stored_grade_raises_value_error() -> None:
-    # W5-1 guarantees 0/1, so a 5 in the column is corruption — fail loudly, never scale it.
+    # The column is guaranteed 0/1, so a 5 in it is corruption — fail loudly, never scale it.
     with pytest.raises(ValueError, match="pass_fail grade must be 0 or 1"):
         compute_section_value(_pf(grade=Decimal("5")))
 

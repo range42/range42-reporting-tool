@@ -1,4 +1,4 @@
-"""campaign + campaign_report (WP3 S10)
+"""campaign + campaign_report
 
 Revision ID: 0009
 Revises: 0008

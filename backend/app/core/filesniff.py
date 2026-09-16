@@ -1,14 +1,12 @@
-"""Magic-byte content-type sniffing for attachment uploads (WP3 S9).
+"""Magic-byte content-type sniffing for attachment uploads.
 
-The client-declared MIME type is never trusted (guardrail: spoofed types must
-be rejected). ``sniff`` derives the content type from the leading bytes against
-a deliberate, closed allowlist — png/jpeg/gif/webp images plus PDF. SVG is
-excluded on purpose (embedded-script risk), as is everything else: an upload
-whose bytes match no signature is rejected by the route layer with 415.
+The client-declared MIME type is never trusted: spoofed types must be rejected. ``sniff``
+derives the content type from the leading bytes against a closed allowlist — png/jpeg/gif/webp
+images plus PDF. SVG is excluded on purpose (embedded-script risk), as is everything else; an
+upload whose bytes match no signature is rejected by the route layer with 415.
 
-Hand-rolled rather than libmagic/filetype: the allowlist is the security
-boundary, and seven fixed prefixes are simpler to audit than a dependency that
-recognises hundreds of formats we would then have to filter back down.
+Hand-rolled rather than libmagic/filetype: the allowlist is the security boundary, and seven
+fixed prefixes are simpler to audit than a dependency recognising hundreds of formats.
 """
 
 

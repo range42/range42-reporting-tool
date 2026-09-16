@@ -28,7 +28,7 @@ export interface SectionGrade {
 
 /**
  * Evaluator-facing section view — the only place the evaluator-only template fields
- * (`evaluation_criteria`, `rubric_criteria`, the grade bounds) are exposed (L12).
+ * (`evaluation_criteria`, `rubric_criteria`, the grade bounds) are exposed.
  */
 export interface GradableSection {
   report_section_id: string
@@ -65,7 +65,7 @@ export interface Evaluation {
 }
 
 /** `GET .../evaluations/{evid}`. Carries `grade_version` so a client can detect that a
- *  reopen invalidated published numbers (D19). */
+ *  reopen invalidated published numbers. */
 export interface EvaluationDetail extends Evaluation {
   report_name: string
   report_status: string
@@ -101,7 +101,7 @@ export interface EvaluationBreakdownRow {
   reopen_count: number
 }
 
-/** `GET .../evaluations` — the W5-3 breakdown that replaced W5-1's plain list. */
+/** `GET .../evaluations` — the per-evaluator breakdown plus the report aggregate. */
 export interface EvaluationBreakdown {
   report_id: string
   report_status: string
@@ -119,7 +119,7 @@ export type GradeUpsertInput = Partial<{
   feedback: string | null
 }>
 
-/** D2's admin deadlock exit: finalize in an absent evaluator's name, with a mandatory comment. */
+/** The admin deadlock exit: finalize in an absent evaluator's name, with a mandatory comment. */
 export type FinalizeInput = Partial<{
   on_behalf_of: string | null
   comment: string | null
@@ -189,7 +189,7 @@ export const putGrade = (
 }
 
 /** `PATCH .../evaluations/{evid}` — overall feedback only; the grade is never set here
- *  (A7: `rollup.py` is the sole writer of a grade). */
+ *  (`rollup.py` is the sole writer of a grade). */
 export const updateEvaluation = (
   token: string,
   exerciseId: string,
@@ -207,7 +207,9 @@ export const finalizeEvaluation = (
 ): Promise<EvaluationBreakdown> =>
   apiPost<EvaluationBreakdown>(`${base(exerciseId, rid)}/${evid}/finalize`, input, token)
 
-/** Global Admin only, and `reason` is mandatory — the handler refuses a blank one. */
+/** The assigned evaluator or a Global Admin, and `reason` is mandatory — the handler refuses
+ *  a blank one. Reopening is how a finalized evaluation becomes editable and finalizable again;
+ *  there is no edit-after-finalize. */
 export const reopenEvaluation = (
   token: string,
   exerciseId: string,
@@ -230,8 +232,8 @@ export const unassignEvaluator = (
   apiPost<EvaluationBreakdown>(`${base(exerciseId, rid)}/${evid}/unassign`, { reason }, token)
 
 /** Global Admin only. Assigning does NOT start the evaluation — the report's status moves on
- *  the evaluator's first write, not here. Re-assigning someone previously unassigned revives
- *  their existing row rather than creating a second one. */
+ *  the evaluator's first write, not here. Re-assigning an unassigned evaluator revives their
+ *  existing row rather than creating a second one. */
 export const assignEvaluator = (
   token: string,
   exerciseId: string,

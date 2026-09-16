@@ -13,7 +13,7 @@ function section(over: Partial<PreviewSection> = {}): PreviewSection {
   }
 }
 
-describe('scoringPreview (preview only — rollup.py is canonical, D6)', () => {
+describe('scoringPreview (preview only — rollup.py is canonical)', () => {
   it('weights section grades by grade_weight', () => {
     // (8·1 + 5·3) / 4 = 5.75
     expect(

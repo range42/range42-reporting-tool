@@ -1,8 +1,8 @@
 """Shared HTML-sanitization allowlist (single source of truth, backend side).
 
-This allowlist is mirrored in ``frontend/src/services/sanitize.ts``; the two MUST
-stay in sync. The actual sanitizer wiring (nh3 on the backend, DOMPurify on the
-frontend) lands in WP3 — this module only locks *what* is allowed.
+Mirrored in ``frontend/src/services/sanitize.ts``; the two MUST stay in sync. This module only
+declares *what* is allowed — the sanitizer wiring is nh3 on the backend, DOMPurify on the
+frontend.
 
 Covers headings, lists, tables, inline/block code, images, and links.
 """

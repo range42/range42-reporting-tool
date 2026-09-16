@@ -1,4 +1,4 @@
-"""W5-3 Task 3 — pure multi-evaluator aggregation and the L7 "counted" predicate.
+"""Pure multi-evaluator aggregation and the "counted" predicate.
 
 DB-free on purpose: the finalize gate and the rollup must agree bit-for-bit on which
 evaluations count, so the predicate has exactly one home and both import it.
@@ -70,7 +70,7 @@ def test_weighted_aggregate_uses_aggregated_weight_as_denominator() -> None:
     assert result == Decimal("6.80")
 
 
-# --- L7: what counts ------------------------------------------------------------------
+# --- what counts ----------------------------------------------------------------------
 
 
 def test_unassigned_evaluation_is_excluded_from_numerator_and_denominator() -> None:
@@ -88,7 +88,7 @@ def test_unassigned_evaluation_is_excluded_from_numerator_and_denominator() -> N
 
 
 def test_unassign_evaluator_renormalizes_aggregated_weight() -> None:
-    """The canonical L5 case: the denominator shrinks, the surviving grade is not rescaled."""
+    """The canonical case: the denominator shrinks, the surviving grade is not rescaled."""
     # Arrange
     kept = _facts("8.00", "1.00", evaluation_id="kept")
     before = [kept, _facts("6.00", "1.50", evaluation_id="dropped")]

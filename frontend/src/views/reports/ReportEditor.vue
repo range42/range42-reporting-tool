@@ -65,8 +65,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-// router is used by template-independent navigation in a later slice; keep a
-// reference so the wiring is in place without an unused-var lint error.
+// Reference kept so the navigation wiring is in place without an unused-var lint error.
 void router
 
 const exerciseId = route.params.exerciseId as string
@@ -84,7 +83,7 @@ const submitError = ref('')
 
 const isTeamAdmin = computed(() => caps.has(exerciseId, REPORTS_RECALL))
 
-// L7 write-lock mirror of the backend policy: an assigned draft is editable
+// Write-lock mirror of the backend policy: an assigned draft is editable
 // only by its writer, a team admin, or a global admin.
 const lockedByAssignment = computed(() => {
   const assigned = report.value?.assigned_writer_id ?? null
@@ -142,7 +141,7 @@ onMounted(async () => {
   }
 })
 
-// --- attachments (WP3 S9) — parent owns the collection; panels render slices
+// --- attachments — parent owns the collection; panels render slices
 
 const attachments = ref<Attachment[]>([])
 const attachmentErrors = reactive<Record<string, string>>({})

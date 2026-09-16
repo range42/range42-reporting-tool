@@ -46,7 +46,7 @@ const assigning = ref(false)
 const rows = computed(() => breakdown.value?.evaluations ?? [])
 const active = computed(() => rows.value.filter((r) => r.unassigned_at === null))
 
-/** Someone already holding an ACTIVE seat is not offerable; a previously removed evaluator is,
+/** Someone already holding an ACTIVE seat is not offerable; a removed evaluator is,
  *  because assigning them again revives their original row rather than duplicating it. */
 const offerable = computed(() =>
   candidates.value.filter((c) => !active.value.some((r) => r.evaluator_id === c.user_id)),

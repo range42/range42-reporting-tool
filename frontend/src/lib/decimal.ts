@@ -1,5 +1,5 @@
 /**
- * Two-decimal grade parsing and formatting (D18).
+ * Two-decimal grade parsing and formatting.
  *
  * The backend pins every grade to one wire form — `NUMERIC(5,2)` serialized as a
  * two-decimal STRING — so the UI must never hand a raw float to the API or read one

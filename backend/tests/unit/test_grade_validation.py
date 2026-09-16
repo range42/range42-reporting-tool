@@ -1,4 +1,4 @@
-"""Unit tests for the L8 grade-mode table — one case per row, plus the boundaries."""
+"""Unit tests for the grade-mode table — one case per row, plus the boundaries."""
 
 from decimal import Decimal
 
@@ -75,7 +75,7 @@ def test_numeric_rejects_other_channels(extra: dict) -> None:
 
 @pytest.mark.parametrize(("result", "stored"), [(True, Decimal("1")), (False, Decimal("0"))])
 def test_pass_fail_stores_one_or_zero(result: bool, stored: Decimal) -> None:
-    # A4 — 0/1 now; W5-2's rollup applies the grade_max scaling.
+    # Stored as 0/1; the rollup applies the grade_max scaling.
     assert validate_grade_payload(_defn(grade_mode="pass_fail"), _body(pass_fail_result=result)) == (
         stored,
         result,
@@ -96,8 +96,8 @@ def test_pass_fail_rejects_an_explicit_grade() -> None:
 
 
 def test_rubric_returns_scores_and_the_pre_rolled_grade() -> None:
-    # M7 (was "leaves grade null" in W5-1; W5-2 Task 8 wired the pre-rollup in). Clarity 4/5
-    # is the only scored criterion, so 80% — with no declared bounds that lands on [0, 1].
+    # The rubric is pre-rolled on write. Clarity 4/5 is the only scored criterion, so 80% —
+    # with no declared bounds that lands on [0, 1].
     defn = _defn(grade_mode="rubric", rubric_criteria=RUBRIC_CRITERIA)
     body = _body(rubric_scores=[{"criterion": "Clarity", "score": Decimal("4"), "note": "clear"}])
     grade, pass_fail, scores = validate_grade_payload(defn, body)
@@ -138,7 +138,7 @@ def test_rubric_requires_scores() -> None:
 
 
 def test_rubric_without_criteria_on_the_definition_is_its_own_error() -> None:
-    # Edge case 15 — distinguishable from a bad payload so the operator knows the template is wrong.
+    # Distinguishable from a bad payload so the operator knows the template is wrong.
     defn = _defn(grade_mode="rubric", rubric_criteria=None)
     body = _body(rubric_scores=[{"criterion": "Clarity", "score": Decimal("1")}])
     assert _code(defn, body) == NO_RUBRIC_CRITERIA

@@ -1,4 +1,4 @@
-"""attachment (WP3 S9)
+"""attachment
 
 Revision ID: 0010
 Revises: 0009

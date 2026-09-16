@@ -1,9 +1,8 @@
 # Dev-only OIDC provider. Not used by the prod overlay.
 #
-# `issuer` must resolve to this service both from inside the compose network,
-# where the backend fetches discovery at boot, and from wherever the browser
-# runs, since it follows the login redirect. The `iss` claim has to match on
-# both sides, so the two cannot use different names.
+# `issuer` must resolve to this service both from inside the compose network (the backend
+# fetches discovery at boot) and from wherever the browser runs (it follows the login
+# redirect). The `iss` claim has to match on both sides.
 issuer: http://dex:5556/dex
 
 # No database in dev — every login is a fresh grant, and nothing needs to
@@ -22,20 +21,19 @@ staticClients:
   - id: reporting-tool
     name: Range42 Reporting Tool
     secret: changeme
-    # Must match OIDC_REDIRECT_URI exactly: the value is replayed to the token
-    # endpoint, and it points at the FRONTEND route (AuthCallback.vue), which
-    # reads code/state and then calls the backend callback itself.
+    # Must match OIDC_REDIRECT_URI exactly — it is replayed to the token endpoint. Points at
+    # the FRONTEND route (AuthCallback.vue), which then calls the backend callback.
     redirectURIs:
       - http://localhost:5173/auth/callback
 
 enablePasswordDB: true
 
-# Emails are the join key used by the grants seeding step to match a logged-in
-# user to their persona roles. A typo here surfaces as a login that succeeds
-# but grants nothing, so keep this list in step with seed_demo.PERSONAS.
+# Emails are the join key the grants seeding step uses to match a logged-in user to their
+# persona roles; keep this list in step with seed_demo.PERSONAS. A typo surfaces as a login
+# that succeeds but grants nothing.
 #
-# The emergency admin (admin@localhost) is deliberately absent: it is the
-# break-glass path that must keep working when the IdP does not.
+# The emergency admin (admin@localhost) is deliberately absent: it is the break-glass path
+# that must keep working when the IdP does not.
 #
 # All passwords are `changeme` (bcrypt, cost 10). Regenerate a hash with:
 #   python3 -c "import bcrypt;print(bcrypt.hashpw(b'<pw>',bcrypt.gensalt(rounds=10)).decode())"

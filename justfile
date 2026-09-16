@@ -32,18 +32,15 @@ seed:
     docker compose {{dev}} exec -T backend uv run --no-sync python -m app.seed_demo
     docker compose {{dev}} exec -T backend uv run --no-sync python -m app.seed_logins
 
-# Log every demo persona in through the dev IdP without a browser, by driving the
-# normal authorization-code flow over HTTP. Only a login creates a user row, and
-# `seed-grants` can only grant to rows that exist — this is what saves typing five
-# logins by hand after a volume rebuild. Included in `just seed`; standalone here
-# for a stack that was seeded before this existed. DEV ONLY (Dex static passwords).
+# Log every demo persona in through the dev IdP without a browser, by driving the normal
+# authorization-code flow over HTTP. Only a login creates a user row, and `seed-grants` can
+# only grant to rows that exist. Included in `just seed`. DEV ONLY (Dex static passwords).
 seed-logins:
     docker compose {{dev}} exec -T backend uv run --no-sync python -m app.seed_logins
 
-# Assign persona roles + team membership. Matches users by EMAIL, so it must run
-# *after* each persona has logged in — `just seed` now does that for you.
-# Idempotent: re-run it as more personas log in, and anyone who has not yet is
-# reported as skipped.
+# Assign persona roles + team membership. Matches users by EMAIL, so it must run *after* each
+# persona has logged in — `just seed` does that for you. Idempotent: re-run it as more personas
+# log in; anyone who has not yet is reported as skipped.
 seed-grants:
     docker compose {{dev}} exec -T backend uv run --no-sync python -m app.seed_grants
 

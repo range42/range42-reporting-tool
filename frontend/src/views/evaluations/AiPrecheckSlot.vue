@@ -1,11 +1,10 @@
 <script setup lang="ts">
 /**
- * Placeholder surface for the AI pre-check (D9).
+ * Placeholder surface for the AI pre-check.
  *
- * MOUNTED ONLY WHEN AI IS AVAILABLE. `GET /ai/status` is W5-8's to build (#167), so today
- * nothing mounts this and the evaluator sees no AI affordance at all — which is the point of
- * D9: an assistive feature that is switched off must be absent, not present-and-broken. The
- * slot exists so W5-8 has a seam to fill rather than a view to restructure.
+ * MOUNTED ONLY WHEN AI IS AVAILABLE. There is no `GET /ai/status` endpoint yet, so nothing
+ * mounts this today and the evaluator sees no AI affordance at all: an assistive feature that
+ * is switched off must be absent, not present-and-broken.
  */
 import { useI18n } from 'vue-i18n'
 
