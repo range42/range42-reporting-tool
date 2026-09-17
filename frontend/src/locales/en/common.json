@@ -196,6 +196,7 @@
     "breakdownHeading": "Evaluations",
     "breakdownYours": "Your evaluation",
     "campaignBeingGraded": "Being graded",
+    "campaignDidNotEvaluate": "You did not evaluate this report.",
     "campaignJumpAriaLabel": "Jump to section",
     "campaignNavAriaLabel": "Campaign reports",
     "charCount": "{count} characters",
