@@ -9,6 +9,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['src/test-setup.ts'],
+    // Playwright owns e2e/*.spec.ts (its own test/expect, a real browser, a live backend) —
+    // vitest's default include glob would otherwise also try to run them under jsdom.
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

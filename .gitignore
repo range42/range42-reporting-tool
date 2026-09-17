@@ -34,3 +34,8 @@ docs/superpowers/
 .coverage.*
 htmlcov/
 frontend/coverage/
+
+# Playwright artifacts (frontend/e2e) — reports, traces, screenshots, saved login state
+frontend/e2e/test-results/
+frontend/e2e/playwright-report/
+frontend/e2e/.auth/
