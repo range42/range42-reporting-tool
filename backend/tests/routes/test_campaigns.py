@@ -2,8 +2,8 @@
 
 A campaign groups reports across teams/time within an exercise (M2M — a report
 may appear in several campaigns). Writes are GA-only like the other authoring
-surfaces; reads reuse the report visibility rules (own team, or
-``reports:read:all``) — server-side, default-deny.
+surfaces; reads reuse the report visibility rules (own team, ``reports:read:assigned``
+for an evaluator's assigned reports, or ``reports:read:all``) — server-side, default-deny.
 """
 
 import pytest
@@ -266,3 +266,68 @@ async def test_compare_cross_team_leak_403(migrated_db: async_sessionmaker) -> N
         wh = {"Authorization": f"Bearer {tok}"}
         r = await c.get(f"/api/v1/exercises/{ex}/campaigns/{cid}/compare", params={"report_ids": [rid_b]}, headers=wh)
         assert r.status_code == 403
+
+
+# --- evaluator (reports:read:assigned) scoping ------------------------------------
+
+
+async def _submit(c, ah, ex: str, rid: str) -> None:
+    sec = (await c.get(f"/api/v1/exercises/{ex}/reports/{rid}", headers=ah)).json()["data"]["sections"][0]
+    await c.patch(
+        f"/api/v1/exercises/{ex}/reports/{rid}/sections/{sec['id']}",
+        json={"version": 1, "body": {"kind": "rich_text", "content": "<p>x</p>"}},
+        headers=ah,
+    )
+    await c.post(f"/api/v1/exercises/{ex}/reports/{rid}/submit", headers=ah)
+
+
+async def test_timeline_scoped_to_assigned_reports(migrated_db: async_sessionmaker) -> None:
+    """An evaluator with no team membership still sees a report they're assigned to evaluate,
+    but not the campaign's other report."""
+    ah = await _ga(migrated_db)
+    tok, uid = await make_user_token(migrated_db, jti="ev", admin=False)
+    async with client(migrated_db) as c:
+        ex, cid, (_, rid_a), (_, rid_b) = await _campaign_with_reports(c, ah)
+        await _submit(c, ah, ex, rid_a)
+        await c.post(f"/api/v1/exercises/{ex}/roles", json={"user_id": uid, "role_key": "evaluator"}, headers=ah)
+        r = await c.post(f"/api/v1/exercises/{ex}/reports/{rid_a}/evaluations", json={"evaluator_id": uid}, headers=ah)
+        assert r.status_code == 201, r.text
+
+        eh = {"Authorization": f"Bearer {tok}"}
+        rows = (await c.get(f"/api/v1/exercises/{ex}/campaigns/{cid}/timeline", headers=eh)).json()["data"]
+        assert [row["report_id"] for row in rows] == [rid_a]
+        assert rid_b not in [row["report_id"] for row in rows]
+
+
+async def test_compare_scoped_to_assigned_reports(migrated_db: async_sessionmaker) -> None:
+    """The same evaluator can compare the report they're assigned to, but not the other one."""
+    ah = await _ga(migrated_db)
+    tok, uid = await make_user_token(migrated_db, jti="ev", admin=False)
+    async with client(migrated_db) as c:
+        ex, cid, (_, rid_a), (_, rid_b) = await _campaign_with_reports(c, ah)
+        await _submit(c, ah, ex, rid_a)
+        await c.post(f"/api/v1/exercises/{ex}/roles", json={"user_id": uid, "role_key": "evaluator"}, headers=ah)
+        await c.post(f"/api/v1/exercises/{ex}/reports/{rid_a}/evaluations", json={"evaluator_id": uid}, headers=ah)
+
+        eh = {"Authorization": f"Bearer {tok}"}
+        ok = await c.get(f"/api/v1/exercises/{ex}/campaigns/{cid}/compare", params={"report_ids": [rid_a]}, headers=eh)
+        assert ok.status_code == 200, ok.text
+
+        denied = await c.get(
+            f"/api/v1/exercises/{ex}/campaigns/{cid}/compare", params={"report_ids": [rid_b]}, headers=eh
+        )
+        assert denied.status_code == 403
+
+
+async def test_timeline_empty_for_evaluator_with_no_assignment(migrated_db: async_sessionmaker) -> None:
+    """Holding the evaluator role isn't itself visibility — an unassigned evaluator sees nothing,
+    not every report in the campaign."""
+    ah = await _ga(migrated_db)
+    tok, uid = await make_user_token(migrated_db, jti="ev", admin=False)
+    async with client(migrated_db) as c:
+        ex, cid, _, _ = await _campaign_with_reports(c, ah)
+        await c.post(f"/api/v1/exercises/{ex}/roles", json={"user_id": uid, "role_key": "evaluator"}, headers=ah)
+
+        eh = {"Authorization": f"Bearer {tok}"}
+        rows = (await c.get(f"/api/v1/exercises/{ex}/campaigns/{cid}/timeline", headers=eh)).json()["data"]
+        assert rows == []

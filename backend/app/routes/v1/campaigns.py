@@ -1,8 +1,9 @@
 """Campaigns — grouping of reports across teams/time for an exercise.
 
 Writes are GA-only, like every authoring surface. Reads reuse the report visibility rules —
-own team, or ``reports:read:all`` — resolved server-side on every query (default-deny). The
-timeline/compare endpoints feed the evaluator two-pane / N-pane views.
+own team, ``reports:read:assigned`` (reports the caller evaluates), or ``reports:read:all`` —
+resolved server-side on every query (default-deny). The timeline/compare endpoints feed the
+evaluator two-pane / N-pane views.
 """
 
 import uuid
@@ -15,9 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
-from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_OWN
+from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_ASSIGNED, REPORTS_READ_OWN
 from app.core.rbac import get_current_user, require_global_admin, require_permission_any
-from app.models import Campaign, CampaignReport, Exercise, Report, Team, User
+from app.models import Campaign, CampaignReport, Evaluation, Exercise, Report, Team, User
 from app.routes.v1.reports import _caller_team_ids, _has_permission, _section_pairs
 from app.schemas.campaign import CampaignCreate, CampaignOut, CampaignReportAdd, CampaignUpdate, TimelineEntryOut
 from app.schemas.common import DataEnvelope, Page
@@ -52,11 +53,42 @@ async def _report_count(db: AsyncSession, campaign_id: uuid.UUID) -> int:
     ).scalar_one()
 
 
-async def _visible_team_filter(db: AsyncSession, exercise_id: uuid.UUID, user: User) -> set[uuid.UUID] | None:
-    """The team_ids the caller may read, or None for unrestricted (admin / read:all)."""
+async def _visible_report_ids(db: AsyncSession, exercise_id: uuid.UUID, user: User) -> set[uuid.UUID] | None:
+    """The report ids the caller may read, or None for unrestricted (admin / read:all).
+
+    Union of: reports belonging to the caller's own team(s), and — for an evaluator holding
+    ``reports:read:assigned`` — reports they are actively assigned to evaluate (soft-unassigned
+    rows don't count, same predicate as the finalize gate/rollup use).
+    """
     if user.is_global_admin or await _has_permission(db, exercise_id, user, REPORTS_READ_ALL):
         return None
-    return await _caller_team_ids(db, exercise_id, user)
+    visible: set[uuid.UUID] = set()
+    team_ids = await _caller_team_ids(db, exercise_id, user)
+    if team_ids:
+        rows = (
+            (await db.execute(select(Report.id).where(Report.exercise_id == exercise_id, Report.team_id.in_(team_ids))))
+            .scalars()
+            .all()
+        )
+        visible.update(rows)
+    if await _has_permission(db, exercise_id, user, REPORTS_READ_ASSIGNED):
+        rows = (
+            (
+                await db.execute(
+                    select(Evaluation.report_id)
+                    .join(Report, Report.id == Evaluation.report_id)
+                    .where(
+                        Report.exercise_id == exercise_id,
+                        Evaluation.evaluator_id == user.id,
+                        Evaluation.unassigned_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        visible.update(rows)
+    return visible
 
 
 # --- CRUD --------------------------------------------------------------------
@@ -95,7 +127,7 @@ async def create_campaign(
 @router.get("/exercises/{exercise_id}/campaigns")
 async def list_campaigns(
     exercise_id: uuid.UUID,
-    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ALL])),
+    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ASSIGNED, REPORTS_READ_ALL])),
     db: AsyncSession = Depends(get_db),
     pp: PageParams = Depends(page_params),
 ) -> DataEnvelope[list[CampaignOut]]:
@@ -122,7 +154,7 @@ async def list_campaigns(
 async def get_campaign(
     exercise_id: uuid.UUID,
     cid: uuid.UUID,
-    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ALL])),
+    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ASSIGNED, REPORTS_READ_ALL])),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[CampaignOut]:
     c = await _get_campaign(db, exercise_id, cid)
@@ -269,16 +301,16 @@ async def campaign_timeline(
     exercise_id: uuid.UUID,
     cid: uuid.UUID,
     user: User = Depends(get_current_user),
-    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ALL])),
+    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ASSIGNED, REPORTS_READ_ALL])),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[list[TimelineEntryOut]]:
     await _get_campaign(db, exercise_id, cid)
     filt = [CampaignReport.campaign_id == cid]
-    team_ids = await _visible_team_filter(db, exercise_id, user)
-    if team_ids is not None:
-        if not team_ids:
+    report_ids = await _visible_report_ids(db, exercise_id, user)
+    if report_ids is not None:
+        if not report_ids:
             return DataEnvelope(data=[])
-        filt.append(Report.team_id.in_(team_ids))
+        filt.append(Report.id.in_(report_ids))
     rows = (
         await db.execute(
             select(Report, Team.name)
@@ -297,7 +329,7 @@ async def campaign_compare(
     cid: uuid.UUID,
     report_ids: Annotated[list[uuid.UUID], Query(min_length=1, max_length=COMPARE_MAX_REPORTS)],
     user: User = Depends(get_current_user),
-    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ALL])),
+    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ASSIGNED, REPORTS_READ_ALL])),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[list[ReportDetailOut]]:
     await _get_campaign(db, exercise_id, cid)
@@ -308,9 +340,9 @@ async def campaign_compare(
     if missing:
         raise HTTPException(status_code=404, detail={"error": "report_not_in_campaign", "report_ids": missing})
 
-    team_ids = await _visible_team_filter(db, exercise_id, user)
+    visible_ids = await _visible_report_ids(db, exercise_id, user)
     reports = {r.id: r for r in (await db.execute(select(Report).where(Report.id.in_(report_ids)))).scalars().all()}
-    if team_ids is not None and any(reports[rid].team_id not in team_ids for rid in report_ids):
+    if visible_ids is not None and any(rid not in visible_ids for rid in report_ids):
         raise HTTPException(status_code=403, detail="insufficient permissions")
     data = [ReportDetailOut.from_models(reports[rid], await _section_pairs(db, rid)) for rid in report_ids]
     return DataEnvelope(data=data)
