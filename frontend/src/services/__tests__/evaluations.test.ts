@@ -90,6 +90,19 @@ describe('evaluations service', () => {
     expect(fetchMock.mock.calls[0]![0]).toBe(NESTED)
   })
 
+  it('listSectionGrades hits the evaluation-scoped grades path, ordered as the server sent them', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      env(200, [
+        { id: 'g1', report_section_id: 's1', grade: '7.50' },
+        { id: 'g2', report_section_id: 's2', grade: '8.00' },
+      ]),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await svc.listSectionGrades('tok', 'ex1', 'r1', 'ev1')
+    expect(out.map((g) => g.report_section_id)).toEqual(['s1', 's2'])
+    expect(fetchMock.mock.calls[0]![0]).toBe(`${NESTED}/ev1/grades`)
+  })
+
   it('exposes grade_version from the detail response', async () => {
     const fetchMock = vi.fn().mockResolvedValue(env(200, { id: 'ev1', grade_version: 3 }))
     vi.stubGlobal('fetch', fetchMock)

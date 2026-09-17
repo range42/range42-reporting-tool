@@ -188,6 +188,15 @@ export const putGrade = (
   return apiPut<SectionGrade>(`${base(exerciseId, rid)}/${evid}/grades/${sectionId}`, body, token)
 }
 
+/** The evaluation's own grades, ordered by section position (mirrors `list_section_grades`). */
+export const listSectionGrades = (
+  token: string,
+  exerciseId: string,
+  rid: string,
+  evid: string,
+): Promise<SectionGrade[]> =>
+  apiGet<SectionGrade[]>(`${base(exerciseId, rid)}/${evid}/grades`, token)
+
 /** `PATCH .../evaluations/{evid}` — overall feedback only; the grade is never set here
  *  (`rollup.py` is the sole writer of a grade). */
 export const updateEvaluation = (
