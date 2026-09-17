@@ -22,8 +22,8 @@ logs:
 # Seed the running dev stack. Runs inside the backend container (env_file + the
 # `postgres` hostname only exist there). Launches three scripts, in order:
 #   1. app.seed      - the 5 built-in system roles (baseline).
-#   2. app.seed_demo - the emergency admin, an exercise, teams, and a published
-#                      template (for manual exploration).
+#   2. app.seed_demo - the emergency admin, an exercise, teams, and the default
+#                      report templates (for manual exploration).
 #   3. app.seed_logins - logs each persona in once, headlessly, which is what
 #                      creates their user row. Dev-only; see `just seed-logins`.
 # All are idempotent, so re-running never duplicates rows. Requires `just up`.
@@ -43,6 +43,13 @@ seed-logins:
 # log in; anyone who has not yet is reported as skipped.
 seed-grants:
     docker compose {{dev}} exec -T backend uv run --no-sync python -m app.seed_grants
+
+# Seed the default report templates for a global admin who has already
+# logged in at least once — `created_by` is a required FK, so the row must already exist.
+# `just seed` already does this for the dev emergency admin via app.seed_demo; use this
+# directly against prod once a real admin has logged in through SSO.
+seed-default-templates email:
+    docker compose {{dev}} exec -T backend uv run --no-sync python -m app.seed_default_templates {{email}}
 
 lint:
     cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy app

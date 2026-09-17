@@ -427,7 +427,24 @@ async def create_report(
         .all()
     )
     for d in defs:
-        db.add(ReportSection(report_id=report.id, section_def_id=d.id, position=d.position, version=1, char_count=0))
+        if d.field_type == "rich_text" and d.default_content:
+            clean = sanitize_html(d.default_content)
+            plain = html_to_plain(d.default_content)
+            db.add(
+                ReportSection(
+                    report_id=report.id,
+                    section_def_id=d.id,
+                    position=d.position,
+                    version=1,
+                    content=clean,
+                    content_plain=plain,
+                    char_count=len(plain),
+                )
+            )
+        else:
+            db.add(
+                ReportSection(report_id=report.id, section_def_id=d.id, position=d.position, version=1, char_count=0)
+            )
     await db.flush()
 
     await record_audit(

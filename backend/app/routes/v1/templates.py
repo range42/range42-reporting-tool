@@ -283,6 +283,7 @@ async def clone_template(
                 position=s.position,
                 name=s.name,
                 description=s.description,
+                default_content=s.default_content,
                 field_type=s.field_type,
                 char_limit=s.char_limit,
                 is_required=s.is_required,
@@ -391,6 +392,7 @@ async def create_section(
         position=count,
         name=body.name,
         description=body.description,
+        default_content=body.default_content,
         field_type=body.field_type,
         char_limit=body.char_limit,
         is_required=body.is_required,
@@ -444,6 +446,7 @@ async def update_section(
         grade_max=s.grade_max,
         rubric_criteria=s.rubric_criteria,
         grade_weight=s.grade_weight,
+        default_content=s.default_content,
     )
     if err:
         raise HTTPException(status_code=422, detail=err)
@@ -706,6 +709,7 @@ async def import_template(
                 position=i,
                 name=sec.name,
                 description=sec.description,
+                default_content=sec.default_content,
                 field_type=sec.field_type,
                 char_limit=sec.char_limit,
                 is_required=sec.is_required,

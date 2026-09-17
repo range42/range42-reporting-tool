@@ -24,6 +24,7 @@ def section_invariant_error(
     grade_max: float | None,
     rubric_criteria: list[dict[str, Any]] | None,
     grade_weight: float,
+    default_content: str | None = None,
 ) -> str | None:
     """Cross-field section validity. Returns an error message, or None when valid."""
     if field_type not in FIELD_TYPES:
@@ -38,6 +39,8 @@ def section_invariant_error(
         if char_limit is not None and char_limit < 1:
             return "char_limit must be >= 1"
     else:  # choice
+        if default_content is not None:
+            return "choice sections must not have default_content"
         if char_limit is not None:
             return "choice sections must not have a char_limit"
         if not choice_config:
@@ -79,6 +82,7 @@ def section_invariant_error(
 class SectionBase(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
+    default_content: str | None = None
     field_type: str = "rich_text"
     char_limit: int | None = None
     is_required: bool = True
@@ -106,6 +110,7 @@ class SectionCreate(SectionBase):
             grade_max=self.grade_max,
             rubric_criteria=self.rubric_criteria,
             grade_weight=self.grade_weight,
+            default_content=self.default_content,
         )
         if err:
             raise ValueError(err)
@@ -115,6 +120,7 @@ class SectionCreate(SectionBase):
 class SectionUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
+    default_content: str | None = None
     field_type: str | None = None
     char_limit: int | None = None
     is_required: bool | None = None
@@ -160,6 +166,7 @@ class SectionOut(SectionBase):
             position=s.position,
             name=s.name,
             description=s.description,
+            default_content=s.default_content,
             field_type=s.field_type,
             char_limit=s.char_limit,
             is_required=s.is_required,
@@ -284,6 +291,7 @@ class TemplateBundle(BaseModel):
                 SectionCreate(
                     name=s.name,
                     description=s.description,
+                    default_content=s.default_content,
                     field_type=s.field_type,
                     char_limit=s.char_limit,
                     is_required=s.is_required,

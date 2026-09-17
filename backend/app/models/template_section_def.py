@@ -17,6 +17,7 @@ class TemplateSectionDef(Base, UUIDMixin, TimestampMixin):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    default_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     field_type: Mapped[str] = mapped_column(String(20), nullable=False)
     char_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))

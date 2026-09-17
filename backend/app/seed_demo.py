@@ -17,8 +17,7 @@ Idempotent: every entity is looked up by its natural key before insert. It seeds
 * one active exercise with the default team-type set + scoring config
   (reuses ``app.seed.seed_exercise_defaults``);
 * two teams (Blue, Red), without members;
-* one *published* ``sitrep`` template with three sections
-  (rich-text, single-choice, numeric-graded).
+* the default report templates (reuses ``app.seed_default_templates.seed_default_templates``).
 
 Log in through the emergency admin using the password whose bcrypt hash is in
 ``EMERGENCY_ADMIN_PASSWORD_HASH`` (``deploy/.env``), or through the IdP and then
@@ -37,11 +36,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.db import build_engine, get_sessionmaker
 from app.models.exercise import Exercise
-from app.models.report_template import ReportTemplate
 from app.models.team import Team
-from app.models.template_section_def import TemplateSectionDef
 from app.models.user import User
 from app.seed import seed_exercise_defaults, seed_system_roles
+from app.seed_default_templates import seed_default_templates
 
 # --- the emergency admin (external_id is namespaced "{provider}:{subject}") ---
 # Must mirror emergency_claims() (provider="emergency", subject="admin") so
@@ -62,51 +60,6 @@ ADMIN = _Persona(ADMIN_EXTERNAL_ID, "admin@localhost", "Emergency Admin", True)
 EXERCISE_NAME = "Autumn Cyber Range 2026"
 BLUE_TEAM_NAME = "Blue Team Alpha"
 RED_TEAM_NAME = "Red Team Bravo"
-TEMPLATE_NAME = "Situation Report (SITREP)"
-
-# Section definitions for the demo template. Each dict is validated against the
-# same invariants the API enforces (app.schemas.template.section_invariant_error).
-_SECTIONS: tuple[dict[str, Any], ...] = (
-    {
-        "position": 1,
-        "name": "Executive Summary",
-        "description": "High-level narrative for leadership.",
-        "field_type": "rich_text",
-        "char_limit": 2000,
-        "is_required": True,
-        "grade_mode": "not_graded",
-    },
-    {
-        "position": 2,
-        "name": "Incident Severity",
-        "description": "Overall severity classification.",
-        "field_type": "choice",
-        "is_required": True,
-        "grade_mode": "not_graded",
-        "choice_config": {
-            "selection": "single",
-            "values": [
-                {"code": "low", "label": "Low", "position": 1},
-                {"code": "medium", "label": "Medium", "position": 2},
-                {"code": "high", "label": "High", "position": 3},
-                {"code": "critical", "label": "Critical", "position": 4},
-            ],
-        },
-    },
-    {
-        "position": 3,
-        "name": "Technical Analysis",
-        "description": "Detailed technical findings (scored 0-10).",
-        "field_type": "rich_text",
-        "char_limit": 8000,
-        "is_required": True,
-        "grade_mode": "numeric",
-        "grade_min": 0.0,
-        "grade_max": 10.0,
-        "grade_weight": 2.0,
-        "evaluation_criteria": "Depth of analysis, accuracy of IOCs, clarity of remediation.",
-    },
-)
 
 
 async def _get_or_create_user(session: AsyncSession, p: _Persona) -> User:
@@ -155,49 +108,6 @@ async def _get_or_create_team(
     return team
 
 
-async def _get_or_create_template(session: AsyncSession, *, created_by: uuid.UUID) -> tuple[ReportTemplate, bool]:
-    template = (
-        await session.execute(select(ReportTemplate).where(ReportTemplate.name == TEMPLATE_NAME))
-    ).scalar_one_or_none()
-    if template is not None:
-        return template, False
-    template = ReportTemplate(
-        lineage_id=uuid.uuid4(),
-        version=1,
-        name=TEMPLATE_NAME,
-        report_type="sitrep",
-        description="Seeded demo template with mixed section types.",
-        status="published",
-        created_by=created_by,
-    )
-    session.add(template)
-    await session.flush()
-    for spec in _SECTIONS:
-        session.add(
-            TemplateSectionDef(
-                template_id=template.id,
-                position=spec["position"],
-                name=spec["name"],
-                description=spec.get("description"),
-                field_type=spec["field_type"],
-                char_limit=spec.get("char_limit"),
-                is_required=spec.get("is_required", True),
-                grade_mode=spec.get("grade_mode", "not_graded"),
-                grade_min=spec.get("grade_min"),
-                grade_max=spec.get("grade_max"),
-                grade_weight=spec.get("grade_weight", 1.0),
-                rubric_criteria=spec.get("rubric_criteria"),
-                evaluation_criteria=spec.get("evaluation_criteria"),
-                choice_config=spec.get("choice_config"),
-                mitre_attack_tags=spec.get("mitre_attack_tags", []),
-                capec_tags=spec.get("capec_tags", []),
-                cwe_tags=spec.get("cwe_tags", []),
-            )
-        )
-    await session.flush()
-    return template, True
-
-
 async def seed_demo(session: AsyncSession) -> dict[str, Any]:
     """Seed the full demo dataset. Returns a summary dict for logging."""
     await seed_system_roles(session)
@@ -214,14 +124,13 @@ async def seed_demo(session: AsyncSession) -> dict[str, Any]:
         session, exercise_id=exercise.id, name=RED_TEAM_NAME, team_type="red", color="#EF4444"
     )
 
-    template, template_created = await _get_or_create_template(session, created_by=admin.id)
+    templates = await seed_default_templates(session, created_by=admin.id)
 
     return {
         "users": 1,
         "exercise": exercise.name,
         "teams": [blue.name, red.name],
-        "template": template.name,
-        "template_created": template_created,
+        "templates": templates,
         "admin_external_id": ADMIN_EXTERNAL_ID,
     }
 
@@ -241,10 +150,8 @@ async def _main() -> None:
     print(f"  users            : {summary['users']} (emergency admin only)")
     print(f"  exercise         : {summary['exercise']} (+ default team-types & scoring)")
     print(f"  teams            : {', '.join(summary['teams'])} (no members yet)")
-    print(
-        f"  template         : {summary['template']} "
-        f"({'created' if summary['template_created'] else 'already present'})"
-    )
+    for name, created in summary["templates"]:
+        print(f"  template         : {name} ({'created' if created else 'already present'})")
     print("  log in as        : emergency admin (POST /api/v1/auth/emergency-login)")
     print("  next             : persona SSO logins, then `just seed-grants`")
 

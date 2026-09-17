@@ -49,6 +49,45 @@ async def test_instantiate_snapshots_sections(migrated_db: async_sessionmaker) -
         assert data["sections"][0]["version"] == 1
 
 
+async def test_instantiate_seeds_default_content(migrated_db: async_sessionmaker) -> None:
+    async with migrated_db() as s:
+        await seed_system_roles(s)
+        await s.commit()
+    token, _ = await make_user_token(migrated_db, jti="ga", admin=True)
+    ah = {"Authorization": f"Bearer {token}"}
+    async with client(migrated_db) as c:
+        tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()[
+            "data"
+        ]["id"]
+        table_html = "<table><thead><tr><th>Named Threat</th><th>Detection</th></tr></thead><tbody><tr><td></td><td></td></tr></tbody></table>"
+        await c.post(
+            f"/api/v1/templates/{tid}/sections",
+            json={
+                "name": "Detection",
+                "field_type": "rich_text",
+                "is_required": True,
+                "default_content": table_html,
+            },
+            headers=ah,
+        )
+        await c.post(
+            f"/api/v1/templates/{tid}/sections",
+            json={"name": "No default", "field_type": "rich_text", "is_required": False},
+            headers=ah,
+        )
+        await c.post(f"/api/v1/templates/{tid}/publish", headers=ah)
+        ex, team = await _exercise_team(c, ah)
+        r = await c.post(
+            f"/api/v1/exercises/{ex}/reports", json={"template_id": tid, "team_id": team, "name": "R1"}, headers=ah
+        )
+        assert r.status_code == 201, r.text
+        sections = {sec["name"]: sec for sec in r.json()["data"]["sections"]}
+        assert sections["Detection"]["content"] == table_html
+        assert sections["Detection"]["char_count"] == len("Named ThreatDetection")
+        assert sections["No default"]["content"] is None
+        assert sections["No default"]["char_count"] == 0
+
+
 async def test_instantiate_rejects_unpublished(migrated_db: async_sessionmaker) -> None:
     async with migrated_db() as s:
         await seed_system_roles(s)
