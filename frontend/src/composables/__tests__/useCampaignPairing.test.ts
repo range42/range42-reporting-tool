@@ -131,7 +131,6 @@ describe('useCampaignPairing', () => {
       token: 'tok',
       exerciseId: 'ex1',
       reportId: 'r2',
-      teamId: 't1',
       userId: 'u1',
     })
     await p.load()
@@ -160,7 +159,6 @@ describe('useCampaignPairing', () => {
       token: 'tok',
       exerciseId: 'ex1',
       reportId: 'r9',
-      teamId: 't1',
       userId: 'u1',
     })
     await p.load()
@@ -195,7 +193,6 @@ describe('useCampaignPairing', () => {
       token: 'tok',
       exerciseId: 'ex1',
       reportId: 'r2',
-      teamId: 't1',
       userId: 'u1',
     })
     await p.load()
@@ -271,7 +268,6 @@ describe('useCampaignPairing', () => {
       token: 'tok',
       exerciseId: 'ex1',
       reportId: 'r2',
-      teamId: 't1',
       userId: 'u1',
     })
     await p.load()
@@ -279,5 +275,23 @@ describe('useCampaignPairing', () => {
     expect(p.hasOwnPreviousEvaluation.value).toBe(true)
     expect(evaluations.listSectionGrades).toHaveBeenCalledWith('tok', 'ex1', 'r1', 'ev-prev')
     expect(p.previousGrades.value).toHaveLength(1)
+    expect(p.previousOverallGrade.value).toBe('7.50')
+    expect(p.entries.value.map((e) => e.report_id)).toEqual(['r1', 'r2'])
+  })
+
+  it('reports a forbidden status when a campaign endpoint returns 403', async () => {
+    vi.mocked(campaigns.listCampaigns).mockRejectedValue(
+      new ApiError('forbidden', 'no', [], undefined, 403),
+    )
+
+    const p = useCampaignPairing({
+      token: 'tok',
+      exerciseId: 'ex1',
+      reportId: 'r2',
+      userId: 'u1',
+    })
+    await p.load()
+
+    expect(p.status.value).toBe('forbidden')
   })
 })

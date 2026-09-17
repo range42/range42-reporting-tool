@@ -96,6 +96,9 @@ async function onFeedbackBlur(): Promise<void> {
         >
           {{ t('evaluations.provisional') }}
         </span>
+        <!-- Campaign view only (D6): a DeltaBadge comparing this evaluation's overall_grade
+             against the caller's own previous-cycle overall_grade. Empty in the single view. -->
+        <slot name="vs-previous" />
       </div>
 
       <p data-test="finalize-remaining" class="text-xs text-[var(--rt-fg-muted)]">

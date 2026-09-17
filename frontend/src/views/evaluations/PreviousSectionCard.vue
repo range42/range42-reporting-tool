@@ -33,7 +33,7 @@ const ownGrade = computed(() => (props.hasOwnPreviousEvaluation ? props.grade : 
 
 <template>
   <article
-    :data-test="`prev-card-${section.id}`"
+    :data-test="`prev-card-${section.section_def_id}`"
     class="rounded-lg border border-[var(--rt-border)] bg-[var(--rt-bg-elev)]"
   >
     <header class="border-b border-[var(--rt-border)] px-4 py-2.5">

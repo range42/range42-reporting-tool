@@ -18,7 +18,6 @@ export interface UseCampaignPairingParams {
   token: string
   exerciseId: string
   reportId: string
-  teamId: string
   userId: string
   /** `?prev=` from the URL — pins a specific earlier cycle over the immediate predecessor. */
   pinnedPrevReportId?: string | null
@@ -29,6 +28,7 @@ export type CampaignPairingStatus =
   | 'loading'
   | 'no_campaign'
   | 'no_previous'
+  | 'forbidden'
   | 'ready'
   | 'error'
 
@@ -36,11 +36,16 @@ export interface UseCampaignPairingResult {
   status: Ref<CampaignPairingStatus>
   error: Ref<string | null>
   campaign: Ref<Campaign | null>
+  /** The whole campaign timeline, in server order — feeds CampaignNavigator directly. */
+  entries: Ref<TimelineEntry[]>
   previousEntry: Ref<TimelineEntry | null>
   previousReport: Ref<ReportDetail | null>
   currentReport: Ref<ReportDetail | null>
   hasOwnPreviousEvaluation: Ref<boolean>
   previousGrades: Ref<SectionGrade[] | null>
+  /** The caller's OWN previous evaluation's overall_grade (D6) — never the report aggregate,
+   *  and never populated when `hasOwnPreviousEvaluation` is false. */
+  previousOverallGrade: Ref<string | null>
   load: () => Promise<void>
 }
 
@@ -76,17 +81,18 @@ async function findCampaign(
 
 /** Own-scoped probe: a 403 means no evaluation of the caller's own on that report, not an error
  *  — `report_evaluation_breakdown` gates on row ownership before it ever reveals content. */
-async function ownPreviousEvaluationId(
+async function ownPreviousEvaluation(
   params: UseCampaignPairingParams,
   previousReportId: string,
-): Promise<string | null> {
+): Promise<{ id: string; overallGrade: string | null } | null> {
   try {
     const breakdown = await listEvaluationsForReport(
       params.token,
       params.exerciseId,
       previousReportId,
     )
-    return breakdown.evaluations.find((e) => e.evaluator_id === params.userId)?.id ?? null
+    const own = breakdown.evaluations.find((e) => e.evaluator_id === params.userId)
+    return own ? { id: own.id, overallGrade: own.overall_grade } : null
   } catch (e) {
     if (e instanceof ApiError && e.status === 403) return null
     throw e
@@ -97,11 +103,13 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
   const status = ref<CampaignPairingStatus>('idle')
   const error = ref<string | null>(null)
   const campaign = ref<Campaign | null>(null)
+  const entries = ref<TimelineEntry[]>([])
   const previousEntry = ref<TimelineEntry | null>(null)
   const previousReport = ref<ReportDetail | null>(null)
   const currentReport = ref<ReportDetail | null>(null)
   const hasOwnPreviousEvaluation = ref(false)
   const previousGrades = ref<SectionGrade[] | null>(null)
+  const previousOverallGrade = ref<string | null>(null)
 
   async function load(): Promise<void> {
     status.value = 'loading'
@@ -113,11 +121,15 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
         return
       }
       campaign.value = found.campaign
+      entries.value = found.entries
 
+      // The report-nested EvaluationDetail carries team_name, not team_id — the caller can't
+      // supply it, so it's read off the caller's own entry in the timeline we just fetched.
+      const myTeamId = found.entries.find((e) => e.report_id === params.reportId)?.team_id ?? ''
       const prev = selectPreviousEntry(
         found.entries,
         params.reportId,
-        params.teamId,
+        myTeamId,
         params.pinnedPrevReportId,
       )
       previousEntry.value = prev
@@ -135,14 +147,19 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
       previousReport.value = reports.find((r) => r.id === prev.report_id) ?? null
       currentReport.value = reports.find((r) => r.id === params.reportId) ?? null
 
-      const evalId = await ownPreviousEvaluationId(params, prev.report_id)
-      hasOwnPreviousEvaluation.value = evalId !== null
-      previousGrades.value = evalId
-        ? await listSectionGrades(params.token, params.exerciseId, prev.report_id, evalId)
+      const own = await ownPreviousEvaluation(params, prev.report_id)
+      hasOwnPreviousEvaluation.value = own !== null
+      previousOverallGrade.value = own?.overallGrade ?? null
+      previousGrades.value = own
+        ? await listSectionGrades(params.token, params.exerciseId, prev.report_id, own.id)
         : null
 
       status.value = 'ready'
     } catch (e) {
+      if (e instanceof ApiError && e.status === 403) {
+        status.value = 'forbidden'
+        return
+      }
       status.value = 'error'
       error.value = e instanceof Error ? e.message : 'unknown error'
     }
@@ -152,11 +169,13 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
     status,
     error,
     campaign,
+    entries,
     previousEntry,
     previousReport,
     currentReport,
     hasOwnPreviousEvaluation,
     previousGrades,
+    previousOverallGrade,
     load,
   }
 }

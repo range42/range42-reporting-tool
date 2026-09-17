@@ -10,13 +10,18 @@ import { useI18n } from 'vue-i18n'
 import ViewModeSwitch from '@/views/evaluations/ViewModeSwitch.vue'
 import type { RouteLocationNamedRaw } from 'vue-router'
 
-const props = defineProps<{
-  reportName: string
-  reportStatus: string
-  teamName: string | null
-  submittedAt: string | null
-  campaignTo: RouteLocationNamedRaw | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    reportName: string
+    reportStatus: string
+    teamName: string | null
+    submittedAt: string | null
+    campaignTo: RouteLocationNamedRaw | null
+    mode?: 'single' | 'campaign'
+    singleTo?: RouteLocationNamedRaw | null
+  }>(),
+  { mode: 'single', singleTo: null },
+)
 
 const { t } = useI18n()
 
@@ -30,7 +35,7 @@ const submittedLabel = (): string =>
   <header data-test="evaluation-header" class="mb-4 space-y-1">
     <div class="flex flex-wrap items-baseline justify-between gap-3">
       <h1 class="text-lg font-semibold">{{ reportName }}</h1>
-      <ViewModeSwitch :campaign-to="campaignTo" />
+      <ViewModeSwitch :campaign-to="campaignTo" :mode="mode" :single-to="singleTo" />
     </div>
     <p class="flex flex-wrap items-baseline gap-3 text-xs text-[var(--rt-fg-muted)]">
       <span v-if="teamName" data-test="evaluation-team">{{ teamName }}</span>
