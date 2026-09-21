@@ -1446,6 +1446,8 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             } | null;
+            /** Report Specs */
+            report_specs?: components["schemas"]["CampaignReportSpec"][] | null;
         };
         /** CampaignEvaluatorCreate */
         CampaignEvaluatorCreate: {
@@ -1499,6 +1501,18 @@ export interface components {
         CampaignReportAdd: {
             /** Report Id */
             report_id: string;
+        };
+        /**
+         * CampaignReportSpec
+         * @description One report to instantiate for every team when a campaign is defined with ``report_specs``.
+         */
+        CampaignReportSpec: {
+            /** Template Id */
+            template_id: string;
+            /** Available At */
+            available_at?: string | null;
+            /** Due At */
+            due_at?: string | null;
         };
         /** CampaignUpdate */
         CampaignUpdate: {
