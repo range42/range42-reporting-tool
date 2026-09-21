@@ -11,16 +11,25 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
-from app.core.permissions import REPORTS_READ_ALL, REPORTS_READ_ASSIGNED, REPORTS_READ_OWN
+from app.core.permissions import EVALUATIONS_WRITE, REPORTS_READ_ALL, REPORTS_READ_ASSIGNED, REPORTS_READ_OWN
 from app.core.rbac import get_current_user, require_global_admin, require_permission_any
-from app.models import Campaign, CampaignReport, Evaluation, Exercise, Report, Team, User
-from app.routes.v1.reports import _caller_team_ids, _has_permission, _section_pairs
-from app.schemas.campaign import CampaignCreate, CampaignOut, CampaignReportAdd, CampaignUpdate, TimelineEntryOut
+from app.models import Campaign, CampaignEvaluator, CampaignReport, Evaluation, Exercise, Report, Team, User
+from app.routes.v1.reports import _auto_assign_evaluators, _caller_team_ids, _has_permission, _section_pairs
+from app.schemas.campaign import (
+    CampaignCreate,
+    CampaignEvaluatorCreate,
+    CampaignEvaluatorOut,
+    CampaignOut,
+    CampaignReportAdd,
+    CampaignUpdate,
+    TimelineEntryOut,
+)
 from app.schemas.common import DataEnvelope, Page
 from app.schemas.report import ReportDetailOut
 
@@ -251,6 +260,10 @@ async def add_campaign_report(
         raise HTTPException(status_code=409, detail="report is already in this campaign")
     db.add(CampaignReport(campaign_id=cid, report_id=rid))
     await db.flush()
+    # Campaign membership can arrive after submission (manual add, here) as well as before it
+    # (the batch campaign-definition flow) — the submission-time hook alone would miss this case.
+    if report.status in ("submitted", "under_evaluation", "evaluated"):
+        await _auto_assign_evaluators(db, report, actor_id=actor.id)
     await record_audit(
         db,
         user_id=actor.id,
@@ -289,6 +302,98 @@ async def remove_campaign_report(
         resource_type="campaign",
         resource_id=cid,
         details={"report_id": str(rid)},
+        ip=client_ip(request),
+    )
+
+
+# --- campaign ↔ evaluator assignment ----------------------------------------------
+# Independent of team; resolved against team_evaluator by intersection at report-submission
+# time (reports.py::_auto_assign_evaluators).
+
+
+@router.get("/exercises/{exercise_id}/campaigns/{cid}/evaluators")
+async def list_campaign_evaluators(
+    exercise_id: uuid.UUID,
+    cid: uuid.UUID,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[list[CampaignEvaluatorOut]]:
+    await _get_campaign(db, exercise_id, cid)
+    rows = (
+        await db.execute(
+            select(CampaignEvaluator, User)
+            .join(User, User.id == CampaignEvaluator.evaluator_id)
+            .where(CampaignEvaluator.campaign_id == cid)
+        )
+    ).all()
+    return DataEnvelope(data=[CampaignEvaluatorOut.from_row(ce, u) for ce, u in rows])
+
+
+@router.post("/exercises/{exercise_id}/campaigns/{cid}/evaluators", status_code=201)
+async def add_campaign_evaluator(
+    request: Request,
+    exercise_id: uuid.UUID,
+    cid: uuid.UUID,
+    body: CampaignEvaluatorCreate,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[CampaignEvaluatorOut]:
+    await _get_campaign(db, exercise_id, cid)
+    try:
+        evaluator_uuid = uuid.UUID(body.evaluator_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="invalid evaluator_id") from None
+    user = (await db.execute(select(User).where(User.id == evaluator_uuid))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    if not await _has_permission(db, exercise_id, user, EVALUATIONS_WRITE):
+        raise HTTPException(status_code=422, detail={"error": "user_is_not_an_evaluator"})
+    ce = CampaignEvaluator(campaign_id=cid, evaluator_id=user.id)
+    db.add(ce)
+    try:
+        await db.flush()
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="already assigned") from None
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="campaign_evaluator.add",
+        resource_type="campaign_evaluator",
+        resource_id=ce.id,
+        details={"campaign_id": str(cid), "evaluator_id": str(user.id)},
+        ip=client_ip(request),
+    )
+    return DataEnvelope(data=CampaignEvaluatorOut.from_row(ce, user))
+
+
+@router.delete("/exercises/{exercise_id}/campaigns/{cid}/evaluators/{evaluator_id}", status_code=204)
+async def remove_campaign_evaluator(
+    request: Request,
+    exercise_id: uuid.UUID,
+    cid: uuid.UUID,
+    evaluator_id: uuid.UUID,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _get_campaign(db, exercise_id, cid)
+    ce = (
+        await db.execute(
+            select(CampaignEvaluator).where(
+                CampaignEvaluator.campaign_id == cid, CampaignEvaluator.evaluator_id == evaluator_id
+            )
+        )
+    ).scalar_one_or_none()
+    if ce is None:
+        raise HTTPException(status_code=404, detail="assignment not found")
+    await db.delete(ce)
+    await db.flush()
+    await record_audit(
+        db,
+        user_id=actor.id,
+        action="campaign_evaluator.remove",
+        resource_type="campaign_evaluator",
+        resource_id=ce.id,
+        details={"campaign_id": str(cid), "evaluator_id": str(evaluator_id)},
         ip=client_ip(request),
     )
 

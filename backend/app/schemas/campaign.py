@@ -6,7 +6,9 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.campaign import Campaign
+from app.models.campaign_evaluator import CampaignEvaluator
 from app.models.report import Report
+from app.models.user import User
 from app.schemas.domain import _reject_null
 
 
@@ -29,6 +31,30 @@ class CampaignUpdate(BaseModel):
 
 class CampaignReportAdd(BaseModel):
     report_id: str
+
+
+class CampaignEvaluatorCreate(BaseModel):
+    evaluator_id: str
+
+
+class CampaignEvaluatorOut(BaseModel):
+    id: str
+    campaign_id: str
+    evaluator_id: str
+    display_name: str
+    email: str
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, ce: CampaignEvaluator, u: User) -> CampaignEvaluatorOut:
+        return cls(
+            id=str(ce.id),
+            campaign_id=str(ce.campaign_id),
+            evaluator_id=str(u.id),
+            display_name=u.display_name,
+            email=u.email,
+            created_at=ce.created_at,
+        )
 
 
 class CampaignOut(BaseModel):

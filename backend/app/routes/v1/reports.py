@@ -21,12 +21,15 @@ from app.core.rbac import get_current_user, require_global_admin, require_permis
 from app.core.sanitize import html_to_plain, sanitize_html
 from app.models import (
     ApprovalRecord,
+    CampaignEvaluator,
+    CampaignReport,
     Evaluation,
     Report,
     ReportSection,
     ReportTemplate,
     ScoringConfig,
     Team,
+    TeamEvaluator,
     TeamMember,
     TemplateSectionDef,
     User,
@@ -192,6 +195,47 @@ def _require_available(r: Report) -> None:
         )
 
 
+async def _auto_assign_evaluators(db: AsyncSession, report: Report, *, actor_id: uuid.UUID) -> None:
+    """Resolve team_evaluator ∩ campaign_evaluator for this report's campaign(s) and assign.
+
+    Best-effort side effect, not a new failure surface: raises nothing. A report with no
+    campaign, or whose team/campaign have no matching evaluator, is simply left untouched —
+    same as today, before this assignment path existed.
+    """
+    campaign_ids = (
+        (await db.execute(select(CampaignReport.campaign_id).where(CampaignReport.report_id == report.id)))
+        .scalars()
+        .all()
+    )
+    if not campaign_ids:
+        return
+    team_evaluator_ids = set(
+        (await db.execute(select(TeamEvaluator.evaluator_id).where(TeamEvaluator.team_id == report.team_id)))
+        .scalars()
+        .all()
+    )
+    if not team_evaluator_ids:
+        return
+    campaign_evaluator_ids = set(
+        (
+            await db.execute(
+                select(CampaignEvaluator.evaluator_id).where(CampaignEvaluator.campaign_id.in_(campaign_ids))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    resolved = team_evaluator_ids & campaign_evaluator_ids
+    if not resolved:
+        return
+    existing = set(
+        (await db.execute(select(Evaluation.evaluator_id).where(Evaluation.report_id == report.id))).scalars().all()
+    )
+    for evaluator_id in resolved - existing:
+        db.add(Evaluation(report_id=report.id, evaluator_id=evaluator_id, assigned_by=actor_id))
+    await db.flush()
+
+
 async def _apply_transition(
     db: AsyncSession,
     report: Report,
@@ -211,6 +255,8 @@ async def _apply_transition(
         raise HTTPException(
             status_code=409, detail={"error": "invalid_state", "from": exc.current, "to": exc.target}
         ) from exc
+    if target_status == "submitted":
+        await _auto_assign_evaluators(db, report, actor_id=actor_id)
 
 
 def _require_status(r: Report, expected: str) -> None:
