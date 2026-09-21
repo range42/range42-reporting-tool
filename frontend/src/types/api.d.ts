@@ -194,6 +194,26 @@ export interface paths {
         patch: operations["update_exercise_api_v1_exercises__exercise_id__patch"];
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Capabilities
+         * @description The caller's own capabilities in this exercise — powers the FE requiresApprover guard.
+         */
+        get: operations["get_my_capabilities_api_v1_exercises__exercise_id__me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exercises/{exercise_id}/team-types": {
         parameters: {
             query?: never;
@@ -309,7 +329,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Team Members
+         * @description Members of a team — powers the assigned-writer selector.
+         */
+        get: operations["list_team_members_api_v1_exercises__exercise_id__teams__team_id__members_get"];
         put?: never;
         /** Add Member */
         post: operations["add_member_api_v1_exercises__exercise_id__teams__team_id__members_post"];
@@ -549,6 +573,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/templates/{template_id}/sections/{section_id}/choice-values/{code}/deprecate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deprecate Choice Value */
+        post: operations["deprecate_choice_value_api_v1_templates__template_id__sections__section_id__choice_values__code__deprecate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/templates/{template_id}/sections/{section_id}/choice-values/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Choice Value */
+        delete: operations["delete_choice_value_api_v1_templates__template_id__sections__section_id__choice_values__code__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/templates/{template_id}/sections/{section_id}/choice-values/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Choice Values
+         * @description Populate a choice section's values from a ``code,label`` CSV.
+         *
+         *     Merge is strictly additive: new codes are appended in file order; an existing code keeps
+         *     its position and ``deprecated_at`` and only refreshes its label. Nothing is removed or
+         *     un-deprecated, so the choice-code immutability rules hold even on published templates whose
+         *     codes are already referenced. ``choice_config.catalog_binding`` passes through untouched.
+         */
+        post: operations["import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/templates/{template_id}/export": {
         parameters: {
             query?: never;
@@ -654,10 +737,687 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Report */
+        post: operations["approve_report_api_v1_exercises__exercise_id__reports__rid__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Report */
+        post: operations["reject_report_api_v1_exercises__exercise_id__reports__rid__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/recall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recall Report */
+        post: operations["recall_report_api_v1_exercises__exercise_id__reports__rid__recall_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Campaigns */
+        get: operations["list_campaigns_api_v1_exercises__exercise_id__campaigns_get"];
+        put?: never;
+        /** Create Campaign */
+        post: operations["create_campaign_api_v1_exercises__exercise_id__campaigns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Campaign */
+        get: operations["get_campaign_api_v1_exercises__exercise_id__campaigns__cid__get"];
+        put?: never;
+        post?: never;
+        /** Delete Campaign */
+        delete: operations["delete_campaign_api_v1_exercises__exercise_id__campaigns__cid__delete"];
+        options?: never;
+        head?: never;
+        /** Update Campaign */
+        patch: operations["update_campaign_api_v1_exercises__exercise_id__campaigns__cid__patch"];
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Campaign Report */
+        post: operations["add_campaign_report_api_v1_exercises__exercise_id__campaigns__cid__reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/reports/{rid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Campaign Report */
+        delete: operations["remove_campaign_report_api_v1_exercises__exercise_id__campaigns__cid__reports__rid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Campaign Timeline */
+        get: operations["campaign_timeline_api_v1_exercises__exercise_id__campaigns__cid__timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Campaign Compare */
+        get: operations["campaign_compare_api_v1_exercises__exercise_id__campaigns__cid__compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/sections/{sid}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Attachment */
+        post: operations["upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Attachments */
+        get: operations["list_attachments_api_v1_exercises__exercise_id__reports__rid__attachments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/attachments/{aid}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Attachment */
+        get: operations["download_attachment_api_v1_exercises__exercise_id__reports__rid__attachments__aid__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/attachments/{aid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Attachment */
+        delete: operations["delete_attachment_api_v1_exercises__exercise_id__reports__rid__attachments__aid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/evaluator-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Evaluator Candidates
+         * @description Users assignable as evaluators in this exercise (Global Admin only).
+         *
+         *     Membership is by EXPLICIT exercise role granting ``evaluations:write``, resolved through
+         *     ``role_definition`` so a custom role qualifies exactly as the seeded ``evaluator`` does.
+         *     Global admins are not offered as candidates: running an exercise is not evaluating in it.
+         */
+        get: operations["list_evaluator_candidates_api_v1_exercises__exercise_id__evaluator_candidates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Evaluations
+         * @description The caller's own evaluation assignments in this exercise (the evaluator queue).
+         *
+         *     OWN ROWS ONLY, unconditionally — including for a Global Admin, who reads anyone else's
+         *     through the report-scoped breakdown. There is no ``assignee`` parameter on purpose: a queue
+         *     that can be pointed at another evaluator is a peer-visibility surface.
+         *
+         *     Unassigned evaluations are excluded — the work is no longer the caller's.
+         *
+         *     Ordered by deadline, undated last.
+         */
+        get: operations["list_my_evaluations_api_v1_exercises__exercise_id__evaluations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Report Evaluation Breakdown
+         * @description The report's per-evaluator breakdown, scoped to the caller.
+         *
+         *     THIS ROUTE GATES; IT DOES NOT MERELY FILTER. The body carries ``aggregate`` — the report's
+         *     grade, its ``grade_version`` and its evaluator headcount — so a non-participant must be
+         *     refused outright rather than handed an empty ``evaluations[]``.
+         *
+         *     THE GATE IS ROW EXISTENCE, NOT THE COUNTED PREDICATE. A soft-unassigned evaluator keeps
+         *     their row so their dispute trail outlives their removal; gating on ``counts()`` would lock
+         *     them out of it. Do not "tidy" this into ``counts()``.
+         *
+         *     The 403 body is the generic denial every other route uses, so this cannot be turned into an
+         *     oracle for enumerating which reports a caller is assigned to.
+         */
+        get: operations["report_evaluation_breakdown_api_v1_exercises__exercise_id__reports__rid__evaluations_get"];
+        put?: never;
+        /**
+         * Assign Evaluator
+         * @description Assign an evaluator to a submitted report (Global Admin only).
+         *
+         *     Assignment does NOT begin evaluation — ``report.status`` is untouched here. The
+         *     ``submitted -> under_evaluation`` transition fires on the evaluator's first write.
+         */
+        post: operations["assign_evaluator_api_v1_exercises__exercise_id__reports__rid__evaluations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Evaluation
+         * @description One evaluation with the sections to grade, scoped to the caller.
+         *
+         *     ``GradableSectionOut`` is the only place the evaluator-only template fields
+         *     (grade_mode/min/max, weight, rubric and evaluation criteria) are exposed. They must never
+         *     migrate onto ``ReportSectionOut``.
+         */
+        get: operations["get_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Evaluation
+         * @description Update the evaluation's overall feedback; the first write begins evaluation.
+         *
+         *     Authorize before mutating: the isolation gate runs ahead of every write and audit call, so
+         *     a rejected caller leaves no trace behind.
+         *
+         *     Sole-writer guard: this handler never touches ``report.overall_grade``,
+         *     ``evaluation.overall_grade`` or ``report.grade_version`` — the rollup owns those.
+         */
+        patch: operations["update_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__patch"];
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/grades/{section_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upsert Section Grade
+         * @description Create or replace the caller's grade for one section.
+         *
+         *     Every rejection — 403, 404, 409, 422 — is raised before the first mutation and before
+         *     ``record_audit``, so a refused write leaves no row and no audit trail.
+         */
+        put: operations["upsert_section_grade_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades__section_id__put"];
+        post?: never;
+        /**
+         * Delete Section Grade
+         * @description Remove the caller's grade for one section and recompute.
+         *
+         *     A separate verb because PUT cannot express a retraction: the numeric branch REQUIRES
+         *     ``grade``, so there is no payload meaning "un-grade this".
+         *
+         *     Deleting the last grade returns the report to an ungraded state — overall_grade goes back
+         *     to NULL, not 0, and grade_version still advances because the published number changed.
+         */
+        delete: operations["delete_section_grade_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades__section_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/grades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Section Grades
+         * @description The evaluation's own grades, ordered by section position.
+         *
+         *     No separate filter: "own grades" falls out of the isolation gate on "own evaluation". A
+         *     Global Admin reads any evaluation's grades, one evaluation at a time.
+         */
+        get: operations["list_section_grades_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/overall-grade": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Overall Grade
+         * @description Set ``report.overall_grade`` by hand, or clear the override.
+         *
+         *     Authorization: Global Admin, or an evaluator ASSIGNED TO THIS REPORT. Holding
+         *     ``evaluations:write`` in the exercise is not enough — evaluator isolation applies to the
+         *     report-level number too, so an unassigned evaluator 403s. Every rejection precedes the
+         *     first write, so a refused call leaves no row and no audit trail.
+         *
+         *     ``overall_grade=None`` clears the flag and recomputes at once, so the report never sits on a
+         *     stale hand-set number. Both branches go through ``rollup.set_manual_grade`` and both bump
+         *     ``grade_version`` because either way a new number is published.
+         */
+        put: operations["set_overall_grade_api_v1_exercises__exercise_id__reports__rid__overall_grade_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finalize Evaluation
+         * @description Mark this evaluator's work done, then settle the report-level gate.
+         *
+         *     ORDER IS LOAD-BEARING: lock, guard, complete the evaluation, recompute the aggregate,
+         *     THEN ask the gate — otherwise ``report.evaluated`` announces the previous grade.
+         *
+         *     An evaluator finalizing their own work sends no body. A Global Admin may send
+         *     ``on_behalf_of`` + ``comment`` to break a deadlock — see ``_resolve_finalize_actor``.
+         */
+        post: operations["finalize_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__finalize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/unassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unassign Evaluator
+         * @description Global-Admin deadlock exit: drop an unavailable evaluator. Removes the seat entirely.
+         *
+         *     SOFT, DELIBERATELY. Nothing is deleted and ``status`` is not rewritten: the evaluation and
+         *     its section grades survive so a later dispute can still read them. ``unassigned_at IS NOT
+         *     NULL`` alone takes the evaluator out of the counted set.
+         *
+         *     ORDER IS LOAD-BEARING, as in finalize: lock, guard, mutate, recompute, THEN settle the gate.
+         */
+        post: operations["unassign_evaluator_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__unassign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen Evaluation
+         * @description Return a finalized evaluation to grading. The assigned evaluator, or a Global Admin.
+         *
+         *     THE ONLY un-finalize path, and still the only way back into grading: there is no
+         *     edit-after-finalize. An evaluator revising work they already gave comes through here,
+         *     with a reason, and finalizes again afterwards.
+         *
+         *     A reopen produces a NEW grade version rather than an in-place edit — the original
+         *     ``report.evaluated`` is not retractable, so supersession is the only mechanism available.
+         *
+         *     LOCK ORDER — report, THEN evaluation, as finalize and unassign take it.
+         *
+         *     The evaluator's WORK SURVIVES: section grades and overall feedback are untouched.
+         *
+         *     A reopened evaluation still COUNTS towards the gate but no longer CONTRIBUTES a grade, so
+         *     the aggregate falls back to the evaluations still completed, and to NULL when none remain.
+         */
+        post: operations["reopen_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__reopen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ApprovalChainEntry
+         * @description One ordered step of a multi-step approval chain.
+         *
+         *     Exactly one of ``role_key``/``user_id`` identifies who may approve the step.
+         *     ``required`` steps must all be approved before the report leaves
+         *     ``pending_approval``; optional steps do not gate finalization.
+         */
+        ApprovalChainEntry: {
+            /** Role Key */
+            role_key?: string | null;
+            /** User Id */
+            user_id?: string | null;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+        };
+        /** ApprovalRecordOut */
+        ApprovalRecordOut: {
+            /** Id */
+            id: string;
+            /** Report Id */
+            report_id: string;
+            /** Approver Id */
+            approver_id: string;
+            /** Step */
+            step: number;
+            /** Cycle */
+            cycle: number;
+            /** Action */
+            action: string;
+            /** Is Admin Override */
+            is_admin_override: boolean;
+            /** Comment */
+            comment: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ApproveRequest */
+        ApproveRequest: {
+            /** Step */
+            step?: number | null;
+            /** On Behalf Of */
+            on_behalf_of?: string | null;
+            /** Comment */
+            comment?: string | null;
+        };
+        /** AttachmentOut */
+        AttachmentOut: {
+            /** Id */
+            id: string;
+            /** Report Id */
+            report_id: string;
+            /** Section Id */
+            section_id: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Classification */
+            classification: string | null;
+            /** Uploaded By */
+            uploaded_by: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** Body_import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post */
+        Body_import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post */
+        Body_upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post: {
+            /** File */
+            file: string;
+        };
+        /**
+         * BreakdownAggregate
+         * @description The report-level numbers, identical for every caller who may see the breakdown at all.
+         *
+         *     ``counted_evaluator_count`` is deliberately NOT suppressed for evaluators: a cardinality is
+         *     not an identity, and it is needed to read ``overall_grade`` honestly. Names, ids, weights
+         *     and timestamps of peers are suppressed; the headcount is not.
+         */
+        BreakdownAggregate: {
+            /** Overall Grade */
+            overall_grade: string | null;
+            /** Grade Version */
+            grade_version: number;
+            /** Counted Evaluator Count */
+            counted_evaluator_count: number;
+            /** Completed Evaluator Count */
+            completed_evaluator_count: number;
+            /** Aggregated Weight Total */
+            aggregated_weight_total: string;
+        };
+        /** CampaignCreate */
+        CampaignCreate: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** CampaignOut */
+        CampaignOut: {
+            /** Id */
+            id: string;
+            /** Exercise Id */
+            exercise_id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Report Count */
+            report_count: number;
+            /** Created By */
+            created_by: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CampaignReportAdd */
+        CampaignReportAdd: {
+            /** Report Id */
+            report_id: string;
+        };
+        /** CampaignUpdate */
+        CampaignUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** ChoiceBody */
         ChoiceBody: {
             /**
@@ -667,6 +1427,31 @@ export interface components {
             kind: "choice";
             /** Choice Values */
             choice_values: string[];
+        };
+        /** DataEnvelope[AttachmentOut] */
+        DataEnvelope_AttachmentOut_: {
+            data: components["schemas"]["AttachmentOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[CampaignOut] */
+        DataEnvelope_CampaignOut_: {
+            data: components["schemas"]["CampaignOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[EvaluationBreakdownOut] */
+        DataEnvelope_EvaluationBreakdownOut_: {
+            data: components["schemas"]["EvaluationBreakdownOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[EvaluationDetailOut] */
+        DataEnvelope_EvaluationDetailOut_: {
+            data: components["schemas"]["EvaluationDetailOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[EvaluationOut] */
+        DataEnvelope_EvaluationOut_: {
+            data: components["schemas"]["EvaluationOut"];
+            meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[ExerciseOut] */
         DataEnvelope_ExerciseOut_: {
@@ -678,9 +1463,19 @@ export interface components {
             data: components["schemas"]["ExerciseRoleOut"];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[MeCapabilitiesOut] */
+        DataEnvelope_MeCapabilitiesOut_: {
+            data: components["schemas"]["MeCapabilitiesOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[ReportDetailOut] */
         DataEnvelope_ReportDetailOut_: {
             data: components["schemas"]["ReportDetailOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[ReportGradeOut] */
+        DataEnvelope_ReportGradeOut_: {
+            data: components["schemas"]["ReportGradeOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[ReportOut] */
@@ -696,6 +1491,11 @@ export interface components {
         /** DataEnvelope[RoleOut] */
         DataEnvelope_RoleOut_: {
             data: components["schemas"]["RoleOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[SectionGradeOut] */
+        DataEnvelope_SectionGradeOut_: {
+            data: components["schemas"]["SectionGradeOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[SectionOut] */
@@ -767,6 +1567,30 @@ export interface components {
             };
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[list[AttachmentOut]] */
+        DataEnvelope_list_AttachmentOut__: {
+            /** Data */
+            data: components["schemas"]["AttachmentOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[CampaignOut]] */
+        DataEnvelope_list_CampaignOut__: {
+            /** Data */
+            data: components["schemas"]["CampaignOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[EvaluationAssignmentOut]] */
+        DataEnvelope_list_EvaluationAssignmentOut__: {
+            /** Data */
+            data: components["schemas"]["EvaluationAssignmentOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[EvaluatorCandidateOut]] */
+        DataEnvelope_list_EvaluatorCandidateOut__: {
+            /** Data */
+            data: components["schemas"]["EvaluatorCandidateOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[list[ExerciseOut]] */
         DataEnvelope_list_ExerciseOut__: {
             /** Data */
@@ -777,6 +1601,12 @@ export interface components {
         DataEnvelope_list_ExerciseRoleOut__: {
             /** Data */
             data: components["schemas"]["ExerciseRoleOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[ReportDetailOut]] */
+        DataEnvelope_list_ReportDetailOut__: {
+            /** Data */
+            data: components["schemas"]["ReportDetailOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[list[ReportOut]] */
@@ -791,10 +1621,22 @@ export interface components {
             data: components["schemas"]["RoleOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[list[SectionGradeOut]] */
+        DataEnvelope_list_SectionGradeOut__: {
+            /** Data */
+            data: components["schemas"]["SectionGradeOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[list[SectionOut]] */
         DataEnvelope_list_SectionOut__: {
             /** Data */
             data: components["schemas"]["SectionOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[TeamMemberOut]] */
+        DataEnvelope_list_TeamMemberOut__: {
+            /** Data */
+            data: components["schemas"]["TeamMemberOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[list[TeamOut]] */
@@ -821,6 +1663,12 @@ export interface components {
             data: components["schemas"]["TemplateVersionOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[list[TimelineEntryOut]] */
+        DataEnvelope_list_TimelineEntryOut__: {
+            /** Data */
+            data: components["schemas"]["TimelineEntryOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[list[str]] */
         DataEnvelope_list_str__: {
             /** Data */
@@ -831,6 +1679,208 @@ export interface components {
         EmergencyLoginIn: {
             /** Password */
             password: string;
+        };
+        /**
+         * EvaluationAssignmentOut
+         * @description One row of the evaluator's own queue: their evaluation plus the report context.
+         *
+         *     Deliberately NOT ``EvaluationBreakdownRow``, which carries the dispute-trail columns and a
+         *     peer's weight. Every row here is the CALLER'S OWN — the route never returns another
+         *     evaluator's assignment, at any report status.
+         */
+        EvaluationAssignmentOut: {
+            /** Id */
+            id: string;
+            /** Report Id */
+            report_id: string;
+            /** Report Name */
+            report_name: string;
+            /** Report Status */
+            report_status: string;
+            /** Team Id */
+            team_id: string;
+            /** Team Name */
+            team_name: string;
+            /** Template Name */
+            template_name: string;
+            /** Due At */
+            due_at: string | null;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Status */
+            status: string;
+            /** Graded Section Count */
+            graded_section_count: number;
+            /** Gradable Section Count */
+            gradable_section_count: number;
+        };
+        /**
+         * EvaluationBreakdownOut
+         * @description Response of ``GET …/reports/{rid}/evaluations``.
+         *
+         *     The aggregate is why this route gates rather than filters — see the route docstring. A
+         *     caller who may not see the report's grade is refused outright; there is no "authorized but
+         *     nulled" variant, because ``aggregate.overall_grade is None`` already means nothing has been
+         *     finalized yet.
+         */
+        EvaluationBreakdownOut: {
+            /** Report Id */
+            report_id: string;
+            /** Report Status */
+            report_status: string;
+            /** Finalize Policy */
+            finalize_policy: string;
+            /** Finalize Gate Satisfied */
+            finalize_gate_satisfied: boolean;
+            aggregate: components["schemas"]["BreakdownAggregate"];
+            /** Evaluations */
+            evaluations: components["schemas"]["EvaluationBreakdownRow"][];
+        };
+        /**
+         * EvaluationBreakdownRow
+         * @description One evaluator's line in the breakdown.
+         *
+         *     Distinct from ``EvaluationOut`` on purpose: this carries the dispute-trail columns
+         *     (``finalized_by``, ``finalize_is_admin_override``, ``unassigned_at``, ``unassign_reason``)
+         *     and ``aggregated_weight``, which are deliberately kept OFF the evaluator-facing
+         *     ``EvaluationOut``.
+         *
+         *     ``evaluator_display_name`` is None for a non-admin caller: the evaluator path never joins
+         *     ``user`` at all.
+         */
+        EvaluationBreakdownRow: {
+            /** Id */
+            id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Evaluator Display Name */
+            evaluator_display_name: string | null;
+            /** Status */
+            status: string;
+            /** Overall Grade */
+            overall_grade: string | null;
+            /** Aggregated Weight */
+            aggregated_weight: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Finalized By */
+            finalized_by: string | null;
+            /** Finalize Is Admin Override */
+            finalize_is_admin_override: boolean;
+            /** Unassigned At */
+            unassigned_at: string | null;
+            /** Unassign Reason */
+            unassign_reason: string | null;
+            /** Reopen Count */
+            reopen_count: number;
+        };
+        /** EvaluationCreate */
+        EvaluationCreate: {
+            /** Evaluator Id */
+            evaluator_id: string;
+            /**
+             * Aggregated Weight
+             * @default 1.0
+             */
+            aggregated_weight: number | string;
+        };
+        /** EvaluationDetailOut */
+        EvaluationDetailOut: {
+            /** Id */
+            id: string;
+            /** Report Id */
+            report_id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Status */
+            status: string;
+            /** Overall Feedback */
+            overall_feedback: string | null;
+            /** Overall Grade */
+            overall_grade: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Reopen Count */
+            reopen_count: number;
+            /** Graded Section Count */
+            graded_section_count: number;
+            /** Gradable Section Count */
+            gradable_section_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Report Name */
+            report_name: string;
+            /** Report Status */
+            report_status: string;
+            /** Team Name */
+            team_name: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Grade Version */
+            grade_version: number;
+            /** Sections */
+            sections: components["schemas"]["GradableSectionOut"][];
+        };
+        /** EvaluationOut */
+        EvaluationOut: {
+            /** Id */
+            id: string;
+            /** Report Id */
+            report_id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Status */
+            status: string;
+            /** Overall Feedback */
+            overall_feedback: string | null;
+            /** Overall Grade */
+            overall_grade: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Reopen Count */
+            reopen_count: number;
+            /** Graded Section Count */
+            graded_section_count: number;
+            /** Gradable Section Count */
+            gradable_section_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** EvaluationUpdate */
+        EvaluationUpdate: {
+            /** Overall Feedback */
+            overall_feedback?: string | null;
+        };
+        /**
+         * EvaluatorCandidateOut
+         * @description One assignable evaluator for ``GET /exercises/{id}/evaluator-candidates``.
+         *
+         *     Deliberately thin: the assignment picker needs a name to show and an id to post back,
+         *     nothing else about the user.
+         */
+        EvaluatorCandidateOut: {
+            /** User Id */
+            user_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
         };
         /** ExerciseCreate */
         ExerciseCreate: {
@@ -936,10 +1986,90 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /**
+         * FinalizeRequest
+         * @description Body of ``POST .../evaluations/{evid}/finalize``. Both fields are optional.
+         *
+         *     An evaluator finalizing their own work sends nothing. ``on_behalf_of`` is the deadlock exit:
+         *     a Global Admin finalizes in an absent evaluator's name, and ``comment`` records why —
+         *     mandatory in that case, enforced in the handler so the error is ``comment_required`` rather
+         *     than a generic 422 shape.
+         */
+        FinalizeRequest: {
+            /** On Behalf Of */
+            on_behalf_of?: string | null;
+            /** Comment */
+            comment?: string | null;
+        };
+        /**
+         * GradableSectionOut
+         * @description Evaluator-facing section view — the ONLY place the evaluator-only template fields are
+         *     exposed. Never merge these into ``ReportSectionOut``.
+         */
+        GradableSectionOut: {
+            /** Report Section Id */
+            report_section_id: string;
+            /** Section Def Id */
+            section_def_id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Position */
+            position: number;
+            /** Field Type */
+            field_type: string;
+            /** Content */
+            content: string | null;
+            /** Content Plain */
+            content_plain: string | null;
+            /** Choice Values */
+            choice_values: string[] | null;
+            /** Grade Mode */
+            grade_mode: string;
+            /** Grade Min */
+            grade_min: string | null;
+            /** Grade Max */
+            grade_max: string | null;
+            /** Grade Weight */
+            grade_weight: string;
+            /** Rubric Criteria */
+            rubric_criteria: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Evaluation Criteria */
+            evaluation_criteria: string | null;
+            grade: components["schemas"]["SectionGradeOut"] | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * ManualGradeRequest
+         * @description Body of ``PUT .../reports/{rid}/overall-grade``.
+         *
+         *     ``overall_grade=None`` clears the override and hands the number back to the rollup.
+         *     ``reason`` is mandatory and lands in the audit row. The bounds mirror
+         *     ``report.overall_grade``'s NUMERIC(5,2), so anything the column could not store is refused
+         *     here with the caller's own digits rather than surfacing as a DB error.
+         */
+        ManualGradeRequest: {
+            /** Overall Grade */
+            overall_grade?: number | string | null;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * MeCapabilitiesOut
+         * @description The caller's own capabilities within an exercise — drives coarse FE route guards.
+         */
+        MeCapabilitiesOut: {
+            /** Is Global Admin */
+            is_global_admin: boolean;
+            /** Capabilities */
+            capabilities: string[];
         };
         /** Page */
         Page: {
@@ -959,6 +2089,33 @@ export interface components {
              */
             total: number;
         };
+        /** RecallRequest */
+        RecallRequest: {
+            /** Comment */
+            comment?: string | null;
+        };
+        /** RejectRequest */
+        RejectRequest: {
+            /** Comment */
+            comment: string;
+            /** Step */
+            step?: number | null;
+        };
+        /**
+         * ReopenRequest
+         * @description Body of ``POST .../evaluations/{evid}/reopen``.
+         *
+         *     ``reason`` is mandatory and defaults to empty rather than being declared required, so an
+         *     absent body, an empty string and a whitespace-only one all land on the SAME handler check
+         *     and the same ``reason_required`` error. Mirrors ``UnassignRequest``.
+         */
+        ReopenRequest: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /** ReorderBody */
         ReorderBody: {
             /** Ordered Ids */
@@ -976,16 +2133,26 @@ export interface components {
             description?: string | null;
             /** Due At */
             due_at?: string | null;
+            /** Available At */
+            available_at?: string | null;
             /**
              * Approval Required
              * @default false
              */
             approval_required: boolean;
+            /** Approval Chain */
+            approval_chain?: components["schemas"]["ApprovalChainEntry"][] | null;
             /** Assigned Writer Id */
             assigned_writer_id?: string | null;
         };
         /** ReportDetailOut */
         ReportDetailOut: {
+            /** Overall Grade */
+            overall_grade?: string | null;
+            /** Overall Grade Is Manual */
+            overall_grade_is_manual?: boolean | null;
+            /** Grade Version */
+            grade_version?: number | null;
             /** Id */
             id: string;
             /** Exercise Id */
@@ -1006,18 +2173,30 @@ export interface components {
             approval_required: boolean;
             /** Due At */
             due_at: string | null;
+            /** Available At */
+            available_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
             /** Assigned Writer Id */
             assigned_writer_id: string | null;
             /** Writer Notes */
             writer_notes: string | null;
+            /** Approval Chain */
+            approval_chain: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Approval Cycle */
+            approval_cycle: number;
+            /** Approval Records */
+            approval_records: components["schemas"]["ApprovalRecordOut"][];
             /** Metadata */
             metadata: {
                 [key: string]: unknown;
             } | null;
             /** Sections */
             sections: components["schemas"]["ReportSectionOut"][];
+            /** Can Approve */
+            can_approve: boolean;
             /**
              * Created At
              * Format: date-time
@@ -1029,8 +2208,28 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * ReportGradeOut
+         * @description The report-level grade state after a manual set/clear.
+         */
+        ReportGradeOut: {
+            /** Report Id */
+            report_id: string;
+            /** Overall Grade */
+            overall_grade: string | null;
+            /** Overall Grade Is Manual */
+            overall_grade_is_manual: boolean;
+            /** Grade Version */
+            grade_version: number;
+        };
         /** ReportOut */
         ReportOut: {
+            /** Overall Grade */
+            overall_grade?: string | null;
+            /** Overall Grade Is Manual */
+            overall_grade_is_manual?: boolean | null;
+            /** Grade Version */
+            grade_version?: number | null;
             /** Id */
             id: string;
             /** Exercise Id */
@@ -1051,12 +2250,20 @@ export interface components {
             approval_required: boolean;
             /** Due At */
             due_at: string | null;
+            /** Available At */
+            available_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
             /** Assigned Writer Id */
             assigned_writer_id: string | null;
+            /** Approval Chain */
+            approval_chain: {
+                [key: string]: unknown;
+            }[] | null;
             /** Section Count */
             section_count: number;
+            /** Can Approve */
+            can_approve: boolean;
             /**
              * Created At
              * Format: date-time
@@ -1125,8 +2332,12 @@ export interface components {
             description?: string | null;
             /** Due At */
             due_at?: string | null;
+            /** Available At */
+            available_at?: string | null;
             /** Approval Required */
             approval_required?: boolean | null;
+            /** Approval Chain */
+            approval_chain?: components["schemas"]["ApprovalChainEntry"][] | null;
             /** Assigned Writer Id */
             assigned_writer_id?: string | null;
         };
@@ -1185,6 +2396,15 @@ export interface components {
             /** Permissions */
             permissions?: string[] | null;
         };
+        /** RubricScoreEntry */
+        RubricScoreEntry: {
+            /** Criterion */
+            criterion: string;
+            /** Score */
+            score: number | string;
+            /** Note */
+            note?: string | null;
+        };
         /** SectionAnswerUpdate */
         SectionAnswerUpdate: {
             /** Version */
@@ -1198,6 +2418,8 @@ export interface components {
             name: string;
             /** Description */
             description?: string | null;
+            /** Default Content */
+            default_content?: string | null;
             /**
              * Field Type
              * @default rich_text
@@ -1241,12 +2463,61 @@ export interface components {
             /** Cwe Tags */
             cwe_tags?: string[];
         };
+        /** SectionGradeOut */
+        SectionGradeOut: {
+            /** Id */
+            id: string;
+            /** Evaluation Id */
+            evaluation_id: string;
+            /** Report Section Id */
+            report_section_id: string;
+            /** Grade */
+            grade: string | null;
+            /** Pass Fail Result */
+            pass_fail_result: boolean | null;
+            /** Rubric Scores */
+            rubric_scores: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Feedback */
+            feedback: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * SectionGradeUpsert
+         * @description One grading channel per row.
+         *
+         *     WHICH channel is legal depends on the source section's ``grade_mode``; that check needs the
+         *     DB and lives at the route layer. Here we only forbid the combination the DB backstop
+         *     ``ck_section_grade_shape`` also refuses.
+         */
+        SectionGradeUpsert: {
+            /** Grade */
+            grade?: number | string | null;
+            /** Pass Fail Result */
+            pass_fail_result?: boolean | null;
+            /** Rubric Scores */
+            rubric_scores?: components["schemas"]["RubricScoreEntry"][] | null;
+            /** Feedback */
+            feedback?: string | null;
+        };
         /** SectionOut */
         SectionOut: {
             /** Name */
             name: string;
             /** Description */
             description?: string | null;
+            /** Default Content */
+            default_content?: string | null;
             /**
              * Field Type
              * @default rich_text
@@ -1312,6 +2583,8 @@ export interface components {
             name?: string | null;
             /** Description */
             description?: string | null;
+            /** Default Content */
+            default_content?: string | null;
             /** Field Type */
             field_type?: string | null;
             /** Char Limit */
@@ -1590,6 +2863,31 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * TimelineEntryOut
+         * @description One campaign report on the evaluator timeline (two-pane/N-pane feed).
+         */
+        TimelineEntryOut: {
+            /** Report Id */
+            report_id: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Team Id */
+            team_id: string;
+            /** Team Name */
+            team_name: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Due At */
+            due_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -1600,6 +2898,21 @@ export interface components {
              */
             token_type: string;
             user: components["schemas"]["UserOut"];
+        };
+        /**
+         * UnassignRequest
+         * @description Body of ``POST .../evaluations/{evid}/unassign``.
+         *
+         *     ``reason`` defaults to empty rather than being declared required, so a missing body and a
+         *     whitespace-only one land on the SAME handler check and the same ``reason_required`` error
+         *     instead of one escaping as a generic Pydantic 422.
+         */
+        UnassignRequest: {
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
         };
         /** UserOut */
         UserOut: {
@@ -2005,6 +3318,37 @@ export interface operations {
             };
         };
     };
+    get_my_capabilities_api_v1_exercises__exercise_id__me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_MeCapabilitiesOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_team_types_api_v1_exercises__exercise_id__team_types_get: {
         parameters: {
             query?: never;
@@ -2384,6 +3728,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataEnvelope_TeamOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_team_members_api_v1_exercises__exercise_id__teams__team_id__members_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_TeamMemberOut__"];
                 };
             };
             /** @description Validation Error */
@@ -3035,6 +4411,108 @@ export interface operations {
             };
         };
     };
+    deprecate_choice_value_api_v1_templates__template_id__sections__section_id__choice_values__code__deprecate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+                section_id: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_SectionOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_choice_value_api_v1_templates__template_id__sections__section_id__choice_values__code__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+                section_id: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_SectionOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_choice_values_api_v1_templates__template_id__sections__section_id__choice_values_import_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_SectionOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_template_api_v1_templates__template_id__export_get: {
         parameters: {
             query?: never;
@@ -3324,6 +4802,997 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataEnvelope_ReportDetailOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_report_api_v1_exercises__exercise_id__reports__rid__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApproveRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportDetailOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_report_api_v1_exercises__exercise_id__reports__rid__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportDetailOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recall_report_api_v1_exercises__exercise_id__reports__rid__recall_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RecallRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportDetailOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_campaigns_api_v1_exercises__exercise_id__campaigns_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path: {
+                exercise_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_CampaignOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_campaign_api_v1_exercises__exercise_id__campaigns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_CampaignOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_campaign_api_v1_exercises__exercise_id__campaigns__cid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_CampaignOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_campaign_api_v1_exercises__exercise_id__campaigns__cid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_campaign_api_v1_exercises__exercise_id__campaigns__cid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_CampaignOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_campaign_report_api_v1_exercises__exercise_id__campaigns__cid__reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignReportAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_CampaignOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_campaign_report_api_v1_exercises__exercise_id__campaigns__cid__reports__rid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    campaign_timeline_api_v1_exercises__exercise_id__campaigns__cid__timeline_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_TimelineEntryOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    campaign_compare_api_v1_exercises__exercise_id__campaigns__cid__compare_get: {
+        parameters: {
+            query: {
+                report_ids: string[];
+            };
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_ReportDetailOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_v1_exercises__exercise_id__reports__rid__sections__sid__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_AttachmentOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_attachments_api_v1_exercises__exercise_id__reports__rid__attachments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_AttachmentOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_api_v1_exercises__exercise_id__reports__rid__attachments__aid__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_attachment_api_v1_exercises__exercise_id__reports__rid__attachments__aid__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                aid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_evaluator_candidates_api_v1_exercises__exercise_id__evaluator_candidates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_EvaluatorCandidateOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_evaluations_api_v1_exercises__exercise_id__evaluations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_EvaluationAssignmentOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_evaluation_breakdown_api_v1_exercises__exercise_id__reports__rid__evaluations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationBreakdownOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_evaluator_api_v1_exercises__exercise_id__reports__rid__evaluations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationDetailOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvaluationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_section_grade_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades__section_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SectionGradeUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_SectionGradeOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_section_grade_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades__section_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+                section_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_section_grades_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__grades_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_SectionGradeOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_overall_grade_api_v1_exercises__exercise_id__reports__rid__overall_grade_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManualGradeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_ReportGradeOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finalize_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__finalize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["FinalizeRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationBreakdownOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unassign_evaluator_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__unassign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnassignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationBreakdownOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_evaluation_api_v1_exercises__exercise_id__reports__rid__evaluations__evid__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+                evid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReopenRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationBreakdownOut_"];
                 };
             };
             /** @description Validation Error */
