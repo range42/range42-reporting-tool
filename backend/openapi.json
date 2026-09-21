@@ -1275,6 +1275,176 @@
         }
       }
     },
+    "/api/v1/exercises/{exercise_id}/teams/{team_id}/evaluators": {
+      "get": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "List Team Evaluators",
+        "operationId": "list_team_evaluators_api_v1_exercises__exercise_id__teams__team_id__evaluators_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_TeamEvaluatorOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Add Team Evaluator",
+        "operationId": "add_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamEvaluatorCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_TeamEvaluatorOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/teams/{team_id}/evaluators/{evaluator_id}": {
+      "delete": {
+        "tags": [
+          "teams"
+        ],
+        "summary": "Remove Team Evaluator",
+        "operationId": "remove_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators__evaluator_id__delete",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "team_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Team Id"
+            }
+          },
+          {
+            "name": "evaluator_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evaluator Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/roles": {
       "post": {
         "tags": [
@@ -3422,6 +3592,176 @@
         }
       }
     },
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/evaluators": {
+      "get": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "List Campaign Evaluators",
+        "operationId": "list_campaign_evaluators_api_v1_exercises__exercise_id__campaigns__cid__evaluators_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_CampaignEvaluatorOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Add Campaign Evaluator",
+        "operationId": "add_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators_post",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CampaignEvaluatorCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_CampaignEvaluatorOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/evaluators/{evaluator_id}": {
+      "delete": {
+        "tags": [
+          "campaigns"
+        ],
+        "summary": "Remove Campaign Evaluator",
+        "operationId": "remove_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators__evaluator_id__delete",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Cid"
+            }
+          },
+          {
+            "name": "evaluator_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Evaluator Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/exercises/{exercise_id}/campaigns/{cid}/timeline": {
       "get": {
         "tags": [
@@ -4946,6 +5286,58 @@
         ],
         "title": "CampaignCreate"
       },
+      "CampaignEvaluatorCreate": {
+        "properties": {
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluator_id"
+        ],
+        "title": "CampaignEvaluatorCreate"
+      },
+      "CampaignEvaluatorOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "campaign_id": {
+            "type": "string",
+            "title": "Campaign Id"
+          },
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "campaign_id",
+          "evaluator_id",
+          "display_name",
+          "email",
+          "created_at"
+        ],
+        "title": "CampaignEvaluatorOut"
+      },
       "CampaignOut": {
         "properties": {
           "id": {
@@ -5101,6 +5493,28 @@
           "data"
         ],
         "title": "DataEnvelope[AttachmentOut]"
+      },
+      "DataEnvelope_CampaignEvaluatorOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CampaignEvaluatorOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[CampaignEvaluatorOut]"
       },
       "DataEnvelope_CampaignOut_": {
         "properties": {
@@ -5410,6 +5824,28 @@
         ],
         "title": "DataEnvelope[SectionOut]"
       },
+      "DataEnvelope_TeamEvaluatorOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/TeamEvaluatorOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[TeamEvaluatorOut]"
+      },
       "DataEnvelope_TeamMemberRowOut_": {
         "properties": {
           "data": {
@@ -5688,6 +6124,32 @@
         ],
         "title": "DataEnvelope[list[AttachmentOut]]"
       },
+      "DataEnvelope_list_CampaignEvaluatorOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CampaignEvaluatorOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[CampaignEvaluatorOut]]"
+      },
       "DataEnvelope_list_CampaignOut__": {
         "properties": {
           "data": {
@@ -5947,6 +6409,32 @@
           "data"
         ],
         "title": "DataEnvelope[list[SectionOut]]"
+      },
+      "DataEnvelope_list_TeamEvaluatorOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TeamEvaluatorOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[TeamEvaluatorOut]]"
       },
       "DataEnvelope_list_TeamMemberOut__": {
         "properties": {
@@ -9153,6 +9641,58 @@
           "team_type"
         ],
         "title": "TeamCreate"
+      },
+      "TeamEvaluatorCreate": {
+        "properties": {
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evaluator_id"
+        ],
+        "title": "TeamEvaluatorCreate"
+      },
+      "TeamEvaluatorOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "team_id": {
+            "type": "string",
+            "title": "Team Id"
+          },
+          "evaluator_id": {
+            "type": "string",
+            "title": "Evaluator Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "team_id",
+          "evaluator_id",
+          "display_name",
+          "email",
+          "created_at"
+        ],
+        "title": "TeamEvaluatorOut"
       },
       "TeamMemberCreate": {
         "properties": {

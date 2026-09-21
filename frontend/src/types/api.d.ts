@@ -360,6 +360,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/teams/{team_id}/evaluators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Team Evaluators */
+        get: operations["list_team_evaluators_api_v1_exercises__exercise_id__teams__team_id__evaluators_get"];
+        put?: never;
+        /** Add Team Evaluator */
+        post: operations["add_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/teams/{team_id}/evaluators/{evaluator_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Team Evaluator */
+        delete: operations["remove_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators__evaluator_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles": {
         parameters: {
             query?: never;
@@ -854,6 +889,41 @@ export interface paths {
         post?: never;
         /** Remove Campaign Report */
         delete: operations["remove_campaign_report_api_v1_exercises__exercise_id__campaigns__cid__reports__rid__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/evaluators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Campaign Evaluators */
+        get: operations["list_campaign_evaluators_api_v1_exercises__exercise_id__campaigns__cid__evaluators_get"];
+        put?: never;
+        /** Add Campaign Evaluator */
+        post: operations["add_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/evaluators/{evaluator_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Campaign Evaluator */
+        delete: operations["remove_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators__evaluator_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1377,6 +1447,29 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** CampaignEvaluatorCreate */
+        CampaignEvaluatorCreate: {
+            /** Evaluator Id */
+            evaluator_id: string;
+        };
+        /** CampaignEvaluatorOut */
+        CampaignEvaluatorOut: {
+            /** Id */
+            id: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** CampaignOut */
         CampaignOut: {
             /** Id */
@@ -1431,6 +1524,11 @@ export interface components {
         /** DataEnvelope[AttachmentOut] */
         DataEnvelope_AttachmentOut_: {
             data: components["schemas"]["AttachmentOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[CampaignEvaluatorOut] */
+        DataEnvelope_CampaignEvaluatorOut_: {
+            data: components["schemas"]["CampaignEvaluatorOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[CampaignOut] */
@@ -1503,6 +1601,11 @@ export interface components {
             data: components["schemas"]["SectionOut"];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[TeamEvaluatorOut] */
+        DataEnvelope_TeamEvaluatorOut_: {
+            data: components["schemas"]["TeamEvaluatorOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[TeamMemberRowOut] */
         DataEnvelope_TeamMemberRowOut_: {
             data: components["schemas"]["TeamMemberRowOut"];
@@ -1573,6 +1676,12 @@ export interface components {
             data: components["schemas"]["AttachmentOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[list[CampaignEvaluatorOut]] */
+        DataEnvelope_list_CampaignEvaluatorOut__: {
+            /** Data */
+            data: components["schemas"]["CampaignEvaluatorOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[list[CampaignOut]] */
         DataEnvelope_list_CampaignOut__: {
             /** Data */
@@ -1631,6 +1740,12 @@ export interface components {
         DataEnvelope_list_SectionOut__: {
             /** Data */
             data: components["schemas"]["SectionOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[TeamEvaluatorOut]] */
+        DataEnvelope_list_TeamEvaluatorOut__: {
+            /** Data */
+            data: components["schemas"]["TeamEvaluatorOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[list[TeamMemberOut]] */
@@ -2628,6 +2743,29 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** TeamEvaluatorCreate */
+        TeamEvaluatorCreate: {
+            /** Evaluator Id */
+            evaluator_id: string;
+        };
+        /** TeamEvaluatorOut */
+        TeamEvaluatorOut: {
+            /** Id */
+            id: string;
+            /** Team Id */
+            team_id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** TeamMemberCreate */
         TeamMemberCreate: {
@@ -3817,6 +3955,105 @@ export interface operations {
                 exercise_id: string;
                 team_id: string;
                 user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_team_evaluators_api_v1_exercises__exercise_id__teams__team_id__evaluators_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_TeamEvaluatorOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamEvaluatorCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_TeamEvaluatorOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators__evaluator_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                team_id: string;
+                evaluator_id: string;
             };
             cookie?: never;
         };
@@ -5134,6 +5371,105 @@ export interface operations {
                 exercise_id: string;
                 cid: string;
                 rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_campaign_evaluators_api_v1_exercises__exercise_id__campaigns__cid__evaluators_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_CampaignEvaluatorOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignEvaluatorCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_CampaignEvaluatorOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators__evaluator_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+                evaluator_id: string;
             };
             cookie?: never;
         };
