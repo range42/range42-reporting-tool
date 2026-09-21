@@ -19,14 +19,31 @@ from app.core.db import get_db
 from app.core.pagination import PageParams, page_params
 from app.core.permissions import EVALUATIONS_WRITE, REPORTS_READ_ALL, REPORTS_READ_ASSIGNED, REPORTS_READ_OWN
 from app.core.rbac import get_current_user, require_global_admin, require_permission_any
-from app.models import Campaign, CampaignEvaluator, CampaignReport, Evaluation, Exercise, Report, Team, User
-from app.routes.v1.reports import _auto_assign_evaluators, _caller_team_ids, _has_permission, _section_pairs
+from app.models import (
+    Campaign,
+    CampaignEvaluator,
+    CampaignReport,
+    Evaluation,
+    Exercise,
+    Report,
+    ReportTemplate,
+    Team,
+    User,
+)
+from app.routes.v1.reports import (
+    _auto_assign_evaluators,
+    _caller_team_ids,
+    _has_permission,
+    _instantiate_report,
+    _section_pairs,
+)
 from app.schemas.campaign import (
     CampaignCreate,
     CampaignEvaluatorCreate,
     CampaignEvaluatorOut,
     CampaignOut,
     CampaignReportAdd,
+    CampaignReportSpec,
     CampaignUpdate,
     TimelineEntryOut,
 )
@@ -103,6 +120,51 @@ async def _visible_report_ids(db: AsyncSession, exercise_id: uuid.UUID, user: Us
 # --- CRUD --------------------------------------------------------------------
 
 
+async def _fan_out_campaign_reports(
+    db: AsyncSession,
+    exercise_id: uuid.UUID,
+    campaign: Campaign,
+    specs: list[CampaignReportSpec],
+    *,
+    actor_id: uuid.UUID,
+) -> None:
+    """Instantiate every spec once per team in the exercise, linking each into ``campaign``.
+
+    n specs x m teams = n*m reports. A report belongs to exactly one campaign by construction —
+    this is the only path that creates reports already tied to a campaign at creation time.
+    """
+    teams = (await db.execute(select(Team).where(Team.exercise_id == exercise_id))).scalars().all()
+    if not teams:
+        raise HTTPException(status_code=422, detail={"error": "exercise_has_no_teams"})
+    templates: dict[str, ReportTemplate] = {}
+    for spec in specs:
+        if spec.template_id in templates:
+            continue
+        tpl = (
+            await db.execute(select(ReportTemplate).where(ReportTemplate.id == uuid.UUID(spec.template_id)))
+        ).scalar_one_or_none()
+        if tpl is None:
+            raise HTTPException(status_code=404, detail="template not found")
+        if tpl.status != "published":
+            raise HTTPException(status_code=409, detail="template is not published")
+        templates[spec.template_id] = tpl
+    for team in teams:
+        for spec in specs:
+            tpl = templates[spec.template_id]
+            report = await _instantiate_report(
+                db,
+                exercise_id=exercise_id,
+                team=team,
+                template=tpl,
+                actor_id=actor_id,
+                name=f"{tpl.name} — {team.name}",
+                due_at=spec.due_at,
+                available_at=spec.available_at,
+            )
+            db.add(CampaignReport(campaign_id=campaign.id, report_id=report.id))
+    await db.flush()
+
+
 @router.post("/exercises/{exercise_id}/campaigns", status_code=201)
 async def create_campaign(
     request: Request,
@@ -121,16 +183,18 @@ async def create_campaign(
     c.metadata_ = body.metadata
     db.add(c)
     await db.flush()
+    if body.report_specs:
+        await _fan_out_campaign_reports(db, exercise_id, c, body.report_specs, actor_id=actor.id)
     await record_audit(
         db,
         user_id=actor.id,
         action="campaign.create",
         resource_type="campaign",
         resource_id=c.id,
-        details={"name": c.name},
+        details={"name": c.name, "report_specs": len(body.report_specs) if body.report_specs else 0},
         ip=client_ip(request),
     )
-    return DataEnvelope(data=CampaignOut.from_model(c, 0))
+    return DataEnvelope(data=CampaignOut.from_model(c, await _report_count(db, c.id)))
 
 
 @router.get("/exercises/{exercise_id}/campaigns")

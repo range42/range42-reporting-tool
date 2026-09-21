@@ -331,3 +331,89 @@ async def test_timeline_empty_for_evaluator_with_no_assignment(migrated_db: asyn
         eh = {"Authorization": f"Bearer {tok}"}
         rows = (await c.get(f"/api/v1/exercises/{ex}/campaigns/{cid}/timeline", headers=eh)).json()["data"]
         assert rows == []
+
+
+# --- report_specs fan-out ----------------------------------------------------
+
+
+async def test_campaign_with_report_specs_fans_out_per_team(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        for name in ("BT1", "BT2", "BT3"):
+            await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": name, "team_type": "blue"}, headers=ah)
+        sitrep = await _published_template(c, ah)
+        r = await c.post(
+            f"/api/v1/exercises/{ex}/campaigns",
+            json={"name": "SITREP campaign", "report_specs": [{"template_id": sitrep}, {"template_id": sitrep}]},
+            headers=ah,
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["data"]["report_count"] == 6  # 2 specs x 3 teams
+
+        reports = (await c.get(f"/api/v1/exercises/{ex}/reports", headers=ah)).json()["data"]
+        assert len(reports) == 6
+        team_ids = {t["id"] for t in (await c.get(f"/api/v1/exercises/{ex}/teams", headers=ah)).json()["data"]}
+        assert {rep["team_id"] for rep in reports} == team_ids
+
+
+async def test_campaign_report_specs_carry_available_at_and_due_at(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "BT1", "team_type": "blue"}, headers=ah)
+        tid = await _published_template(c, ah)
+        due = "2026-12-01T00:00:00Z"
+        available = "2026-11-25T00:00:00Z"
+        await c.post(
+            f"/api/v1/exercises/{ex}/campaigns",
+            json={"name": "C", "report_specs": [{"template_id": tid, "available_at": available, "due_at": due}]},
+            headers=ah,
+        )
+        reports = (await c.get(f"/api/v1/exercises/{ex}/reports", headers=ah)).json()["data"]
+        assert reports[0]["due_at"].startswith("2026-12-01")
+        assert reports[0]["available_at"].startswith("2026-11-25")
+
+
+async def test_campaign_report_specs_rejects_empty_list(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        r = await c.post(f"/api/v1/exercises/{ex}/campaigns", json={"name": "C", "report_specs": []}, headers=ah)
+        assert r.status_code == 422
+
+
+async def test_campaign_report_specs_rejects_unpublished_template(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "BT1", "team_type": "blue"}, headers=ah)
+        tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()["data"][
+            "id"
+        ]
+        r = await c.post(
+            f"/api/v1/exercises/{ex}/campaigns", json={"name": "C", "report_specs": [{"template_id": tid}]}, headers=ah
+        )
+        assert r.status_code == 409
+
+
+async def test_campaign_report_specs_rejects_no_teams(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        tid = await _published_template(c, ah)
+        r = await c.post(
+            f"/api/v1/exercises/{ex}/campaigns", json={"name": "C", "report_specs": [{"template_id": tid}]}, headers=ah
+        )
+        assert r.status_code == 422
+        assert r.json()["error"]["message"] == "exercise_has_no_teams"
+
+
+async def test_campaign_without_report_specs_still_creates_an_empty_campaign(migrated_db: async_sessionmaker) -> None:
+    # Backward compatibility — report_specs is optional.
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        r = await c.post(f"/api/v1/exercises/{ex}/campaigns", json={"name": "C"}, headers=ah)
+        assert r.status_code == 201, r.text
+        assert r.json()["data"]["report_count"] == 0

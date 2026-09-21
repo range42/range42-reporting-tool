@@ -419,53 +419,40 @@ async def _get_report_section(db: AsyncSession, report_id: uuid.UUID, sid: uuid.
 # --- instantiate -----------------------------------------------------------
 
 
-@router.post("/exercises/{exercise_id}/reports", status_code=201)
-async def create_report(
-    request: Request,
+async def _instantiate_report(
+    db: AsyncSession,
+    *,
     exercise_id: uuid.UUID,
-    body: ReportCreate,
-    actor: User = Depends(require_global_admin),
-    db: AsyncSession = Depends(get_db),
-) -> DataEnvelope[ReportDetailOut]:
-    team = (await db.execute(select(Team).where(Team.id == uuid.UUID(body.team_id)))).scalar_one_or_none()
-    if team is None:
-        raise HTTPException(status_code=404, detail="team not found")
-    if team.exercise_id != exercise_id:
-        raise HTTPException(status_code=422, detail="team does not belong to this exercise")
+    team: Team,
+    template: ReportTemplate,
+    actor_id: uuid.UUID,
+    name: str,
+    description: str | None = None,
+    due_at: datetime | None = None,
+    available_at: datetime | None = None,
+    approval_required: bool = False,
+    approval_chain: list[dict[str, object]] | None = None,
+    assigned_writer_id: uuid.UUID | None = None,
+) -> Report:
+    """Snapshot the template's current version into a new draft report and seed its sections.
 
-    template = (
-        await db.execute(select(ReportTemplate).where(ReportTemplate.id == uuid.UUID(body.template_id)))
-    ).scalar_one_or_none()
-    if template is None:
-        raise HTTPException(status_code=404, detail="template not found")
-    if template.status != "published":
-        raise HTTPException(status_code=409, detail="template is not published")
-
-    if body.assigned_writer_id is not None:
-        member = (
-            await db.execute(
-                select(TeamMember.id).where(
-                    TeamMember.team_id == team.id, TeamMember.user_id == uuid.UUID(body.assigned_writer_id)
-                )
-            )
-        ).first()
-        if member is None:
-            raise HTTPException(status_code=422, detail="assigned writer is not a member of the team")
-
+    Shared by ``create_report`` (one report) and ``campaigns.py``'s ``create_campaign`` (a
+    report per team, fanned out from ``report_specs``) — the only place either builds a `Report`.
+    """
     report = Report(
         exercise_id=exercise_id,
         team_id=team.id,
         template_id=template.id,
         template_version_at_creation=template.version,
-        name=body.name,
-        description=body.description,
+        name=name,
+        description=description,
         status="draft",
-        approval_required=body.approval_required,
-        approval_chain=[e.model_dump() for e in body.approval_chain] if body.approval_chain else None,
-        due_at=body.due_at,
-        available_at=body.available_at,
-        assigned_writer_id=uuid.UUID(body.assigned_writer_id) if body.assigned_writer_id else None,
-        created_by=actor.id,
+        approval_required=approval_required,
+        approval_chain=approval_chain,
+        due_at=due_at,
+        available_at=available_at,
+        assigned_writer_id=assigned_writer_id,
+        created_by=actor_id,
     )
     db.add(report)
     await db.flush()
@@ -501,6 +488,56 @@ async def create_report(
                 ReportSection(report_id=report.id, section_def_id=d.id, position=d.position, version=1, char_count=0)
             )
     await db.flush()
+    return report
+
+
+@router.post("/exercises/{exercise_id}/reports", status_code=201)
+async def create_report(
+    request: Request,
+    exercise_id: uuid.UUID,
+    body: ReportCreate,
+    actor: User = Depends(require_global_admin),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[ReportDetailOut]:
+    team = (await db.execute(select(Team).where(Team.id == uuid.UUID(body.team_id)))).scalar_one_or_none()
+    if team is None:
+        raise HTTPException(status_code=404, detail="team not found")
+    if team.exercise_id != exercise_id:
+        raise HTTPException(status_code=422, detail="team does not belong to this exercise")
+
+    template = (
+        await db.execute(select(ReportTemplate).where(ReportTemplate.id == uuid.UUID(body.template_id)))
+    ).scalar_one_or_none()
+    if template is None:
+        raise HTTPException(status_code=404, detail="template not found")
+    if template.status != "published":
+        raise HTTPException(status_code=409, detail="template is not published")
+
+    if body.assigned_writer_id is not None:
+        member = (
+            await db.execute(
+                select(TeamMember.id).where(
+                    TeamMember.team_id == team.id, TeamMember.user_id == uuid.UUID(body.assigned_writer_id)
+                )
+            )
+        ).first()
+        if member is None:
+            raise HTTPException(status_code=422, detail="assigned writer is not a member of the team")
+
+    report = await _instantiate_report(
+        db,
+        exercise_id=exercise_id,
+        team=team,
+        template=template,
+        actor_id=actor.id,
+        name=body.name,
+        description=body.description,
+        due_at=body.due_at,
+        available_at=body.available_at,
+        approval_required=body.approval_required,
+        approval_chain=[e.model_dump() for e in body.approval_chain] if body.approval_chain else None,
+        assigned_writer_id=uuid.UUID(body.assigned_writer_id) if body.assigned_writer_id else None,
+    )
 
     await record_audit(
         db,
@@ -508,7 +545,11 @@ async def create_report(
         action="report.create",
         resource_type="report",
         resource_id=report.id,
-        details={"template_id": str(template.id), "team_id": str(team.id), "sections": len(defs)},
+        details={
+            "template_id": str(template.id),
+            "team_id": str(team.id),
+            "sections": await _section_count(db, report.id),
+        },
         ip=client_ip(request),
     )
     return DataEnvelope(data=ReportDetailOut.from_models(report, await _section_pairs(db, report.id)))
