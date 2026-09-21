@@ -47,6 +47,7 @@ class ReportCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
     due_at: datetime | None = None
+    available_at: datetime | None = None
     approval_required: bool = False
     approval_chain: list[ApprovalChainEntry] | None = None
     assigned_writer_id: str | None = None
@@ -58,6 +59,7 @@ class ReportUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     due_at: datetime | None = None
+    available_at: datetime | None = None
     approval_required: bool | None = None
     approval_chain: list[ApprovalChainEntry] | None = None
     assigned_writer_id: str | None = None
@@ -220,6 +222,7 @@ class ReportOut(_GatedGradeFields):
     status: str
     approval_required: bool
     due_at: datetime | None
+    available_at: datetime | None
     submitted_at: datetime | None
     assigned_writer_id: str | None
     approval_chain: list[dict[str, Any]] | None
@@ -243,6 +246,7 @@ class ReportOut(_GatedGradeFields):
             status=r.status,
             approval_required=r.approval_required,
             due_at=r.due_at,
+            available_at=r.available_at,
             submitted_at=r.submitted_at,
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
             approval_chain=r.approval_chain,
@@ -265,6 +269,7 @@ class ReportDetailOut(_GatedGradeFields):
     status: str
     approval_required: bool
     due_at: datetime | None
+    available_at: datetime | None
     submitted_at: datetime | None
     assigned_writer_id: str | None
     writer_notes: str | None
@@ -300,6 +305,7 @@ class ReportDetailOut(_GatedGradeFields):
             status=r.status,
             approval_required=r.approval_required,
             due_at=r.due_at,
+            available_at=r.available_at,
             submitted_at=r.submitted_at,
             assigned_writer_id=str(r.assigned_writer_id) if r.assigned_writer_id else None,
             writer_notes=r.writer_notes,

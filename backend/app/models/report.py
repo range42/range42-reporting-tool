@@ -38,6 +38,7 @@ class Report(Base, UUIDMixin, TimestampMixin, MetadataMixin):
     # superseded submission stop counting without being deleted.
     approval_cycle: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     writer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     overall_feedback: Mapped[str | None] = mapped_column(Text, nullable=True)

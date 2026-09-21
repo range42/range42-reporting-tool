@@ -184,6 +184,14 @@ def _require_draft(r: Report) -> None:
         raise HTTPException(status_code=409, detail="report is not a draft")
 
 
+def _require_available(r: Report) -> None:
+    if r.available_at is not None and datetime.now(UTC) < r.available_at:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "report_not_yet_available", "available_at": r.available_at.isoformat()},
+        )
+
+
 async def _apply_transition(
     db: AsyncSession,
     report: Report,
@@ -409,6 +417,7 @@ async def create_report(
         approval_required=body.approval_required,
         approval_chain=[e.model_dump() for e in body.approval_chain] if body.approval_chain else None,
         due_at=body.due_at,
+        available_at=body.available_at,
         assigned_writer_id=uuid.UUID(body.assigned_writer_id) if body.assigned_writer_id else None,
         created_by=actor.id,
     )
@@ -635,6 +644,7 @@ async def save_section(
 ) -> DataEnvelope[ReportSectionOut]:
     report = await _get_report(db, exercise_id, rid)
     _require_draft(report)
+    _require_available(report)
     await _assert_report_access(db, exercise_id, report, user, write=True)
     await _assert_section_write_access(db, exercise_id, report, user)
     section = await _get_report_section(db, rid, sid)
