@@ -88,4 +88,24 @@ describe('ExercisePicker.vue', () => {
     await flushPromises()
     expect(wrapper.find('[data-test="new-exercise"]').exists()).toBe(false)
   })
+
+  it('shows a settings shortcut per exercise for admins that navigates to its settings screen', async () => {
+    vi.spyOn(svc, 'listExercises').mockResolvedValue([exercise({ id: '1', name: 'Alpha' })])
+    const wrapper = mountPicker()
+    await flushPromises()
+    await wrapper.get('[data-test="exercise-settings-1"]').trigger('click')
+    expect(push).toHaveBeenCalledWith('/exercises/1/settings')
+  })
+
+  it('hides the per-exercise settings shortcut for non-admins', async () => {
+    useAuthStore().setSession({
+      access_token: 'tok',
+      token_type: 'bearer',
+      user: { id: 'u', email: 'e', display_name: 'd', avatar_url: null, is_global_admin: false },
+    })
+    vi.spyOn(svc, 'listExercises').mockResolvedValue([exercise({ id: '1', name: 'Alpha' })])
+    const wrapper = mountPicker()
+    await flushPromises()
+    expect(wrapper.find('[data-test="exercise-settings-1"]').exists()).toBe(false)
+  })
 })

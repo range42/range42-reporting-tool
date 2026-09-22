@@ -19,6 +19,7 @@
     "empty": "No exercises available to you yet.",
     "loadError": "Could not load exercises. Please try again.",
     "new": "New exercise",
+    "settingsLink": "Exercise settings",
     "manageTemplates": "Manage templates",
     "manageRoles": "Manage roles",
     "status": {
