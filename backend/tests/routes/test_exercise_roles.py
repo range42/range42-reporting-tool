@@ -12,9 +12,7 @@ async def test_assign_list_delete_role(migrated_db: async_sessionmaker) -> None:
         await seed_system_roles(s)
         await s.commit()
     token, _ = await make_user_token(migrated_db, jti="ga", admin=True)
-    _, member_id = await make_user_token(
-        migrated_db, jti="u", admin=False, email="carol@x", display_name="Carol"
-    )
+    _, member_id = await make_user_token(migrated_db, jti="u", admin=False, email="carol@x", display_name="Carol")
     h = {"Authorization": f"Bearer {token}"}
     async with client(migrated_db) as c:
         ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=h)).json()["data"]["id"]
