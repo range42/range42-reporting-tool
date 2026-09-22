@@ -7032,6 +7032,14 @@
             "type": "string",
             "title": "User Id"
           },
+          "user_display_name": {
+            "type": "string",
+            "title": "User Display Name"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email"
+          },
           "role_key": {
             "type": "string",
             "title": "Role Key"
@@ -7047,6 +7055,8 @@
           "id",
           "exercise_id",
           "user_id",
+          "user_display_name",
+          "user_email",
           "role_key",
           "created_at"
         ],

@@ -1978,6 +1978,10 @@ export interface components {
             exercise_id: string;
             /** User Id */
             user_id: string;
+            /** User Display Name */
+            user_display_name: string;
+            /** User Email */
+            user_email: string;
             /** Role Key */
             role_key: string;
             /**
