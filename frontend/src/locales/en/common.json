@@ -18,6 +18,7 @@
     "subtitle": "Select an exercise to work in",
     "empty": "No exercises available to you yet.",
     "loadError": "Could not load exercises. Please try again.",
+    "new": "New exercise",
     "manageTemplates": "Manage templates",
     "manageRoles": "Manage roles",
     "status": {

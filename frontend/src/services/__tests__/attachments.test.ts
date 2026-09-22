@@ -48,7 +48,7 @@ describe('attachments service', () => {
   })
 
   it('deletes by attachment id', async () => {
-    vi.mocked(http.apiDelete).mockResolvedValue()
+    vi.mocked(http.apiDelete).mockResolvedValue(undefined)
     await deleteAttachment('tok', 'e1', 'r1', 'a1')
     expect(http.apiDelete).toHaveBeenCalledWith(
       '/api/v1/exercises/e1/reports/r1/attachments/a1',

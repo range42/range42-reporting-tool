@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, type Component } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Activity, Archive, ArrowRight, Pencil, TriangleAlert } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
@@ -10,6 +10,7 @@ import AppShell from '@/components/AppShell.vue'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const router = useRouter()
 const exercises = ref<Exercise[]>([])
 const loading = ref(true)
 const error = ref('')
@@ -52,6 +53,15 @@ onMounted(async () => {
 <template>
   <AppShell :title="t('exercises.title')">
     <template #actions>
+      <button
+        v-if="auth.isAdmin"
+        type="button"
+        data-test="new-exercise"
+        class="flex h-9 items-center rounded-md bg-indigo-500 px-3 text-sm font-medium text-white transition hover:bg-indigo-400"
+        @click="router.push('/exercises/new')"
+      >
+        {{ t('exercises.new') }}
+      </button>
       <RouterLink
         v-if="auth.isAdmin"
         to="/settings/templates"

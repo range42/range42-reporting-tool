@@ -29,6 +29,7 @@ from app.routes.v1 import reports as reports_route
 from app.routes.v1 import roles as roles_route
 from app.routes.v1 import teams as teams_route
 from app.routes.v1 import templates as templates_route
+from app.routes.v1 import users as users_route
 from app.routes.v1._stubs import routers as stub_routers
 
 logger = structlog.get_logger(__name__)
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
         auth_route.router,
         exercises_route.router,
         teams_route.router,
+        users_route.router,
         roles_route.router,
         permissions_route.router,
         templates_route.router,
