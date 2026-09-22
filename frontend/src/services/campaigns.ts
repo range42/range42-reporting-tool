@@ -1,4 +1,4 @@
-import { apiGet } from '@/services/http'
+import { apiDelete, apiGet, apiPost } from '@/services/http'
 import type { ReportDetail } from '@/services/reports'
 
 /** Server-side cap on how many reports one compare call may ask for. */
@@ -28,10 +28,65 @@ export interface TimelineEntry {
   created_at: string
 }
 
+/** One report to instantiate for every team when defining a campaign via `report_specs`. */
+export interface CampaignReportSpec {
+  template_id: string
+  available_at?: string | null
+  due_at?: string | null
+}
+
+export interface CampaignCreateInput {
+  name: string
+  description?: string | null
+  report_specs?: CampaignReportSpec[]
+}
+
+/** One evaluator assigned to a campaign, independent of team. */
+export interface CampaignEvaluatorSummary {
+  id: string
+  campaign_id: string
+  evaluator_id: string
+  display_name: string
+  email: string
+  created_at: string
+}
+
 const base = (exerciseId: string): string => `/api/v1/exercises/${exerciseId}/campaigns`
 
 export const listCampaigns = (token: string, exerciseId: string): Promise<Campaign[]> =>
   apiGet<Campaign[]>(base(exerciseId), token)
+
+export const createCampaign = (
+  token: string,
+  exerciseId: string,
+  body: CampaignCreateInput,
+): Promise<Campaign> => apiPost<Campaign>(base(exerciseId), body, token)
+
+export const listCampaignEvaluators = (
+  token: string,
+  exerciseId: string,
+  cid: string,
+): Promise<CampaignEvaluatorSummary[]> =>
+  apiGet<CampaignEvaluatorSummary[]>(`${base(exerciseId)}/${cid}/evaluators`, token)
+
+export const addCampaignEvaluator = (
+  token: string,
+  exerciseId: string,
+  cid: string,
+  evaluatorId: string,
+): Promise<CampaignEvaluatorSummary> =>
+  apiPost<CampaignEvaluatorSummary>(
+    `${base(exerciseId)}/${cid}/evaluators`,
+    { evaluator_id: evaluatorId },
+    token,
+  )
+
+export const removeCampaignEvaluator = (
+  token: string,
+  exerciseId: string,
+  cid: string,
+  evaluatorId: string,
+): Promise<void> => apiDelete(`${base(exerciseId)}/${cid}/evaluators/${evaluatorId}`, token)
 
 export const getCampaignTimeline = (
   token: string,

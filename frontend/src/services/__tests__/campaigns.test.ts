@@ -108,4 +108,76 @@ describe('campaigns service', () => {
     // Act / Assert
     await expect(svc.getCampaignTimeline('tok', 'ex1', 'c1')).rejects.toMatchObject({ status: 403 })
   })
+
+  it('createCampaign POSTs the campaign path with the report_specs payload', async () => {
+    // Arrange
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(env(201, { id: 'c1', name: 'SITREP', report_count: 6 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // Act
+    const out = await svc.createCampaign('tok', 'ex1', {
+      name: 'SITREP',
+      report_specs: [{ template_id: 'tpl1', available_at: '2026-01-01T00:00:00Z', due_at: null }],
+    })
+
+    // Assert
+    expect(out.report_count).toBe(6)
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns')
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string)
+    expect(body.report_specs).toEqual([
+      { template_id: 'tpl1', available_at: '2026-01-01T00:00:00Z', due_at: null },
+    ])
+  })
+
+  it('listCampaignEvaluators GETs the evaluators sub-path', async () => {
+    // Arrange
+    const fetchMock = vi.fn().mockResolvedValue(
+      env(200, [
+        {
+          id: 'ce1',
+          campaign_id: 'c1',
+          evaluator_id: 'u1',
+          display_name: 'Eve',
+          email: 'eve@x',
+          created_at: 'now',
+        },
+      ]),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    // Act
+    const out = await svc.listCampaignEvaluators('tok', 'ex1', 'c1')
+
+    // Assert
+    expect(out).toHaveLength(1)
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns/c1/evaluators')
+  })
+
+  it('addCampaignEvaluator POSTs the evaluator_id', async () => {
+    // Arrange
+    const fetchMock = vi.fn().mockResolvedValue(env(201, { id: 'ce1' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // Act
+    await svc.addCampaignEvaluator('tok', 'ex1', 'c1', 'u1')
+
+    // Assert
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns/c1/evaluators')
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({ evaluator_id: 'u1' })
+  })
+
+  it('removeCampaignEvaluator DELETEs the specific evaluator', async () => {
+    // Arrange
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    // Act
+    await svc.removeCampaignEvaluator('tok', 'ex1', 'c1', 'u1')
+
+    // Assert
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns/c1/evaluators/u1')
+    expect(fetchMock.mock.calls[0]![1].method).toBe('DELETE')
+  })
 })

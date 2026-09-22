@@ -75,6 +75,24 @@ export const router = createRouter({
       meta: { requiresAuth: true, requiresEvaluator: true },
     },
     {
+      path: '/exercises/:exerciseId/teams/:teamId/evaluators',
+      name: 'team-evaluators',
+      component: () => import('@/views/settings/TeamEvaluators.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/exercises/:exerciseId/campaigns/new',
+      name: 'campaign-define',
+      component: () => import('@/views/settings/CampaignDefine.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/exercises/:exerciseId/campaigns/:campaignId/evaluators',
+      name: 'campaign-evaluators',
+      component: () => import('@/views/settings/CampaignEvaluators.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/settings/roles',
       component: () => import('@/views/settings/Roles.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },

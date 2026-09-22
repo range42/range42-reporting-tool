@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TriangleAlert } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
@@ -141,6 +141,14 @@ async function submit(): Promise<void> {
             <option value="" disabled>{{ t('reports.selectTeam') }}</option>
             <option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option>
           </select>
+          <RouterLink
+            v-if="teamId"
+            data-test="report-team-evaluators-link"
+            :to="`/exercises/${exerciseId}/teams/${teamId}/evaluators`"
+            class="mt-1.5 inline-block text-xs text-indigo-500 hover:underline"
+          >
+            {{ t('reports.manageTeamEvaluators') }}
+          </RouterLink>
         </div>
 
         <div v-if="teamId">

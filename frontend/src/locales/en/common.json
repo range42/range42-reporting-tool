@@ -140,6 +140,7 @@
     "loadError": "Could not load reports. Please try again.",
     "lockedByAssignment": "This report is assigned to another writer, so it is read-only for you.",
     "manageEvaluators": "Assign",
+    "manageTeamEvaluators": "Manage evaluators for this team",
     "merge": {
       "title": "This section changed on the server while you were editing. Choose how to resolve it.",
       "base": "Base",
@@ -290,5 +291,51 @@
     "unnamedEvaluator": "Evaluator",
     "waitingOthers": "Finalized. The report grade publishes once the remaining evaluators finalize.",
     "weight": "weight {weight}"
+  },
+  "teamEvaluators": {
+    "title": "Team evaluators",
+    "subtitle": "Who watches this team, independent of any campaign.",
+    "loading": "Loading…",
+    "loadError": "Could not load evaluator assignments.",
+    "addHeading": "Add an evaluator",
+    "noCandidates": "No one in this exercise is an evaluator yet.",
+    "pickLabel": "Choose an evaluator",
+    "assignAction": "Add",
+    "assignFailed": "Could not add that evaluator.",
+    "currentHeading": "Assigned",
+    "nobody": "No evaluators assigned to this team yet.",
+    "removeAction": "Remove",
+    "removeFailed": "Could not remove that evaluator."
+  },
+  "campaignEvaluators": {
+    "title": "Campaign evaluators",
+    "subtitle": "Who covers this campaign, independent of team.",
+    "loading": "Loading…",
+    "loadError": "Could not load evaluator assignments.",
+    "addHeading": "Add an evaluator",
+    "noCandidates": "No one in this exercise is an evaluator yet.",
+    "pickLabel": "Choose an evaluator",
+    "assignAction": "Add",
+    "assignFailed": "Could not add that evaluator.",
+    "currentHeading": "Assigned",
+    "nobody": "No evaluators assigned to this campaign yet.",
+    "removeAction": "Remove",
+    "removeFailed": "Could not remove that evaluator."
+  },
+  "campaigns": {
+    "define": {
+      "title": "Define a campaign",
+      "subtitle": "Each report spec is instantiated once for every team in the exercise.",
+      "loadError": "Could not load templates.",
+      "createError": "Could not create the campaign.",
+      "name": "Campaign name",
+      "specsHeading": "Report specs",
+      "template": "Template",
+      "templatePlaceholder": "Choose a template",
+      "availableAt": "Available from",
+      "dueAt": "Due",
+      "addSpec": "Add another report",
+      "submit": "Create campaign"
+    }
   }
 }
