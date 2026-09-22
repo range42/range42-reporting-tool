@@ -395,6 +395,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search Users */
+        get: operations["search_users_api_v1_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles": {
         parameters: {
             query?: never;
@@ -1798,6 +1815,12 @@ export interface components {
             data: components["schemas"]["TimelineEntryOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[list[UserOut]] */
+        DataEnvelope_list_UserOut__: {
+            /** Data */
+            data: components["schemas"]["UserOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[list[str]] */
         DataEnvelope_list_str__: {
             /** Data */
@@ -2084,6 +2107,10 @@ export interface components {
             exercise_id: string;
             /** User Id */
             user_id: string;
+            /** User Display Name */
+            user_display_name: string;
+            /** User Email */
+            user_email: string;
             /** Role Key */
             role_key: string;
             /**
@@ -4079,6 +4106,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_users_api_v1_users_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_UserOut__"];
+                };
             };
             /** @description Validation Error */
             422: {

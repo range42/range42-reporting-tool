@@ -234,15 +234,19 @@ class ExerciseRoleOut(BaseModel):
     id: str
     exercise_id: str
     user_id: str
+    user_display_name: str
+    user_email: str
     role_key: str
     created_at: datetime
 
     @classmethod
-    def from_model(cls, r: ExerciseRole) -> ExerciseRoleOut:
+    def from_model(cls, r: ExerciseRole, user: User) -> ExerciseRoleOut:
         return cls(
             id=str(r.id),
             exercise_id=str(r.exercise_id),
             user_id=str(r.user_id),
+            user_display_name=user.display_name,
+            user_email=user.email,
             role_key=r.role_key,
             created_at=r.created_at,
         )

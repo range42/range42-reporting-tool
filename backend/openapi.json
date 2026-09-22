@@ -1445,6 +1445,72 @@
         }
       }
     },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Search Users",
+        "operationId": "search_users_api_v1_users_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_list_UserOut__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/roles": {
       "post": {
         "tags": [
@@ -6644,6 +6710,32 @@
         ],
         "title": "DataEnvelope[list[TimelineEntryOut]]"
       },
+      "DataEnvelope_list_UserOut__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/UserOut"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[list[UserOut]]"
+      },
       "DataEnvelope_list_str__": {
         "properties": {
           "data": {
@@ -7480,6 +7572,14 @@
             "type": "string",
             "title": "User Id"
           },
+          "user_display_name": {
+            "type": "string",
+            "title": "User Display Name"
+          },
+          "user_email": {
+            "type": "string",
+            "title": "User Email"
+          },
           "role_key": {
             "type": "string",
             "title": "Role Key"
@@ -7495,6 +7595,8 @@
           "id",
           "exercise_id",
           "user_id",
+          "user_display_name",
+          "user_email",
           "role_key",
           "created_at"
         ],

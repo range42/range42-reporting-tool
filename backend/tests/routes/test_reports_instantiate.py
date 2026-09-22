@@ -56,10 +56,13 @@ async def test_instantiate_seeds_default_content(migrated_db: async_sessionmaker
     token, _ = await make_user_token(migrated_db, jti="ga", admin=True)
     ah = {"Authorization": f"Bearer {token}"}
     async with client(migrated_db) as c:
-        tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()[
-            "data"
-        ]["id"]
-        table_html = "<table><thead><tr><th>Named Threat</th><th>Detection</th></tr></thead><tbody><tr><td></td><td></td></tr></tbody></table>"
+        tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()["data"][
+            "id"
+        ]
+        table_html = (
+            "<table><thead><tr><th>Named Threat</th><th>Detection</th></tr></thead>"
+            "<tbody><tr><td></td><td></td></tr></tbody></table>"
+        )
         await c.post(
             f"/api/v1/templates/{tid}/sections",
             json={

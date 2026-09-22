@@ -98,6 +98,6 @@ export function apiPatch<T>(path: string, body: unknown, token?: string): Promis
 export function apiPut<T>(path: string, body: unknown, token?: string): Promise<T> {
   return request<T>('PUT', path, body, token)
 }
-export function apiDelete(path: string, token?: string): Promise<void> {
-  return request<void>('DELETE', path, undefined, token)
+export function apiDelete<T = void>(path: string, token?: string): Promise<T> {
+  return request<T>('DELETE', path, undefined, token)
 }

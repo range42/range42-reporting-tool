@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref, type Component } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Activity, Archive, ArrowRight, Pencil, TriangleAlert } from '@lucide/vue'
+import { Activity, Archive, ArrowRight, Pencil, Settings, TriangleAlert } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { listExercises, type Exercise } from '@/services/exercises'
 import { ApiError } from '@/services/http'
@@ -10,6 +10,7 @@ import AppShell from '@/components/AppShell.vue'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const router = useRouter()
 const exercises = ref<Exercise[]>([])
 const loading = ref(true)
 const error = ref('')
@@ -66,6 +67,15 @@ onMounted(async () => {
       >
         {{ t('exercises.manageRoles') }}
       </RouterLink>
+      <button
+        v-if="auth.isAdmin"
+        type="button"
+        data-test="new-exercise"
+        class="flex h-9 items-center rounded-md bg-indigo-500 px-3 text-sm font-medium text-white transition hover:bg-indigo-400"
+        @click="router.push('/exercises/new')"
+      >
+        {{ t('exercises.new') }}
+      </button>
     </template>
 
     <div class="mb-6">
@@ -112,6 +122,16 @@ onMounted(async () => {
           <div class="font-semibold">{{ ex.name }}</div>
           <div v-if="ex.description" class="mt-1 text-sm text-zinc-500">{{ ex.description }}</div>
         </div>
+        <button
+          v-if="auth.isAdmin"
+          type="button"
+          :data-test="`exercise-settings-${ex.id}`"
+          class="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+          :title="t('exercises.settingsLink')"
+          @click.prevent="router.push(`/exercises/${ex.id}/settings`)"
+        >
+          <Settings class="h-4 w-4" />
+        </button>
         <ArrowRight
           class="h-4 w-4 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-indigo-500"
         />
