@@ -4,6 +4,8 @@ export interface ExerciseRoleAssignment {
   id: string
   exercise_id: string
   user_id: string
+  user_display_name: string
+  user_email: string
   role_key: string
   created_at: string
 }

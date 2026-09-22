@@ -19,6 +19,8 @@ function assignment(over: Partial<ExerciseRoleAssignment> = {}): ExerciseRoleAss
     id: 'r1',
     exercise_id: 'ex1',
     user_id: 'u1',
+    user_display_name: 'Carol',
+    user_email: 'carol@x',
     role_key: 'evaluator',
     created_at: 'now',
     ...over,
@@ -69,7 +71,7 @@ describe('RoleAssignmentsPanel', () => {
     ])
     const grant = vi
       .spyOn(exerciseRolesSvc, 'grantExerciseRole')
-      .mockResolvedValue(assignment({ id: 'r2', user_id: 'u2' }))
+      .mockResolvedValue(assignment({ id: 'r2', user_id: 'u2', user_display_name: 'Ivan' }))
     const wrapper = mountPanel()
     await flushPromises()
 
@@ -78,7 +80,7 @@ describe('RoleAssignmentsPanel', () => {
     await wrapper.get('[data-test="role-candidate-u2"]').trigger('click')
     await wrapper.get('[data-test="role-select"]').setValue('evaluator')
     vi.mocked(exerciseRolesSvc.listExerciseRoleAssignments).mockResolvedValue([
-      assignment({ id: 'r2', user_id: 'u2' }),
+      assignment({ id: 'r2', user_id: 'u2', user_display_name: 'Ivan' }),
     ])
     await wrapper.get('[data-test="role-grant"]').trigger('click')
     await flushPromises()

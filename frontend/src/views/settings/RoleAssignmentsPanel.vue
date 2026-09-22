@@ -1,11 +1,5 @@
 <script setup lang="ts">
-/**
- * Global-Admin role-assignment CRUD for an exercise.
- *
- * The assignment list only carries `user_id` (no joined name/email) — this caches display
- * names for users seen through the search picker so recently granted rows read as names, not
- * raw ids. Anyone else's assignment falls back to their id.
- */
+/** Global-Admin role-assignment CRUD for an exercise. */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { UserMinus } from '@lucide/vue'
@@ -46,11 +40,6 @@ const pickedLabel = computed(() => {
 const canGrant = computed(
   () => pickedUserId.value !== '' && roleKey.value !== '' && !granting.value,
 )
-
-function labelFor(userId: string): string {
-  const u = knownUsers.get(userId)
-  return u ? u.display_name : userId
-}
 
 function roleLabel(key: string): string {
   return roles.value.find((r) => r.role_key === key)?.display_label ?? key
@@ -189,7 +178,7 @@ onMounted(async () => {
         class="flex items-center justify-between rounded-lg border border-zinc-200 px-3.5 py-2.5 text-sm dark:border-zinc-800"
       >
         <span
-          >{{ labelFor(a.user_id) }} —
+          >{{ a.user_display_name }} —
           <code class="text-xs text-zinc-500">{{ roleLabel(a.role_key) }}</code></span
         >
         <button
