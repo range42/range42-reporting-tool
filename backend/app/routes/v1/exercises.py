@@ -349,7 +349,7 @@ async def assign_role(
         details={"user_id": str(user.id), "role_key": body.role_key, "exercise_id": str(exercise_id)},
         ip=client_ip(request),
     )
-    return DataEnvelope(data=ExerciseRoleOut.from_model(r))
+    return DataEnvelope(data=ExerciseRoleOut.from_model(r, user))
 
 
 @router.get("/exercises/{exercise_id}/roles")
@@ -358,8 +358,14 @@ async def list_role_assignments(
     _: User = Depends(require_global_admin),
     db: AsyncSession = Depends(get_db),
 ) -> DataEnvelope[list[ExerciseRoleOut]]:
-    rows = (await db.execute(select(ExerciseRole).where(ExerciseRole.exercise_id == exercise_id))).scalars().all()
-    return DataEnvelope(data=[ExerciseRoleOut.from_model(r) for r in rows])
+    rows = (
+        await db.execute(
+            select(ExerciseRole, User)
+            .join(User, User.id == ExerciseRole.user_id)
+            .where(ExerciseRole.exercise_id == exercise_id)
+        )
+    ).all()
+    return DataEnvelope(data=[ExerciseRoleOut.from_model(r, user) for r, user in rows])
 
 
 @router.delete("/exercises/{exercise_id}/roles/{assignment_id}", status_code=204)

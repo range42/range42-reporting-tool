@@ -20,7 +20,9 @@ def client(sm: async_sessionmaker) -> AsyncClient:
 async def make_user_token(sm: async_sessionmaker, *, jti: str, admin: bool = False, **kw: Any) -> tuple[str, str]:
     """Create a user + session; return (token, user_id)."""
     async with sm() as s:
-        u = User(external_id=f"oidc:{jti}", email=f"{jti}@x", display_name="U", is_global_admin=admin, **kw)
+        kw.setdefault("email", f"{jti}@x")
+        kw.setdefault("display_name", "U")
+        u = User(external_id=f"oidc:{jti}", is_global_admin=admin, **kw)
         s.add(u)
         await s.flush()
         s.add(

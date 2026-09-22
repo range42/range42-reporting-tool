@@ -21,6 +21,18 @@ export const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/exercises/new',
+      name: 'exercise-wizard',
+      component: () => import('@/views/settings/ExerciseWizard.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/exercises/:exerciseId/settings',
+      name: 'exercise-settings',
+      component: () => import('@/views/settings/ExerciseSettings.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/exercises/:exerciseId',
       name: 'exercise-entry',
       component: () => import('@/views/ExerciseEntry.vue'),

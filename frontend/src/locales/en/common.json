@@ -18,12 +18,83 @@
     "subtitle": "Select an exercise to work in",
     "empty": "No exercises available to you yet.",
     "loadError": "Could not load exercises. Please try again.",
+    "new": "New exercise",
+    "settingsLink": "Exercise settings",
     "manageTemplates": "Manage templates",
     "manageRoles": "Manage roles",
     "status": {
       "draft": "Draft",
       "active": "Active",
       "archived": "Archived"
+    },
+    "wizard": {
+      "title": "New exercise",
+      "subtitle": "Set the basics — teams, templates, and reports come next.",
+      "createError": "Could not create the exercise.",
+      "name": "Name",
+      "description": "Description",
+      "starts": "Starts",
+      "ends": "Ends",
+      "classification": "Classification",
+      "classificationPlaceholder": "e.g. UNCLASSIFIED",
+      "tlp": "TLP",
+      "tlpPlaceholder": "e.g. AMBER",
+      "cancel": "Cancel",
+      "submit": "Create exercise"
+    },
+    "settings": {
+      "title": "Exercise settings",
+      "subtitle": "Configure this exercise, its teams, and who can do what in it.",
+      "loading": "Loading…",
+      "loadError": "Could not load this exercise.",
+      "saveError": "Could not save these details.",
+      "archiveError": "Could not archive this exercise.",
+      "archiveConfirm": "Archive this exercise? It stays read-only for everyone afterward.",
+      "status": "Status",
+      "archive": "Archive",
+      "save": "Save",
+      "tabs": {
+        "details": "Details",
+        "teamTypes": "Team types",
+        "teams": "Teams",
+        "roles": "Roles"
+      },
+      "teamTypes": {
+        "key": "Key",
+        "label": "Label",
+        "color": "Color",
+        "visible": "Visible to other teams",
+        "add": "Add",
+        "saveError": "Could not save that team type.",
+        "deleteError": "Could not delete that team type — it may still be in use by a team.",
+        "loadError": "Could not load team types."
+      },
+      "teams": {
+        "name": "Name",
+        "type": "Team type",
+        "typePlaceholder": "Choose a team type",
+        "color": "Color",
+        "add": "Add",
+        "saveError": "Could not save that team.",
+        "deleteError": "Could not delete that team.",
+        "loadError": "Could not load teams.",
+        "searchPlaceholder": "Search people by name or email…",
+        "searchError": "Could not search for people.",
+        "addMemberError": "Could not add that member.",
+        "removeMemberError": "Could not remove that member.",
+        "noMembers": "No members yet."
+      },
+      "roles": {
+        "person": "Person",
+        "searchPlaceholder": "Search by name or email…",
+        "searchError": "Could not search for people.",
+        "role": "Role",
+        "rolePlaceholder": "Choose a role",
+        "grant": "Grant",
+        "grantError": "Could not grant that role — the person may already hold it.",
+        "revokeError": "Could not revoke that assignment.",
+        "loadError": "Could not load role assignments."
+      }
     }
   },
   "roles": {
