@@ -43,6 +43,7 @@ class SectionGradeEntry:
     name: str
     grade: Decimal | None
     weight: Decimal
+    feedback: str | None = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,7 @@ def aggregate_section_grades(evaluations: Sequence[EvaluationInput]) -> list[Sec
             value = compute_section_value(s)
             if value is not None:
                 contributions.setdefault(s.section_def_id, []).append((value, ev.aggregated_weight))
+    feedback = aggregate_section_feedback(evaluations)
     entries = []
     for section_def_id, defn in definitions.items():
         average = compute_weighted_average(contributions.get(section_def_id, []))
@@ -118,10 +120,42 @@ def aggregate_section_grades(evaluations: Sequence[EvaluationInput]) -> list[Sec
                 name=defn.name,
                 grade=None if average is None else quantize_grade(average),
                 weight=defn.grade_weight,
+                feedback=feedback.get(section_def_id),
             )
         )
     order = {sid: defn.position for sid, defn in definitions.items()}
     return sorted(entries, key=lambda e: order[e.section_def_id])
+
+
+def aggregate_section_feedback(evaluations: Sequence[EvaluationInput]) -> dict[str, str | None]:
+    """Per-section feedback, joined across contributing evaluators.
+
+    Mirrors ``aggregate_section_grades``'s definition/contribution split: ``not_graded``
+    sections are excluded, and only ``contributes`` evaluations feed a value, so the joined
+    text describes the same evaluator set as the grade numbers. No per-evaluator label or
+    count is attached — the team sees combined guidance, not who said what.
+    """
+    definitions: set[str] = set()
+    pieces: dict[str, list[str]] = {}
+    for ev in evaluations:
+        if not ev.contributes:
+            continue
+        for s in ev.sections:
+            if s.grade_mode == "not_graded":
+                continue
+            definitions.add(s.section_def_id)
+            if s.feedback:
+                pieces.setdefault(s.section_def_id, []).append(s.feedback)
+    return {
+        section_def_id: "\n".join(pieces[section_def_id]) if section_def_id in pieces else None
+        for section_def_id in definitions
+    }
+
+
+def aggregate_overall_feedback(evaluations: Sequence[EvaluationInput]) -> str | None:
+    """Report-level feedback, joined across contributing evaluators' ``overall_feedback``."""
+    pieces = [ev.overall_feedback for ev in evaluations if ev.contributes and ev.overall_feedback]
+    return "\n".join(pieces) if pieces else None
 
 
 def build_timeline_entry(

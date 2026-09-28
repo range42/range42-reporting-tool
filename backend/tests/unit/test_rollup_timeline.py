@@ -4,7 +4,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.services.scoring.rollup import EvaluationInput, GradeTimeline, SectionGradeInput
-from app.services.scoring.timeline import ReportMeta, build_timeline_entry
+from app.services.scoring.timeline import (
+    ReportMeta,
+    aggregate_overall_feedback,
+    aggregate_section_feedback,
+    build_timeline_entry,
+)
 
 EARLIER = datetime(2026, 8, 30, 9, 0, tzinfo=UTC)
 LATER = datetime(2026, 8, 31, 17, 30, tzinfo=UTC)
@@ -29,6 +34,7 @@ def _s(grade: str | None, **kw) -> SectionGradeInput:
         grade_max=Decimal("10"),
         grade_weight=Decimal("1"),
         position=0,
+        feedback=None,
     )
     return SectionGradeInput(**{**base, **kw})
 
@@ -39,6 +45,7 @@ def _ev(
     eid: str = "e",
     completed=LATER,
     contributes: bool = True,
+    overall_feedback: str | None = None,
 ) -> EvaluationInput:
     return EvaluationInput(
         evaluation_id=eid,
@@ -47,6 +54,7 @@ def _ev(
         sections=sections,
         completed_at=completed,
         contributes=contributes,
+        overall_feedback=overall_feedback,
     )
 
 
@@ -227,3 +235,82 @@ def test_timeline_section_is_listed_with_a_null_grade_when_only_non_contributors
     vanishing because the only evaluator who marked it was removed."""
     entry = _entry(_ev(_s("5"), eid="dropped", contributes=False), grade=None)
     assert [(g.section_def_id, g.grade) for g in entry.section_grades] == [("s1", None)]
+
+
+# --- feedback aggregation, alongside the grades ------------------------------------------
+#
+# Same contributor/weight rules as the grade numbers: a non-contributing evaluator's feedback
+# must not leak in, and no per-evaluator label or count may appear in the joined text — the
+# team sees combined guidance, never who said what or how many evaluators said it.
+
+
+def test_aggregate_section_feedback_single_evaluator_passthrough() -> None:
+    result = aggregate_section_feedback([_ev(_s("8", feedback="Good structure."))])
+    assert result == {"s1": "Good structure."}
+
+
+def test_aggregate_section_feedback_joins_multiple_contributors() -> None:
+    result = aggregate_section_feedback(
+        [
+            _ev(_s("9", feedback="Clear and concise."), eid="a"),
+            _ev(_s("5", feedback="Needs more detail."), eid="b"),
+        ]
+    )
+    assert result["s1"] == "Clear and concise.\nNeeds more detail."
+
+
+def test_aggregate_section_feedback_is_none_when_nobody_left_feedback() -> None:
+    result = aggregate_section_feedback([_ev(_s("8", feedback=None))])
+    assert result["s1"] is None
+
+
+def test_aggregate_section_feedback_excludes_not_graded_sections() -> None:
+    sections = (
+        _s("8", feedback="On the mark."),
+        _s(None, section_def_id="s2", name="Service status", grade_mode="not_graded", feedback="ignored"),
+    )
+    result = aggregate_section_feedback([_ev(*sections)])
+    assert list(result.keys()) == ["s1"]
+
+
+def test_aggregate_section_feedback_excludes_a_non_contributing_evaluation() -> None:
+    result = aggregate_section_feedback(
+        [
+            _ev(_s("9", feedback="Counts."), eid="counts"),
+            _ev(_s("5", feedback="Dropped, must not appear."), eid="dropped", contributes=False),
+        ]
+    )
+    assert result["s1"] == "Counts."
+
+
+def test_aggregate_overall_feedback_single_evaluator_passthrough() -> None:
+    assert aggregate_overall_feedback([_ev(_s("8"), overall_feedback="Solid report.")]) == "Solid report."
+
+
+def test_aggregate_overall_feedback_joins_multiple_contributors() -> None:
+    result = aggregate_overall_feedback(
+        [
+            _ev(_s("9"), eid="a", overall_feedback="Well organized."),
+            _ev(_s("5"), eid="b", overall_feedback="Watch the timeline section."),
+        ]
+    )
+    assert result == "Well organized.\nWatch the timeline section."
+
+
+def test_aggregate_overall_feedback_is_none_when_nobody_left_feedback() -> None:
+    assert aggregate_overall_feedback([_ev(_s("8"), overall_feedback=None)]) is None
+
+
+def test_aggregate_overall_feedback_excludes_a_non_contributing_evaluation() -> None:
+    result = aggregate_overall_feedback(
+        [
+            _ev(_s("9"), eid="counts", overall_feedback="Counts."),
+            _ev(_s("5"), eid="dropped", contributes=False, overall_feedback="Dropped, must not appear."),
+        ]
+    )
+    assert result == "Counts."
+
+
+def test_timeline_section_grades_carry_the_aggregated_feedback() -> None:
+    entry = _entry(_ev(_s("8", feedback="Good structure.")))
+    assert entry.section_grades[0].feedback == "Good structure."
