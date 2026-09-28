@@ -228,6 +228,7 @@
     "new": "New report",
     "noDue": "—",
     "overdue": "Overdue",
+    "previousReportHeading": "Previous report",
     "recallAction": "Recall",
     "recallError": "Could not recall the report. Please try again.",
     "restore": "Restore draft",

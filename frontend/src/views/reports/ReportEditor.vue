@@ -26,9 +26,15 @@ import {
 } from '@/services/attachments'
 import { useDraftCache } from '@/composables/useDraftCache'
 import { useCharBudget } from '@/composables/useCharBudget'
+import {
+  useWriterPreviousReport,
+  type PreviousReportStatus,
+} from '@/composables/useWriterPreviousReport'
+import type { EvaluationSummary } from '@/services/evaluations'
 import AttachmentsPanel from '@/views/reports/AttachmentsPanel.vue'
 import RichTextField from '@/views/reports/RichTextField.vue'
 import SectionConflictMerge from '@/views/reports/SectionConflictMerge.vue'
+import PreviousReportPanel from '@/views/reports/PreviousReportPanel.vue'
 
 const AUTOSAVE_MS = 30_000
 
@@ -81,6 +87,12 @@ const sections = reactive<EditableSection[]>([])
 const error = ref('')
 const submitError = ref('')
 
+// Previous-campaign-report reference — a bonus panel, never required and never blocking:
+// writing/saving the current report proceeds regardless of this state.
+const previousStatus = ref<PreviousReportStatus>('idle')
+const previousReportDetail = ref<ReportDetail | null>(null)
+const previousSummary = ref<EvaluationSummary | null>(null)
+
 const isTeamAdmin = computed(() => caps.has(exerciseId, REPORTS_RECALL))
 
 // Write-lock mirror of the backend policy: an assigned draft is editable
@@ -124,6 +136,19 @@ function toEditable(s: ReportDetail['sections'][number]): EditableSection {
   }
 }
 
+async function loadPreviousReport(teamId: string): Promise<void> {
+  const result = useWriterPreviousReport({
+    token: token.value,
+    exerciseId,
+    reportId: rid,
+    teamId,
+  })
+  await result.load()
+  previousStatus.value = result.status.value
+  previousReportDetail.value = result.previousReport.value
+  previousSummary.value = result.previousSummary.value
+}
+
 onMounted(async () => {
   if (!auth.token) return
   // Capabilities drive the team-admin lock exemption + the recall affordance.
@@ -136,6 +161,7 @@ onMounted(async () => {
       if (draft.isNewerThanServer(s.sectionDefId, s.serverUpdatedAt)) s.restore = true
     }
     attachments.value = await listAttachments(token.value, exerciseId, rid)
+    void loadPreviousReport(detail.team_id)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('reports.loadError')
   }
@@ -421,6 +447,14 @@ async function submit(): Promise<void> {
       >
         <TriangleAlert class="h-4 w-4 shrink-0" />
         <span>{{ submitError }}</span>
+      </div>
+
+      <div class="mb-6">
+        <PreviousReportPanel
+          :status="previousStatus"
+          :previous-report="previousReportDetail"
+          :previous-summary="previousSummary"
+        />
       </div>
 
       <div class="space-y-8">

@@ -6,6 +6,9 @@ import en from '@/locales/en/common.json'
 import ReportEditor from '@/views/reports/ReportEditor.vue'
 import * as reports from '@/services/reports'
 import * as attachments from '@/services/attachments'
+import * as campaigns from '@/services/campaigns'
+import * as evaluations from '@/services/evaluations'
+import { ApiError } from '@/services/http'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 
@@ -13,6 +16,8 @@ const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
 vi.mock('@/services/reports')
 vi.mock('@/services/attachments')
+vi.mock('@/services/campaigns')
+vi.mock('@/services/evaluations')
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { exerciseId: 'ex1', rid: 'r1' } }),
   useRouter: () => ({ push: vi.fn() }),
@@ -94,6 +99,9 @@ describe('ReportEditor.vue', () => {
     vi.mocked(attachments.attachmentUrl).mockImplementation(
       (ex, rid, aid) => `/api/v1/exercises/${ex}/reports/${rid}/attachments/${aid}/download`,
     )
+    // Most reports aren't in a campaign — the default keeps every pre-existing test's
+    // PreviousReportPanel silent (no_campaign) without per-test mocking.
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([])
   })
 
   it('renders a char counter for rich_text and blocks over the limit', async () => {
@@ -322,5 +330,127 @@ describe('ReportEditor.vue', () => {
     await flushPromises()
     expect(w.find('[data-test="attach-btn-s1"]').exists()).toBe(false)
     expect(w.find('[data-test="img-btn-s1"]').exists()).toBe(false)
+  })
+
+  // --- previous-campaign-report panel: a reference surface, never a gate on writing ------
+
+  it('shows no previous-report panel when the current report is in no campaign', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue({ ...richDetail, team_id: 't1' } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="previous-report-panel"]').exists()).toBe(false)
+  })
+
+  it('shows the previous report content and, once evaluated, its scores', async () => {
+    vi.mocked(reports.getReport).mockImplementation(
+      async (_t, _e, rid) =>
+        (rid === 'r0'
+          ? { ...richDetail, id: 'r0', name: 'Day 1', team_id: 't1' }
+          : { ...richDetail, id: 'r1', team_id: 't1' }) as never,
+    )
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([
+      {
+        id: 'c1',
+        exercise_id: 'ex1',
+        name: 'Sitreps',
+        description: null,
+        report_count: 2,
+        created_by: 'u1',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    vi.mocked(campaigns.getCampaignTimeline).mockResolvedValue([
+      {
+        report_id: 'r0',
+        name: 'Day 1',
+        status: 'evaluated',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+      {
+        report_id: 'r1',
+        name: 'Day 2',
+        status: 'draft',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+    ])
+    vi.mocked(evaluations.getReportEvaluationSummary).mockResolvedValue({
+      report_id: 'r0',
+      overall_grade: '8.00',
+      overall_feedback: 'Solid overall.',
+      evaluated_at: '2026-09-01T00:00:00Z',
+      section_grades: [],
+    })
+
+    const w = mountEditor()
+    await flushPromises()
+
+    const panel = w.find('[data-test="previous-report-panel"]')
+    expect(panel.exists()).toBe(true)
+    expect(panel.text()).toContain('Day 1')
+    expect(w.find('[data-test="evaluation-summary-overall"]').text()).toContain('8.00')
+  })
+
+  it('writing the current report is unaffected by the previous report not being evaluated yet', async () => {
+    vi.mocked(reports.getReport).mockImplementation(
+      async (_t, _e, rid) =>
+        (rid === 'r0'
+          ? { ...richDetail, id: 'r0', name: 'Day 1', team_id: 't1' }
+          : { ...richDetail, id: 'r1', team_id: 't1' }) as never,
+    )
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([
+      {
+        id: 'c1',
+        exercise_id: 'ex1',
+        name: 'Sitreps',
+        description: null,
+        report_count: 2,
+        created_by: 'u1',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    vi.mocked(campaigns.getCampaignTimeline).mockResolvedValue([
+      {
+        report_id: 'r0',
+        name: 'Day 1',
+        status: 'submitted',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+      {
+        report_id: 'r1',
+        name: 'Day 2',
+        status: 'draft',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+    ])
+    vi.mocked(evaluations.getReportEvaluationSummary).mockRejectedValue(
+      new ApiError('HTTP_ERROR', 'not_yet_evaluated', [], undefined, 409),
+    )
+
+    const w = mountEditor()
+    await flushPromises()
+
+    expect(w.find('[data-test="previous-report-panel"]').exists()).toBe(true)
+    expect(w.find('[data-test="evaluation-summary-overall"]').exists()).toBe(false)
+    // The current report is still fully editable — the previous one's status never gates it.
+    expect(w.find('[data-test="content-s1"]').attributes('disabled')).toBeUndefined()
+    expect(w.find('[data-test="save-s1"]').exists()).toBe(true)
   })
 })
