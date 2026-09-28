@@ -180,4 +180,41 @@ describe('campaigns service', () => {
     expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns/c1/evaluators/u1')
     expect(fetchMock.mock.calls[0]![1].method).toBe('DELETE')
   })
+
+  it('getCampaign GETs the single-campaign path and unwraps data', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(env(200, { id: 'c1', name: 'Campaign' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const out = await svc.getCampaign('tok', 'ex1', 'c1')
+
+    expect(out.id).toBe('c1')
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns/c1')
+    expect(fetchMock.mock.calls[0]![1].method).toBe('GET')
+  })
+
+  it('updateCampaign PATCHes only the given fields', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(env(200, { id: 'c1', name: 'Renamed' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await svc.updateCampaign('tok', 'ex1', 'c1', { name: 'Renamed' })
+
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns/c1')
+    expect(fetchMock.mock.calls[0]![1].method).toBe('PATCH')
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({ name: 'Renamed' })
+  })
+
+  it('deleteCampaign DELETEs the campaign', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await svc.deleteCampaign('tok', 'ex1', 'c1')
+
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/exercises/ex1/campaigns/c1')
+    expect(fetchMock.mock.calls[0]![1].method).toBe('DELETE')
+  })
+
+  it('getCampaign throws ApiError on a 404', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(errEnv(404, 'not_found', 'nope')))
+    await expect(svc.getCampaign('tok', 'ex1', 'missing')).rejects.toMatchObject({ status: 404 })
+  })
 })

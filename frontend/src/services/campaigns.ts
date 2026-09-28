@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from '@/services/http'
+import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/http'
 import type { ReportDetail } from '@/services/reports'
 
 /** Server-side cap on how many reports one compare call may ask for. */
@@ -63,6 +63,24 @@ export const createCampaign = (
   exerciseId: string,
   body: CampaignCreateInput,
 ): Promise<Campaign> => apiPost<Campaign>(base(exerciseId), body, token)
+
+export const getCampaign = (token: string, exerciseId: string, cid: string): Promise<Campaign> =>
+  apiGet<Campaign>(`${base(exerciseId)}/${cid}`, token)
+
+export type CampaignUpdateInput = Partial<{
+  name: string
+  description: string | null
+}>
+
+export const updateCampaign = (
+  token: string,
+  exerciseId: string,
+  cid: string,
+  body: CampaignUpdateInput,
+): Promise<Campaign> => apiPatch<Campaign>(`${base(exerciseId)}/${cid}`, body, token)
+
+export const deleteCampaign = (token: string, exerciseId: string, cid: string): Promise<void> =>
+  apiDelete(`${base(exerciseId)}/${cid}`, token)
 
 export const listCampaignEvaluators = (
   token: string,

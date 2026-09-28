@@ -99,6 +99,12 @@ export const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/exercises/:exerciseId/campaigns',
+      name: 'campaigns',
+      component: () => import('@/views/settings/CampaignManage.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/exercises/:exerciseId/campaigns/new',
       name: 'campaign-define',
       component: () => import('@/views/settings/CampaignDefine.vue'),

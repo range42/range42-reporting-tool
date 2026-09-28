@@ -403,7 +403,28 @@
     "removeFailed": "Could not remove that evaluator."
   },
   "campaigns": {
+    "nav": "Campaigns",
     "new": "New campaign",
+    "manage": {
+      "title": "Campaigns",
+      "subtitle": "List, edit, and delete campaigns for this exercise.",
+      "loadError": "Could not load campaigns.",
+      "empty": "No campaigns yet.",
+      "reportsCount": "{count} reports",
+      "deleteAction": "Delete",
+      "deleteConfirm": "Delete this campaign? Its evaluator assignments are removed; already-created reports stay.",
+      "deleteError": "Could not delete the campaign.",
+      "backAction": "Back to campaigns",
+      "loadDetailError": "Could not load this campaign.",
+      "nameLabel": "Campaign name",
+      "editAction": "Rename",
+      "saveAction": "Save",
+      "cancelAction": "Cancel",
+      "saveError": "Could not rename the campaign.",
+      "campaignEvaluatorsHeading": "Campaign evaluators",
+      "teamEvaluatorsHeading": "Per-team evaluators",
+      "teamEvaluatorsHint": "A report only auto-assigns an evaluator once the same person covers both the campaign and the report's team."
+    },
     "define": {
       "title": "Define a campaign",
       "subtitle": "Each report spec is instantiated once for every team in the exercise.",
