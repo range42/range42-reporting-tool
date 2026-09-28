@@ -157,7 +157,7 @@ async def _fan_out_campaign_reports(
                 team=team,
                 template=tpl,
                 actor_id=actor_id,
-                name=f"{tpl.name} — {team.name}",
+                name=f"{spec.name or tpl.name} — {team.name}",
                 due_at=spec.due_at,
                 available_at=spec.available_at,
             )

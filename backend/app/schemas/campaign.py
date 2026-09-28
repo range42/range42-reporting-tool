@@ -13,9 +13,15 @@ from app.schemas.domain import _reject_null
 
 
 class CampaignReportSpec(BaseModel):
-    """One report to instantiate for every team when a campaign is defined with ``report_specs``."""
+    """One report to instantiate for every team when a campaign is defined with ``report_specs``.
+
+    ``name`` is optional — two specs sharing a template would otherwise produce identically
+    named reports per team (e.g. two SITREP specs both naming their reports "SITREP — BT1").
+    Left unset, the report name falls back to the template's own name.
+    """
 
     template_id: str
+    name: str | None = None
     available_at: datetime | None = None
     due_at: datetime | None = None
 

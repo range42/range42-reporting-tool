@@ -31,6 +31,8 @@ export interface TimelineEntry {
 /** One report to instantiate for every team when defining a campaign via `report_specs`. */
 export interface CampaignReportSpec {
   template_id: string
+  /** Optional; falls back to the template's own name (backend default) when left unset. */
+  name?: string | null
   available_at?: string | null
   due_at?: string | null
 }

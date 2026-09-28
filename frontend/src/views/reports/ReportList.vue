@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, TriangleAlert, Clock, ShieldCheck, ClipboardCheck } from '@lucide/vue'
+import { Plus, TriangleAlert, Clock, ShieldCheck, ClipboardCheck, CalendarPlus } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
@@ -93,6 +93,10 @@ function openReport(id: string): void {
 function createReport(): void {
   void router.push(`/exercises/${exerciseId}/reports/new`)
 }
+
+function createCampaign(): void {
+  void router.push(`/exercises/${exerciseId}/campaigns/new`)
+}
 </script>
 
 <template>
@@ -117,6 +121,16 @@ function createReport(): void {
       >
         <ClipboardCheck class="h-4 w-4" />
         {{ t('evaluations.nav') }}
+      </button>
+      <button
+        v-if="auth.isAdmin"
+        type="button"
+        data-test="new-campaign"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="createCampaign"
+      >
+        <CalendarPlus class="h-4 w-4" />
+        {{ t('campaigns.new') }}
       </button>
       <button
         v-if="auth.isAdmin"

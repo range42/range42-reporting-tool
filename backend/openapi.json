@@ -5494,6 +5494,17 @@
             "type": "string",
             "title": "Template Id"
           },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "available_at": {
             "anyOf": [
               {
@@ -5524,7 +5535,7 @@
           "template_id"
         ],
         "title": "CampaignReportSpec",
-        "description": "One report to instantiate for every team when a campaign is defined with ``report_specs``."
+        "description": "One report to instantiate for every team when a campaign is defined with ``report_specs``.\n\n``name`` is optional \u2014 two specs sharing a template would otherwise produce identically\nnamed reports per team (e.g. two SITREP specs both naming their reports \"SITREP \u2014 BT1\").\nLeft unset, the report name falls back to the template's own name."
       },
       "CampaignUpdate": {
         "properties": {

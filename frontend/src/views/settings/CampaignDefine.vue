@@ -19,6 +19,7 @@ import { createCampaign, type CampaignReportSpec } from '@/services/campaigns'
 
 interface SpecRow {
   templateId: string
+  name: string
   availableLocal: string
   dueLocal: string
 }
@@ -36,7 +37,7 @@ const token = computed(() => auth.token ?? '')
 
 const templates = ref<TemplateSummary[]>([])
 const name = ref('')
-const specs = ref<SpecRow[]>([{ templateId: '', availableLocal: '', dueLocal: '' }])
+const specs = ref<SpecRow[]>([{ templateId: '', name: '', availableLocal: '', dueLocal: '' }])
 const error = ref('')
 const saving = ref(false)
 
@@ -49,7 +50,7 @@ const canSubmit = computed(
 )
 
 function addSpec(): void {
-  specs.value.push({ templateId: '', availableLocal: '', dueLocal: '' })
+  specs.value.push({ templateId: '', name: '', availableLocal: '', dueLocal: '' })
 }
 
 function removeSpec(index: number): void {
@@ -72,6 +73,7 @@ async function submit(): Promise<void> {
   try {
     const reportSpecs: CampaignReportSpec[] = specs.value.map((s) => ({
       template_id: s.templateId,
+      name: s.name.trim() || null,
       available_at: s.availableLocal ? new Date(s.availableLocal).toISOString() : null,
       due_at: s.dueLocal ? new Date(s.dueLocal).toISOString() : null,
     }))
@@ -110,7 +112,7 @@ async function submit(): Promise<void> {
           v-for="(spec, i) in specs"
           :key="i"
           :data-test="`spec-row-${i}`"
-          class="grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[2fr_1fr_1fr_auto] dark:border-zinc-800"
+          class="grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[1.5fr_1.5fr_1fr_1fr_auto] dark:border-zinc-800"
         >
           <div>
             <label class="mb-1 block text-xs text-zinc-500">{{
@@ -120,6 +122,17 @@ async function submit(): Promise<void> {
               <option value="">{{ t('campaigns.define.templatePlaceholder') }}</option>
               <option v-for="tpl in templates" :key="tpl.id" :value="tpl.id">{{ tpl.name }}</option>
             </select>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-zinc-500">{{
+              t('campaigns.define.specName')
+            }}</label>
+            <input
+              :data-test="`spec-name-${i}`"
+              v-model="spec.name"
+              :placeholder="t('campaigns.define.specNamePlaceholder')"
+              :class="inputClass"
+            />
           </div>
           <div>
             <label class="mb-1 block text-xs text-zinc-500">{{

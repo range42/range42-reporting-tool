@@ -1522,10 +1522,16 @@ export interface components {
         /**
          * CampaignReportSpec
          * @description One report to instantiate for every team when a campaign is defined with ``report_specs``.
+         *
+         *     ``name`` is optional — two specs sharing a template would otherwise produce identically
+         *     named reports per team (e.g. two SITREP specs both naming their reports "SITREP — BT1").
+         *     Left unset, the report name falls back to the template's own name.
          */
         CampaignReportSpec: {
             /** Template Id */
             template_id: string;
+            /** Name */
+            name?: string | null;
             /** Available At */
             available_at?: string | null;
             /** Due At */

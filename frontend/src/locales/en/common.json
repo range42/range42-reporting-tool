@@ -399,6 +399,7 @@
     "removeFailed": "Could not remove that evaluator."
   },
   "campaigns": {
+    "new": "New campaign",
     "define": {
       "title": "Define a campaign",
       "subtitle": "Each report spec is instantiated once for every team in the exercise.",
@@ -408,6 +409,8 @@
       "specsHeading": "Report specs",
       "template": "Template",
       "templatePlaceholder": "Choose a template",
+      "specName": "Report name (optional)",
+      "specNamePlaceholder": "Defaults to the template name",
       "availableAt": "Available from",
       "dueAt": "Due",
       "addSpec": "Add another report",

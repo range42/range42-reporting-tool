@@ -76,6 +76,18 @@ describe('ReportList.vue', () => {
     expect(w.find('[data-test="new-report"]').exists()).toBe(false)
   })
 
+  it('shows the New campaign button for admins only', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const admin = mountList()
+    await flushPromises()
+    expect(admin.find('[data-test="new-campaign"]').exists()).toBe(true)
+
+    setAdmin(false)
+    const nonAdmin = mountList()
+    await flushPromises()
+    expect(nonAdmin.find('[data-test="new-campaign"]').exists()).toBe(false)
+  })
+
   it('shows the Evaluations entry only for a caller who can evaluate', async () => {
     setAdmin(false)
     vi.spyOn(svc, 'listReports').mockResolvedValue([])

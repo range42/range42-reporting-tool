@@ -357,6 +357,47 @@ async def test_campaign_with_report_specs_fans_out_per_team(migrated_db: async_s
         assert {rep["team_id"] for rep in reports} == team_ids
 
 
+async def test_campaign_report_specs_with_the_same_template_use_the_given_name_to_avoid_duplicates(
+    migrated_db: async_sessionmaker,
+) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "BT1", "team_type": "blue"}, headers=ah)
+        sitrep = await _published_template(c, ah)
+        r = await c.post(
+            f"/api/v1/exercises/{ex}/campaigns",
+            json={
+                "name": "SITREP campaign",
+                "report_specs": [
+                    {"template_id": sitrep, "name": "Day 1"},
+                    {"template_id": sitrep, "name": "Day 2"},
+                ],
+            },
+            headers=ah,
+        )
+        assert r.status_code == 201, r.text
+        reports = (await c.get(f"/api/v1/exercises/{ex}/reports", headers=ah)).json()["data"]
+        assert {rep["name"] for rep in reports} == {"Day 1 — BT1", "Day 2 — BT1"}
+
+
+async def test_campaign_report_spec_without_a_name_falls_back_to_the_template_name(
+    migrated_db: async_sessionmaker,
+) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "BT1", "team_type": "blue"}, headers=ah)
+        sitrep = await _published_template(c, ah)
+        await c.post(
+            f"/api/v1/exercises/{ex}/campaigns",
+            json={"name": "C", "report_specs": [{"template_id": sitrep}]},
+            headers=ah,
+        )
+        reports = (await c.get(f"/api/v1/exercises/{ex}/reports", headers=ah)).json()["data"]
+        assert reports[0]["name"] == "T — BT1"
+
+
 async def test_campaign_report_specs_carry_available_at_and_due_at(migrated_db: async_sessionmaker) -> None:
     ah = await _ga(migrated_db)
     async with client(migrated_db) as c:

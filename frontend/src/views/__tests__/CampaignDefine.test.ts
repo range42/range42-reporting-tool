@@ -95,12 +95,34 @@ describe('CampaignDefine', () => {
       report_specs: [
         {
           template_id: 'tpl1',
+          name: null,
           available_at: new Date('2026-11-25T00:00').toISOString(),
           due_at: new Date('2026-12-01T00:00').toISOString(),
         },
       ],
     })
     expect(push).toHaveBeenCalledWith('/exercises/ex1/campaigns/c1/evaluators')
+  })
+
+  it('passes a per-spec name through so same-template specs do not collide', async () => {
+    const create = vi
+      .spyOn(campaignsSvc, 'createCampaign')
+      .mockResolvedValue({ id: 'c1', name: 'C', report_count: 3 } as never)
+    const wrapper = await mountPage()
+
+    await wrapper.get('[data-test="define-name"]').setValue('SITREP campaign')
+    await wrapper.get('[data-test="spec-template-0"]').setValue('tpl1')
+    await wrapper.get('[data-test="spec-name-0"]').setValue('Day 1')
+    await wrapper.get('[data-test="define-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledWith(
+      'tok',
+      'ex1',
+      expect.objectContaining({
+        report_specs: [expect.objectContaining({ template_id: 'tpl1', name: 'Day 1' })],
+      }),
+    )
   })
 
   it('surfaces a create error without navigating', async () => {
