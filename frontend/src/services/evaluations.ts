@@ -265,3 +265,39 @@ export const listEvaluatorCandidates = (
   exerciseId: string,
 ): Promise<EvaluatorCandidate[]> =>
   apiGet<EvaluatorCandidate[]>(`/api/v1/exercises/${exerciseId}/evaluator-candidates`, token)
+
+/** One section's aggregated grade + feedback, for `EvaluationSummary`. No `evaluator_id` —
+ *  the own-team read path never reveals who graded what, only the combined result. */
+export interface SectionGradeSummary {
+  section_def_id: string
+  name: string
+  grade: string | null
+  weight: string
+  feedback: string | null
+}
+
+/** `GET .../reports/{rid}/evaluation-summary` — the own-team, per-section grade+feedback
+ *  view. Report-level, NOT nested under `/evaluations`. */
+export interface EvaluationSummary {
+  report_id: string
+  overall_grade: string | null
+  overall_feedback: string | null
+  evaluated_at: string | null
+  section_grades: SectionGradeSummary[]
+}
+
+/**
+ * Throws a typed `ApiError` (status 409) when the report isn't evaluated yet, or when
+ * `scoring_config.teams_see_own_scores` hides it — both are expected states for this
+ * endpoint's caller, not failures. The caller decides how to treat a 409, same as
+ * `useCampaignPairing` does for a 403 on `listEvaluationsForReport`.
+ */
+export const getReportEvaluationSummary = (
+  token: string,
+  exerciseId: string,
+  rid: string,
+): Promise<EvaluationSummary> =>
+  apiGet<EvaluationSummary>(
+    `/api/v1/exercises/${exerciseId}/reports/${rid}/evaluation-summary`,
+    token,
+  )

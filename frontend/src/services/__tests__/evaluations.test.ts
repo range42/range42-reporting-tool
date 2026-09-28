@@ -117,4 +117,47 @@ describe('evaluations service', () => {
       status: 403,
     })
   })
+
+  // getReportEvaluationSummary is report-level, NOT nested under /evaluations — it's the
+  // own-team read path, distinct from the evaluator's report-nested evaluation routes above.
+  it('getReportEvaluationSummary GETs the report-level evaluation-summary path and unwraps data', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      env(200, {
+        report_id: 'r1',
+        overall_grade: '8.00',
+        overall_feedback: 'Solid overall.',
+        evaluated_at: '2026-09-01T00:00:00Z',
+        section_grades: [
+          { section_def_id: 's1', name: 'S', grade: '8.00', weight: '1.0', feedback: 'Good structure.' },
+        ],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const out = await svc.getReportEvaluationSummary('tok', 'ex1', 'r1')
+    expect(out.overall_grade).toBe('8.00')
+    expect(out.overall_feedback).toBe('Solid overall.')
+    expect(out.section_grades).toEqual([
+      { section_def_id: 's1', name: 'S', grade: '8.00', weight: '1.0', feedback: 'Good structure.' },
+    ])
+    const [url, init] = fetchMock.mock.calls[0]!
+    expect(url).toBe('/api/v1/exercises/ex1/reports/r1/evaluation-summary')
+    expect(init.method).toBe('GET')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+  })
+
+  // "Not yet evaluated" and "hidden by config" are both a typed 409 the route emits on
+  // purpose (see test_evaluation_summary.py) — the service surfaces it as a normal ApiError
+  // rather than swallowing it, matching how getEvaluation's 403 is handled above; the caller
+  // (a composable) decides what a 409 here means, same as useCampaignPairing does for 403.
+  it('getReportEvaluationSummary throws ApiError with status 409 and the reason as the message', async () => {
+    const res = new Response(
+      JSON.stringify({ error: { code: 'HTTP_ERROR', message: 'not_yet_evaluated', details: [] } }),
+      { status: 409, headers: { 'Content-Type': 'application/json' } },
+    )
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res))
+    await expect(svc.getReportEvaluationSummary('tok', 'ex1', 'r1')).rejects.toMatchObject({
+      message: 'not_yet_evaluated',
+      status: 409,
+    })
+  })
 })
