@@ -111,6 +111,12 @@ export const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/exercises/:exerciseId/campaigns/:cid',
+      name: 'campaign-detail',
+      component: () => import('@/views/settings/CampaignDetail.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/exercises/:exerciseId/campaigns/:campaignId/evaluators',
       name: 'campaign-evaluators',
       component: () => import('@/views/settings/CampaignEvaluators.vue'),

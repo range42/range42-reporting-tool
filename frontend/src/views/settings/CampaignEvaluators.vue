@@ -9,8 +9,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { UserMinus, UserPlus } from '@lucide/vue'
 import AppShell from '@/components/AppShell.vue'
+import EvaluatorAssignmentPanel from '@/components/EvaluatorAssignmentPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import { ApiError } from '@/services/http'
 import { listEvaluatorCandidates, type EvaluatorCandidate } from '@/services/evaluations'
@@ -31,27 +31,21 @@ const token = computed(() => auth.token ?? '')
 
 const rows = ref<CampaignEvaluatorSummary[]>([])
 const candidates = ref<EvaluatorCandidate[]>([])
-const picked = ref('')
 const loading = ref(true)
 const error = ref('')
 const assignError = ref('')
 const assigning = ref(false)
 
-const offerable = computed(() =>
-  candidates.value.filter((c) => !rows.value.some((r) => r.evaluator_id === c.user_id)),
-)
-
 async function load(): Promise<void> {
   rows.value = await listCampaignEvaluators(token.value, exerciseId, campaignId)
 }
 
-async function assign(): Promise<void> {
-  if (picked.value === '' || assigning.value) return
+async function assign(evaluatorId: string): Promise<void> {
+  if (assigning.value) return
   assigning.value = true
   assignError.value = ''
   try {
-    await addCampaignEvaluator(token.value, exerciseId, campaignId, picked.value)
-    picked.value = ''
+    await addCampaignEvaluator(token.value, exerciseId, campaignId, evaluatorId)
     await load()
   } catch (e) {
     assignError.value = e instanceof ApiError ? e.message : t('campaignEvaluators.assignFailed')
@@ -98,83 +92,21 @@ onMounted(async () => {
 
     <p v-else-if="error" data-test="assign-load-error" class="text-sm text-red-500">{{ error }}</p>
 
-    <template v-else>
-      <section class="mb-8 space-y-2">
-        <h2 class="text-xs font-medium uppercase tracking-wider text-zinc-500">
-          {{ t('campaignEvaluators.addHeading') }}
-        </h2>
-
-        <p
-          v-if="candidates.length === 0"
-          data-test="assign-no-candidates"
-          class="text-sm text-zinc-500"
-        >
-          {{ t('campaignEvaluators.noCandidates') }}
-        </p>
-
-        <div v-else class="flex flex-wrap items-center gap-2">
-          <label for="campaign-evaluator-pick" class="sr-only">{{
-            t('campaignEvaluators.pickLabel')
-          }}</label>
-          <select
-            id="campaign-evaluator-pick"
-            v-model="picked"
-            data-test="assign-pick"
-            class="h-9 rounded-md border border-zinc-200 bg-white px-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="">{{ t('campaignEvaluators.pickLabel') }}</option>
-            <option v-for="c in offerable" :key="c.user_id" :value="c.user_id">
-              {{ c.display_name }} ({{ c.email }})
-            </option>
-          </select>
-          <button
-            type="button"
-            data-test="assign-submit"
-            :disabled="picked === '' || assigning"
-            class="flex h-9 items-center gap-1.5 rounded-md bg-indigo-500 px-3 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:opacity-50"
-            @click="assign"
-          >
-            <UserPlus class="h-4 w-4" />
-            {{ t('campaignEvaluators.assignAction') }}
-          </button>
-        </div>
-
-        <p v-if="assignError" data-test="assign-error" class="text-sm text-red-500">
-          {{ assignError }}
-        </p>
-      </section>
-
-      <section class="space-y-2">
-        <h2 class="text-xs font-medium uppercase tracking-wider text-zinc-500">
-          {{ t('campaignEvaluators.currentHeading') }}
-        </h2>
-
-        <p v-if="rows.length === 0" data-test="assign-none" class="text-sm text-zinc-500">
-          {{ t('campaignEvaluators.nobody') }}
-        </p>
-
-        <ul v-else class="space-y-1.5">
-          <li
-            v-for="r in rows"
-            :key="r.id"
-            :data-test="`assign-row-${r.id}`"
-            class="flex items-center justify-between rounded-lg border border-zinc-200 px-3.5 py-2.5 dark:border-zinc-800"
-          >
-            <span class="text-sm"
-              >{{ r.display_name }} <span class="text-zinc-500">({{ r.email }})</span></span
-            >
-            <button
-              type="button"
-              :data-test="`assign-remove-${r.id}`"
-              class="flex h-7 items-center gap-1 rounded-md px-2 text-xs text-red-500 transition hover:bg-red-500/10"
-              @click="remove(r.evaluator_id)"
-            >
-              <UserMinus class="h-3.5 w-3.5" />
-              {{ t('campaignEvaluators.removeAction') }}
-            </button>
-          </li>
-        </ul>
-      </section>
-    </template>
+    <EvaluatorAssignmentPanel
+      v-else
+      :rows="rows"
+      :candidates="candidates"
+      :assigning="assigning"
+      :assign-error="assignError"
+      :add-heading="t('campaignEvaluators.addHeading')"
+      :no-candidates-text="t('campaignEvaluators.noCandidates')"
+      :pick-label="t('campaignEvaluators.pickLabel')"
+      :assign-action-text="t('campaignEvaluators.assignAction')"
+      :current-heading="t('campaignEvaluators.currentHeading')"
+      :nobody-text="t('campaignEvaluators.nobody')"
+      :remove-action-text="t('campaignEvaluators.removeAction')"
+      @assign="assign"
+      @remove="remove"
+    />
   </AppShell>
 </template>
