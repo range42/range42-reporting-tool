@@ -128,7 +128,13 @@ describe('evaluations service', () => {
         overall_feedback: 'Solid overall.',
         evaluated_at: '2026-09-01T00:00:00Z',
         section_grades: [
-          { section_def_id: 's1', name: 'S', grade: '8.00', weight: '1.0', feedback: 'Good structure.' },
+          {
+            section_def_id: 's1',
+            name: 'S',
+            grade: '8.00',
+            weight: '1.0',
+            feedback: 'Good structure.',
+          },
         ],
       }),
     )
@@ -137,7 +143,13 @@ describe('evaluations service', () => {
     expect(out.overall_grade).toBe('8.00')
     expect(out.overall_feedback).toBe('Solid overall.')
     expect(out.section_grades).toEqual([
-      { section_def_id: 's1', name: 'S', grade: '8.00', weight: '1.0', feedback: 'Good structure.' },
+      {
+        section_def_id: 's1',
+        name: 'S',
+        grade: '8.00',
+        weight: '1.0',
+        feedback: 'Good structure.',
+      },
     ])
     const [url, init] = fetchMock.mock.calls[0]!
     expect(url).toBe('/api/v1/exercises/ex1/reports/r1/evaluation-summary')

@@ -293,6 +293,7 @@
     "draftRestore": "You have unsaved grades from an earlier session on this report.",
     "draftRestoreAction": "Restore them",
     "emptySection": "This section was left empty.",
+    "evaluationSummaryPending": "Scores aren't available for this report yet.",
     "fail": "Fail",
     "feedbackLabel": "Feedback on this section",
     "feedbackPlaceholder": "What did the team do well, and what would you change?",
