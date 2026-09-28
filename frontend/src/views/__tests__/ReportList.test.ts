@@ -160,11 +160,30 @@ describe('ReportList.vue', () => {
     expect(wrapper.find('[data-test="assign-evaluators-r1"]').exists()).toBe(false)
   })
 
-  // "View evaluation" opens unconditionally — no gating on status. The page itself shows
-  // content-only for a not-yet-evaluated report; the list never decides that.
-  it('offers View evaluation for a draft report, same as any other status', async () => {
+  // "View evaluation" opens for any report that's actually been submitted — no further
+  // gating on evaluation status itself; the page shows content-only until evaluated. A
+  // report that never left draft/pending_approval has no evaluation concept at all yet.
+  it('hides View evaluation for a draft report — it was never submitted', async () => {
     setAdmin(false)
     vi.spyOn(svc, 'listReports').mockResolvedValue([report({ status: 'draft' })] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="view-evaluation-r1"]').exists()).toBe(false)
+  })
+
+  it('hides View evaluation for a report still awaiting approval', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([
+      report({ status: 'pending_approval' }),
+    ] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="view-evaluation-r1"]').exists()).toBe(false)
+  })
+
+  it('offers View evaluation once the report is actually submitted', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report({ status: 'submitted' })] as never)
     const wrapper = mountList()
     await flushPromises()
     expect(wrapper.find('[data-test="view-evaluation-r1"]').exists()).toBe(true)

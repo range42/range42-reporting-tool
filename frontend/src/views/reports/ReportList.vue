@@ -76,6 +76,12 @@ const ASSIGNABLE_STATUSES: readonly string[] = ['submitted', 'under_evaluation']
 
 const canAssign = (status: string): boolean => ASSIGNABLE_STATUSES.includes(status)
 
+/** A report never submitted (draft/pending_approval) has no evaluation concept yet —
+ *  offering "View evaluation" there would only ever show empty content, no scores. */
+const SUBMITTED_STATUSES: readonly string[] = ['submitted', 'under_evaluation', 'evaluated']
+
+const canViewEvaluation = (status: string): boolean => SUBMITTED_STATUSES.includes(status)
+
 function openEvaluators(id: string): void {
   void router.push({ name: 'report-evaluators', params: { exerciseId, rid: id } })
 }
@@ -226,6 +232,7 @@ function createCampaign(): void {
             </td>
             <td class="px-5 py-3">
               <button
+                v-if="canViewEvaluation(r.status)"
                 :data-test="`view-evaluation-${r.id}`"
                 type="button"
                 class="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium transition hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60"

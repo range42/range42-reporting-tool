@@ -227,6 +227,7 @@
     "namePlaceholder": "e.g. Day 1 situation report",
     "new": "New report",
     "noDue": "—",
+    "notSubmittedYet": "This report hasn't been submitted yet, so there's nothing to evaluate.",
     "overdue": "Overdue",
     "previousReportHeading": "Previous report",
     "recallAction": "Recall",

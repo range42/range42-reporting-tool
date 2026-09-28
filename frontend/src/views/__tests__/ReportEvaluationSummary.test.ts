@@ -111,6 +111,22 @@ describe('ReportEvaluationSummary.vue', () => {
     expect(wrapper.find('[data-test="evaluation-summary-overall"]').text()).toContain('8.00')
   })
 
+  it('shows a "not submitted yet" state for a draft report, without fetching a summary', async () => {
+    vi.spyOn(reports, 'getReport').mockResolvedValue(reportDetail({ status: 'draft' }))
+    const summarySpy = vi.spyOn(evaluations, 'getReportEvaluationSummary')
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="evaluation-summary-not-submitted"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="evaluation-summary-overall"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Situation stable.')
+    expect(summarySpy).not.toHaveBeenCalled()
+  })
+
+  it('shows the same "not submitted yet" state for a report awaiting approval', async () => {
+    vi.spyOn(reports, 'getReport').mockResolvedValue(reportDetail({ status: 'pending_approval' }))
+    const wrapper = await mountPage()
+    expect(wrapper.find('[data-test="evaluation-summary-not-submitted"]').exists()).toBe(true)
+  })
+
   it('opens for a NOT-yet-evaluated report unconditionally, showing content only', async () => {
     vi.spyOn(reports, 'getReport').mockResolvedValue(reportDetail({ status: 'submitted' }))
     vi.spyOn(evaluations, 'getReportEvaluationSummary').mockRejectedValue(

@@ -1,13 +1,15 @@
 <script setup lang="ts">
 /**
- * Route-level "view evaluation" screen — opens for ANY report, regardless of status. Content
- * is always fetched and shown; the evaluation summary is best-effort: a 409 from
+ * Route-level "view evaluation" screen. A report that's never been submitted (draft /
+ * pending_approval) has no evaluation concept at all yet — shown as a distinct, non-error
+ * "not submitted" state, without even fetching a summary. Once submitted, content is always
+ * fetched and shown; the evaluation summary is best-effort: a 409 from
  * `getReportEvaluationSummary` (not yet evaluated, or hidden by
  * `scoring_config.teams_see_own_scores`) is expected and simply leaves `summary` null, never
  * surfaced as an error. Any other failure — including the report itself failing to load — is
  * a real error.
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { TriangleAlert } from '@lucide/vue'
@@ -17,6 +19,8 @@ import AppShell from '@/components/AppShell.vue'
 import { getReport, type ReportDetail } from '@/services/reports'
 import { getReportEvaluationSummary, type EvaluationSummary } from '@/services/evaluations'
 import EvaluationSummaryView from '@/views/reports/EvaluationSummaryView.vue'
+
+const NOT_SUBMITTED_STATUSES: readonly string[] = ['draft', 'pending_approval']
 
 const { t } = useI18n()
 const route = useRoute()
@@ -29,6 +33,10 @@ const report = ref<ReportDetail | null>(null)
 const summary = ref<EvaluationSummary | null>(null)
 const error = ref('')
 
+const notSubmittedYet = computed(
+  () => report.value !== null && NOT_SUBMITTED_STATUSES.includes(report.value.status),
+)
+
 onMounted(async () => {
   if (!auth.token) return
   try {
@@ -37,6 +45,7 @@ onMounted(async () => {
     error.value = e instanceof ApiError ? e.message : t('reports.loadError')
     return
   }
+  if (notSubmittedYet.value) return
   try {
     summary.value = await getReportEvaluationSummary(auth.token, exerciseId, rid)
   } catch (e) {
@@ -61,7 +70,14 @@ onMounted(async () => {
         <span>{{ error }}</span>
       </div>
 
-      <EvaluationSummaryView v-if="report" :sections="report.sections" :summary="summary" />
+      <p
+        v-if="notSubmittedYet"
+        data-test="evaluation-summary-not-submitted"
+        class="text-sm italic text-zinc-500"
+      >
+        {{ t('reports.notSubmittedYet') }}
+      </p>
+      <EvaluationSummaryView v-else-if="report" :sections="report.sections" :summary="summary" />
     </div>
   </AppShell>
 </template>
