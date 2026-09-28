@@ -207,6 +207,7 @@
     "dueIn": "Due in {time}",
     "empty": "No reports yet.",
     "evaluators": "Evaluators",
+    "hidePreviousReport": "Hide previous report",
     "insertTable": "Insert table",
     "loadError": "Could not load reports. Please try again.",
     "lockedByAssignment": "This report is assigned to another writer, so it is read-only for you.",
@@ -230,6 +231,7 @@
     "notSubmittedYet": "This report hasn't been submitted yet, so there's nothing to evaluate.",
     "overdue": "Overdue",
     "previousReportHeading": "Previous report",
+    "previousSectionMissing": "No matching section in the previous report.",
     "recallAction": "Recall",
     "recallError": "Could not recall the report. Please try again.",
     "restore": "Restore draft",
@@ -240,6 +242,7 @@
     "sections": "Sections",
     "selectTeam": "Select a team…",
     "selectTemplate": "Select a published template…",
+    "showPreviousReport": "Show previous report",
     "status": "Status",
     "statusLabel": {
       "draft": "Draft",

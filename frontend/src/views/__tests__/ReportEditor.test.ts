@@ -332,16 +332,16 @@ describe('ReportEditor.vue', () => {
     expect(w.find('[data-test="img-btn-s1"]').exists()).toBe(false)
   })
 
-  // --- previous-campaign-report panel: a reference surface, never a gate on writing ------
+  // --- previous-campaign-report pairing: a reference surface, never a gate on writing ----
 
-  it('shows no previous-report panel when the current report is in no campaign', async () => {
+  it('shows no previous-report toggle when the current report is in no campaign', async () => {
     vi.mocked(reports.getReport).mockResolvedValue({ ...richDetail, team_id: 't1' } as never)
     const w = mountEditor()
     await flushPromises()
-    expect(w.find('[data-test="previous-report-panel"]').exists()).toBe(false)
+    expect(w.find('[data-test="toggle-previous-report"]').exists()).toBe(false)
   })
 
-  it('shows the previous report content and, once evaluated, its scores', async () => {
+  it('shows the previous report content side by side and, once evaluated, its scores', async () => {
     vi.mocked(reports.getReport).mockImplementation(
       async (_t, _e, rid) =>
         (rid === 'r0'
@@ -393,10 +393,80 @@ describe('ReportEditor.vue', () => {
     const w = mountEditor()
     await flushPromises()
 
-    const panel = w.find('[data-test="previous-report-panel"]')
-    expect(panel.exists()).toBe(true)
-    expect(panel.text()).toContain('Day 1')
-    expect(w.find('[data-test="evaluation-summary-overall"]').text()).toContain('8.00')
+    expect(w.find('[data-test="toggle-previous-report"]').exists()).toBe(true)
+    const previousCard = w.find('[data-test="evaluation-summary-section-d1"]')
+    expect(previousCard.exists()).toBe(true)
+    expect(previousCard.find('[data-test="evaluation-summary-section-grade-d1"]').exists()).toBe(
+      false,
+    )
+    // section_grades was empty in this fixture — no per-section grade to show, which is fine;
+    // the pairing itself (previous section beside the current one) is what's under test.
+    const row = previousCard.element.parentElement!
+    expect(row.className).toContain('md:grid-cols-2')
+  })
+
+  it('hides the side-by-side pairing when the toggle is switched off', async () => {
+    vi.mocked(reports.getReport).mockImplementation(
+      async (_t, _e, rid) =>
+        (rid === 'r0'
+          ? { ...richDetail, id: 'r0', name: 'Day 1', team_id: 't1' }
+          : { ...richDetail, id: 'r1', team_id: 't1' }) as never,
+    )
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([
+      {
+        id: 'c1',
+        exercise_id: 'ex1',
+        name: 'Sitreps',
+        description: null,
+        report_count: 2,
+        created_by: 'u1',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    vi.mocked(campaigns.getCampaignTimeline).mockResolvedValue([
+      {
+        report_id: 'r0',
+        name: 'Day 1',
+        status: 'evaluated',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+      {
+        report_id: 'r1',
+        name: 'Day 2',
+        status: 'draft',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+    ])
+    vi.mocked(evaluations.getReportEvaluationSummary).mockResolvedValue({
+      report_id: 'r0',
+      overall_grade: '8.00',
+      overall_feedback: 'Solid overall.',
+      evaluated_at: '2026-09-01T00:00:00Z',
+      section_grades: [],
+    })
+
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(true)
+
+    await w.find('[data-test="toggle-previous-report"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(false)
+    // The current section is still there — only the previous side is hidden.
+    expect(w.find('[data-test="content-s1"]').exists()).toBe(true)
+
+    await w.find('[data-test="toggle-previous-report"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(true)
   })
 
   it('writing the current report is unaffected by the previous report not being evaluated yet', async () => {
@@ -447,8 +517,8 @@ describe('ReportEditor.vue', () => {
     const w = mountEditor()
     await flushPromises()
 
-    expect(w.find('[data-test="previous-report-panel"]').exists()).toBe(true)
-    expect(w.find('[data-test="evaluation-summary-overall"]').exists()).toBe(false)
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(true)
+    expect(w.find('[data-test="evaluation-summary-section-grade-d1"]').exists()).toBe(false)
     // The current report is still fully editable — the previous one's status never gates it.
     expect(w.find('[data-test="content-s1"]').attributes('disabled')).toBeUndefined()
     expect(w.find('[data-test="save-s1"]').exists()).toBe(true)
