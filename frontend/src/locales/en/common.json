@@ -242,7 +242,9 @@
     "statusLabel": {
       "draft": "Draft",
       "pending_approval": "Pending approval",
-      "submitted": "Submitted"
+      "submitted": "Submitted",
+      "under_evaluation": "Under evaluation",
+      "evaluated": "Evaluated"
     },
     "submit": "Submit report",
     "submitBlocked": "Fill in every required section before submitting.",
@@ -250,7 +252,8 @@
     "subtitle": "Reports for this exercise",
     "team": "Team",
     "template": "Template",
-    "title": "Reports"
+    "title": "Reports",
+    "viewEvaluation": "View evaluation"
   },
   "evaluations": {
     "aiPrecheck": "AI pre-check",

@@ -147,4 +147,27 @@ describe('ReportList.vue', () => {
     await flushPromises()
     expect(wrapper.find('[data-test="assign-evaluators-r1"]').exists()).toBe(false)
   })
+
+  // "View evaluation" opens unconditionally — no gating on status. The page itself shows
+  // content-only for a not-yet-evaluated report; the list never decides that.
+  it('offers View evaluation for a draft report, same as any other status', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report({ status: 'draft' })] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="view-evaluation-r1"]').exists()).toBe(true)
+  })
+
+  it('navigates to the evaluation summary route without also opening the editor', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report()] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    await wrapper.find('[data-test="view-evaluation-r1"]').trigger('click')
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith({
+      name: 'report-evaluation-summary',
+      params: { exerciseId: 'ex1', rid: 'r1' },
+    })
+  })
 })

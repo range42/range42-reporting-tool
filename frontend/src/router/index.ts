@@ -69,6 +69,12 @@ export const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/exercises/:exerciseId/reports/:rid/evaluation-summary',
+      name: 'report-evaluation-summary',
+      component: () => import('@/views/reports/ReportEvaluationSummary.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/exercises/:exerciseId/evaluations',
       name: 'evaluation-queue',
       component: () => import('@/views/evaluations/EvaluationQueuePage.vue'),

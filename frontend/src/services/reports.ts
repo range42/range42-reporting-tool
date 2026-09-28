@@ -1,7 +1,12 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/http'
 import type { ChoiceConfig, FieldType } from '@/services/templates'
 
-export type ReportStatus = 'draft' | 'pending_approval' | 'submitted'
+export type ReportStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'submitted'
+  | 'under_evaluation'
+  | 'evaluated'
 
 export type ApprovalAction = 'approved' | 'rejected'
 
