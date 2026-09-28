@@ -100,8 +100,8 @@ function createReport(): void {
   void router.push(`/exercises/${exerciseId}/reports/new`)
 }
 
-function createCampaign(): void {
-  void router.push(`/exercises/${exerciseId}/campaigns/new`)
+function openCampaigns(): void {
+  void router.push({ name: 'campaigns', params: { exerciseId } })
 }
 </script>
 
@@ -131,12 +131,12 @@ function createCampaign(): void {
       <button
         v-if="auth.isAdmin"
         type="button"
-        data-test="new-campaign"
+        data-test="campaigns-link"
         class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
-        @click="createCampaign"
+        @click="openCampaigns"
       >
         <CalendarPlus class="h-4 w-4" />
-        {{ t('campaigns.new') }}
+        {{ t('campaigns.nav') }}
       </button>
       <button
         v-if="auth.isAdmin"

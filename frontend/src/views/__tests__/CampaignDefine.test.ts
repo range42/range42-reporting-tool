@@ -101,7 +101,9 @@ describe('CampaignDefine', () => {
         },
       ],
     })
-    expect(push).toHaveBeenCalledWith('/exercises/ex1/campaigns/c1/evaluators')
+    // Straight to the new campaign's detail hub — that's where both halves of evaluator
+    // assignment (campaign + every team) actually get set, not the old campaign-only screen.
+    expect(push).toHaveBeenCalledWith('/exercises/ex1/campaigns/c1')
   })
 
   it('passes a per-spec name through so same-template specs do not collide', async () => {

@@ -81,7 +81,7 @@ async function submit(): Promise<void> {
       name: name.value.trim(),
       report_specs: reportSpecs,
     })
-    await router.push(`/exercises/${exerciseId}/campaigns/${created.id}/evaluators`)
+    await router.push(`/exercises/${exerciseId}/campaigns/${created.id}`)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('campaigns.define.createError')
   } finally {

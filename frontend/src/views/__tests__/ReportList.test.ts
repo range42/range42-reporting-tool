@@ -76,16 +76,26 @@ describe('ReportList.vue', () => {
     expect(w.find('[data-test="new-report"]').exists()).toBe(false)
   })
 
-  it('shows the New campaign button for admins only', async () => {
+  it('shows the Campaigns entry for admins only', async () => {
     vi.spyOn(svc, 'listReports').mockResolvedValue([])
     const admin = mountList()
     await flushPromises()
-    expect(admin.find('[data-test="new-campaign"]').exists()).toBe(true)
+    expect(admin.find('[data-test="campaigns-link"]').exists()).toBe(true)
 
     setAdmin(false)
     const nonAdmin = mountList()
     await flushPromises()
-    expect(nonAdmin.find('[data-test="new-campaign"]').exists()).toBe(false)
+    expect(nonAdmin.find('[data-test="campaigns-link"]').exists()).toBe(false)
+  })
+
+  // The button now opens the campaign LIST, not the create form directly — "New campaign" was
+  // a dead end once campaigns needed managing (list/edit/delete/evaluators), not just creating.
+  it('navigates to the campaigns list route from the Campaigns entry', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const w = mountList()
+    await flushPromises()
+    await w.get('[data-test="campaigns-link"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'campaigns', params: { exerciseId: 'ex1' } })
   })
 
   it('shows the Evaluations entry only for a caller who can evaluate', async () => {
