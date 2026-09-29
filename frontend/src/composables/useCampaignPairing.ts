@@ -36,8 +36,10 @@ export interface UseCampaignPairingResult {
   status: Ref<CampaignPairingStatus>
   error: Ref<string | null>
   campaign: Ref<Campaign | null>
-  /** The whole campaign timeline, in server order — feeds CampaignNavigator directly. */
+  /** The whole campaign timeline, in server order. */
   entries: Ref<TimelineEntry[]>
+  /** The current report's team only, in server order — feeds CampaignNavigator. */
+  teamEntries: Ref<TimelineEntry[]>
   previousEntry: Ref<TimelineEntry | null>
   previousReport: Ref<ReportDetail | null>
   currentReport: Ref<ReportDetail | null>
@@ -46,14 +48,16 @@ export interface UseCampaignPairingResult {
   /** The caller's OWN previous evaluation's overall_grade (D6) — never the report aggregate,
    *  and never populated when `hasOwnPreviousEvaluation` is false. */
   previousOverallGrade: Ref<string | null>
-  load: () => Promise<void>
+  /** `pinnedPrevReportId` overrides the URL pin given at creation. */
+  load: (pinnedPrevReportId?: string | null) => Promise<void>
 }
 
 /**
  * "Previous" is derived, not stored (D11): `campaign`/`campaign_report` carry no sequence
  * column, so ordering is exactly what the caller's timeline array already has — this never
  * re-sorts it. "Previous" is the same-team entry immediately before the current report in that
- * order, unless `pinned` (the URL's `?prev=`) names an earlier cycle explicitly.
+ * order, unless `pinned` (the URL's `?prev=`) names an earlier same-team entry; a pin that is not
+ * earlier than the current report selects nothing.
  */
 export function selectPreviousEntry(
   entries: readonly TimelineEntry[],
@@ -62,10 +66,11 @@ export function selectPreviousEntry(
   pinned?: string | null,
 ): TimelineEntry | null {
   const sameTeam = entries.filter((e) => e.team_id === teamId)
-  if (pinned) return sameTeam.find((e) => e.report_id === pinned) ?? null
   const idx = sameTeam.findIndex((e) => e.report_id === currentId)
   if (idx <= 0) return null
-  return sameTeam[idx - 1] ?? null
+  const earlier = sameTeam.slice(0, idx)
+  if (pinned) return earlier.find((e) => e.report_id === pinned) ?? null
+  return earlier[idx - 1] ?? null
 }
 
 async function findCampaign(
@@ -104,6 +109,7 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
   const error = ref<string | null>(null)
   const campaign = ref<Campaign | null>(null)
   const entries = ref<TimelineEntry[]>([])
+  const teamEntries = ref<TimelineEntry[]>([])
   const previousEntry = ref<TimelineEntry | null>(null)
   const previousReport = ref<ReportDetail | null>(null)
   const currentReport = ref<ReportDetail | null>(null)
@@ -111,9 +117,19 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
   const previousGrades = ref<SectionGrade[] | null>(null)
   const previousOverallGrade = ref<string | null>(null)
 
-  async function load(): Promise<void> {
+  function resetPrevious(): void {
+    previousEntry.value = null
+    previousReport.value = null
+    currentReport.value = null
+    hasOwnPreviousEvaluation.value = false
+    previousGrades.value = null
+    previousOverallGrade.value = null
+  }
+
+  async function load(pinnedPrevReportId = params.pinnedPrevReportId): Promise<void> {
     status.value = 'loading'
     error.value = null
+    resetPrevious()
     try {
       const found = await findCampaign(params)
       if (!found) {
@@ -126,12 +142,8 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
       // The report-nested EvaluationDetail carries team_name, not team_id — the caller can't
       // supply it, so it's read off the caller's own entry in the timeline we just fetched.
       const myTeamId = found.entries.find((e) => e.report_id === params.reportId)?.team_id ?? ''
-      const prev = selectPreviousEntry(
-        found.entries,
-        params.reportId,
-        myTeamId,
-        params.pinnedPrevReportId,
-      )
+      teamEntries.value = found.entries.filter((e) => e.team_id === myTeamId)
+      const prev = selectPreviousEntry(found.entries, params.reportId, myTeamId, pinnedPrevReportId)
       previousEntry.value = prev
       if (!prev) {
         status.value = 'no_previous'
@@ -170,6 +182,7 @@ export function useCampaignPairing(params: UseCampaignPairingParams): UseCampaig
     error,
     campaign,
     entries,
+    teamEntries,
     previousEntry,
     previousReport,
     currentReport,

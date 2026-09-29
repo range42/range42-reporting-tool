@@ -80,6 +80,16 @@ describe('selectPreviousEntry', () => {
     expect(selectPreviousEntry(entries, 'r3', 't1', 'r1')?.report_id).toBe('r1')
   })
 
+  it('ignores a prev report id that is not earlier than the current report', () => {
+    const entries = [
+      entry({ report_id: 'r1' }),
+      entry({ report_id: 'r2' }),
+      entry({ report_id: 'r3' }),
+    ]
+    expect(selectPreviousEntry(entries, 'r2', 't1', 'r3')).toBeNull()
+    expect(selectPreviousEntry(entries, 'r2', 't1', 'r2')).toBeNull()
+  })
+
   it('does not re-sort the timeline entries it was given', () => {
     // Deliberately out of chronological order — selectPreviousEntry must use array order only.
     const entries = [

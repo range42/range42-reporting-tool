@@ -10,7 +10,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
 import EvaluationHeader from '@/views/evaluations/EvaluationHeader.vue'
 import FinalizeBar from '@/views/evaluations/FinalizeBar.vue'
@@ -32,6 +32,7 @@ const SINGLE_ROUTE = 'evaluation'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const store = useEvaluationStore()
 
@@ -81,6 +82,12 @@ function previousGradeFor(sectionDefId: string) {
   const prevSection = previousSectionFor(sectionDefId)
   if (!prevSection) return null
   return pairing.previousGrades.value?.find((g) => g.report_section_id === prevSection.id) ?? null
+}
+
+/** Pins an earlier report as the previous pane, keeping the choice in `?prev=`. */
+async function pinPrevious(reportId: string): Promise<void> {
+  void router.replace({ query: { ...route.query, prev: reportId } })
+  await pairing.load(reportId)
 }
 
 onMounted(async () => {
@@ -141,11 +148,12 @@ onBeforeUnmount(() => activeSection.disconnect())
         />
 
         <CampaignNavigator
-          v-if="pairing.entries.value.length > 0"
+          v-if="pairing.teamEntries.value.length > 0"
           class="mb-4"
-          :entries="pairing.entries.value"
+          :entries="pairing.teamEntries.value"
           :current-report-id="rid"
-          @select="() => {}"
+          :pinned-report-id="pairing.previousEntry.value?.report_id ?? null"
+          @select="pinPrevious"
         />
 
         <SectionJumpBar

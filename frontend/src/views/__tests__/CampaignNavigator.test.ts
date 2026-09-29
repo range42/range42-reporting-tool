@@ -67,11 +67,45 @@ describe('CampaignNavigator.vue', () => {
     expect(evaluatedClass).not.toBe(draftClass)
   })
 
-  it('emits select with the report id when a pill is activated', async () => {
+  it('emits select with the report id when an earlier pill is activated', async () => {
     const entries = [entry({ report_id: 'r1' }), entry({ report_id: 'r2' })]
-    const wrapper = mountNav(entries, 'r1')
+    const wrapper = mountNav(entries, 'r2')
+    await wrapper.find('[data-test="nav-pill-r1"]').trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['r1']])
+  })
+
+  it("does not emit select for the current report's pill", async () => {
+    const entries = [entry({ report_id: 'r1' }), entry({ report_id: 'r2' })]
+    const wrapper = mountNav(entries, 'r2')
     await wrapper.find('[data-test="nav-pill-r2"]').trigger('click')
-    expect(wrapper.emitted('select')).toEqual([['r2']])
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
+  it('disables pills for reports after the current one', async () => {
+    const entries = [
+      entry({ report_id: 'r1' }),
+      entry({ report_id: 'r2' }),
+      entry({ report_id: 'r3' }),
+    ]
+    const wrapper = mountNav(entries, 'r2')
+    expect(wrapper.find('[data-test="nav-pill-r1"]').attributes('disabled')).toBeUndefined()
+    expect(wrapper.find('[data-test="nav-pill-r3"]').attributes('disabled')).toBeDefined()
+    await wrapper.find('[data-test="nav-pill-r3"]').trigger('click')
+    expect(wrapper.emitted('select')).toBeUndefined()
+  })
+
+  it('marks the report pinned as the previous pane', () => {
+    const entries = [
+      entry({ report_id: 'r1' }),
+      entry({ report_id: 'r2' }),
+      entry({ report_id: 'r3' }),
+    ]
+    const wrapper = mount(CampaignNavigator, {
+      props: { entries, currentReportId: 'r3', pinnedReportId: 'r1' },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.find('[data-test="nav-pill-r1"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-test="nav-pill-r2"]').attributes('aria-pressed')).toBe('false')
   })
 
   it('renders pills as buttons reachable by keyboard', () => {

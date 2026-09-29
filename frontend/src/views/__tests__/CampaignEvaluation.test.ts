@@ -334,6 +334,36 @@ describe('CampaignEvaluation', () => {
     expect(w.get('[data-test="nav-pill-r1"]').attributes('aria-current')).toBe('true')
   })
 
+  it("lists only the current team's reports in the navigator", async () => {
+    const w = await setup({
+      entries: [
+        timelineEntry({ report_id: 'r0' }),
+        timelineEntry({ report_id: 'x0', team_id: 't2', team_name: 'Red' }),
+        timelineEntry({ report_id: 'r1' }),
+      ],
+    })
+    expect(w.find('[data-test="nav-pill-r0"]').exists()).toBe(true)
+    expect(w.find('[data-test="nav-pill-x0"]').exists()).toBe(false)
+  })
+
+  it('pins an earlier report as the previous pane when its pill is clicked', async () => {
+    const w = await setup({
+      entries: [
+        timelineEntry({ report_id: 'rA', name: 'Day 0' }),
+        timelineEntry({ report_id: 'r0', name: 'Day 1' }),
+        timelineEntry({ report_id: 'r1', name: 'Day 2' }),
+      ],
+    })
+    const compare = vi
+      .spyOn(campaignSvc, 'compareCampaignReports')
+      .mockResolvedValue([reportDetail('rA', []), reportDetail('r1', [])])
+    await w.get('[data-test="nav-pill-rA"]').trigger('click')
+    await flushPromises()
+    expect(routerReplace).toHaveBeenCalledWith({ query: { prev: 'rA' } })
+    expect(compare.mock.calls.at(-1)![3]).toEqual(['rA', 'r1'])
+    expect(w.get('[data-test="pane-header-previous"]').text()).toContain('Day 0')
+  })
+
   it('shows a first-report state with no previous pane when the report opens the campaign', async () => {
     const w = await setup({ entries: [timelineEntry({ report_id: 'r1' })] })
     expect(w.find('[data-test="campaign-empty"]').exists()).toBe(true)
