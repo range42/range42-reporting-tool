@@ -35,6 +35,7 @@ export interface CampaignReportSpec {
   name?: string | null
   available_at?: string | null
   due_at?: string | null
+  approval_required?: boolean
 }
 
 export interface CampaignCreateInput {

@@ -160,6 +160,7 @@ async def _fan_out_campaign_reports(
                 name=f"{spec.name or tpl.name} — {team.name}",
                 due_at=spec.due_at,
                 available_at=spec.available_at,
+                approval_required=spec.approval_required,
             )
             db.add(CampaignReport(campaign_id=campaign.id, report_id=report.id))
     await db.flush()

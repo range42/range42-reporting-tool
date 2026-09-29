@@ -24,6 +24,7 @@ class CampaignReportSpec(BaseModel):
     name: str | None = None
     available_at: datetime | None = None
     due_at: datetime | None = None
+    approval_required: bool = False
 
 
 def _reject_empty_specs(v: list[CampaignReportSpec] | None) -> list[CampaignReportSpec] | None:

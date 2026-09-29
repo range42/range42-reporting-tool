@@ -98,12 +98,34 @@ describe('CampaignDefine', () => {
           name: null,
           available_at: new Date('2026-11-25T00:00').toISOString(),
           due_at: new Date('2026-12-01T00:00').toISOString(),
+          approval_required: false,
         },
       ],
     })
     // Straight to the new campaign's detail hub — that's where both halves of evaluator
     // assignment (campaign + every team) actually get set, not the old campaign-only screen.
     expect(push).toHaveBeenCalledWith('/exercises/ex1/campaigns/c1')
+  })
+
+  it('toggles approval_required per spec, defaulting to false', async () => {
+    const create = vi
+      .spyOn(campaignsSvc, 'createCampaign')
+      .mockResolvedValue({ id: 'c1', name: 'C', report_count: 3 } as never)
+    const wrapper = await mountPage()
+
+    await wrapper.get('[data-test="define-name"]').setValue('SITREP campaign')
+    await wrapper.get('[data-test="spec-template-0"]').setValue('tpl1')
+    await wrapper.get('[data-test="spec-approval-0"]').setValue(true)
+    await wrapper.get('[data-test="define-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledWith(
+      'tok',
+      'ex1',
+      expect.objectContaining({
+        report_specs: [expect.objectContaining({ approval_required: true })],
+      }),
+    )
   })
 
   it('passes a per-spec name through so same-template specs do not collide', async () => {

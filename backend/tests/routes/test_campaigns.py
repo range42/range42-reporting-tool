@@ -416,6 +416,48 @@ async def test_campaign_report_specs_carry_available_at_and_due_at(migrated_db: 
         assert reports[0]["available_at"].startswith("2026-11-25")
 
 
+async def test_campaign_report_specs_carry_approval_required_per_spec(
+    migrated_db: async_sessionmaker,
+) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "BT1", "team_type": "blue"}, headers=ah)
+        tid = await _published_template(c, ah)
+        await c.post(
+            f"/api/v1/exercises/{ex}/campaigns",
+            json={
+                "name": "C",
+                "report_specs": [
+                    {"template_id": tid, "name": "Needs approval", "approval_required": True},
+                    {"template_id": tid, "name": "No approval", "approval_required": False},
+                ],
+            },
+            headers=ah,
+        )
+        reports = (await c.get(f"/api/v1/exercises/{ex}/reports", headers=ah)).json()["data"]
+        by_name = {r["name"]: r["approval_required"] for r in reports}
+        assert by_name["Needs approval — BT1"] is True
+        assert by_name["No approval — BT1"] is False
+
+
+async def test_campaign_report_spec_approval_required_defaults_to_false(
+    migrated_db: async_sessionmaker,
+) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "BT1", "team_type": "blue"}, headers=ah)
+        tid = await _published_template(c, ah)
+        await c.post(
+            f"/api/v1/exercises/{ex}/campaigns",
+            json={"name": "C", "report_specs": [{"template_id": tid}]},
+            headers=ah,
+        )
+        reports = (await c.get(f"/api/v1/exercises/{ex}/reports", headers=ah)).json()["data"]
+        assert reports[0]["approval_required"] is False
+
+
 async def test_campaign_report_specs_rejects_empty_list(migrated_db: async_sessionmaker) -> None:
     ah = await _ga(migrated_db)
     async with client(migrated_db) as c:

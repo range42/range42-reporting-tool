@@ -4809,6 +4809,60 @@
         }
       }
     },
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluation-summary": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Get Evaluation Summary",
+        "description": "The evaluated grade + per-section feedback, own-team read path.\n\nGated by the SAME rule as ``report.overall_grade`` elsewhere (``_GradeGate``): visible to\nGlobal Admin / ``scoring:read:all`` always, and to a team member only once the report is\n``evaluated`` AND ``scoring_config.teams_see_own_scores`` is true. Both \"not evaluated\" and\n\"hidden by config\" are typed 409s \u2014 neither is an error state for this endpoint's caller,\nwho is checking a report they wrote, not probing for one they shouldn't see.",
+        "operationId": "get_evaluation_summary_api_v1_exercises__exercise_id__reports__rid__evaluation_summary_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_EvaluationSummaryOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/finalize": {
       "post": {
         "tags": [
@@ -5528,6 +5582,11 @@
               }
             ],
             "title": "Due At"
+          },
+          "approval_required": {
+            "type": "boolean",
+            "title": "Approval Required",
+            "default": false
           }
         },
         "type": "object",
@@ -5732,6 +5791,28 @@
           "data"
         ],
         "title": "DataEnvelope[EvaluationOut]"
+      },
+      "DataEnvelope_EvaluationSummaryOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EvaluationSummaryOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[EvaluationSummaryOut]"
       },
       "DataEnvelope_ExerciseOut_": {
         "properties": {
@@ -7281,6 +7362,65 @@
           "updated_at"
         ],
         "title": "EvaluationOut"
+      },
+      "EvaluationSummaryOut": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "overall_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Grade"
+          },
+          "overall_feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Feedback"
+          },
+          "evaluated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluated At"
+          },
+          "section_grades": {
+            "items": {
+              "$ref": "#/components/schemas/SectionGradeSummaryOut"
+            },
+            "type": "array",
+            "title": "Section Grades"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "overall_grade",
+          "overall_feedback",
+          "evaluated_at",
+          "section_grades"
+        ],
+        "title": "EvaluationSummaryOut",
+        "description": "Body of ``GET .../reports/{rid}/evaluation-summary``.\n\nGated the same way ``report.overall_grade`` is elsewhere (``_GradeGate``): the route 409s\nrather than returning this with nulled fields, since \"not visible yet\" is a distinct state\nfrom \"graded zero.\""
       },
       "EvaluationUpdate": {
         "properties": {
@@ -9330,6 +9470,55 @@
           "updated_at"
         ],
         "title": "SectionGradeOut"
+      },
+      "SectionGradeSummaryOut": {
+        "properties": {
+          "section_def_id": {
+            "type": "string",
+            "title": "Section Def Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "weight": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Weight"
+          },
+          "feedback": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Feedback"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section_def_id",
+          "name",
+          "grade",
+          "weight",
+          "feedback"
+        ],
+        "title": "SectionGradeSummaryOut",
+        "description": "One section's aggregated grade + feedback, for ``EvaluationSummaryOut``.\n\nNo ``evaluator_id`` here by design \u2014 ``GET .../evaluation-summary`` is the own-team read\npath, and evaluator isolation means the team never sees who graded what, only the combined\nresult."
       },
       "SectionGradeUpsert": {
         "properties": {

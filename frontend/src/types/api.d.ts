@@ -1257,6 +1257,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluation-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Evaluation Summary
+         * @description The evaluated grade + per-section feedback, own-team read path.
+         *
+         *     Gated by the SAME rule as ``report.overall_grade`` elsewhere (``_GradeGate``): visible to
+         *     Global Admin / ``scoring:read:all`` always, and to a team member only once the report is
+         *     ``evaluated`` AND ``scoring_config.teams_see_own_scores`` is true. Both "not evaluated" and
+         *     "hidden by config" are typed 409s — neither is an error state for this endpoint's caller,
+         *     who is checking a report they wrote, not probing for one they shouldn't see.
+         */
+        get: operations["get_evaluation_summary_api_v1_exercises__exercise_id__reports__rid__evaluation_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/finalize": {
         parameters: {
             query?: never;
@@ -1536,6 +1562,11 @@ export interface components {
             available_at?: string | null;
             /** Due At */
             due_at?: string | null;
+            /**
+             * Approval Required
+             * @default false
+             */
+            approval_required: boolean;
         };
         /** CampaignUpdate */
         CampaignUpdate: {
@@ -1586,6 +1617,11 @@ export interface components {
         /** DataEnvelope[EvaluationOut] */
         DataEnvelope_EvaluationOut_: {
             data: components["schemas"]["EvaluationOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[EvaluationSummaryOut] */
+        DataEnvelope_EvaluationSummaryOut_: {
+            data: components["schemas"]["EvaluationSummaryOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[ExerciseOut] */
@@ -2019,6 +2055,26 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * EvaluationSummaryOut
+         * @description Body of ``GET .../reports/{rid}/evaluation-summary``.
+         *
+         *     Gated the same way ``report.overall_grade`` is elsewhere (``_GradeGate``): the route 409s
+         *     rather than returning this with nulled fields, since "not visible yet" is a distinct state
+         *     from "graded zero."
+         */
+        EvaluationSummaryOut: {
+            /** Report Id */
+            report_id: string;
+            /** Overall Grade */
+            overall_grade: string | null;
+            /** Overall Feedback */
+            overall_feedback: string | null;
+            /** Evaluated At */
+            evaluated_at: string | null;
+            /** Section Grades */
+            section_grades: components["schemas"]["SectionGradeSummaryOut"][];
         };
         /** EvaluationUpdate */
         EvaluationUpdate: {
@@ -2653,6 +2709,26 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * SectionGradeSummaryOut
+         * @description One section's aggregated grade + feedback, for ``EvaluationSummaryOut``.
+         *
+         *     No ``evaluator_id`` here by design — ``GET .../evaluation-summary`` is the own-team read
+         *     path, and evaluator isolation means the team never sees who graded what, only the combined
+         *     result.
+         */
+        SectionGradeSummaryOut: {
+            /** Section Def Id */
+            section_def_id: string;
+            /** Name */
+            name: string;
+            /** Grade */
+            grade: string | null;
+            /** Weight */
+            weight: string;
+            /** Feedback */
+            feedback: string | null;
         };
         /**
          * SectionGradeUpsert
@@ -6098,6 +6174,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataEnvelope_ReportGradeOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evaluation_summary_api_v1_exercises__exercise_id__reports__rid__evaluation_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationSummaryOut_"];
                 };
             };
             /** @description Validation Error */

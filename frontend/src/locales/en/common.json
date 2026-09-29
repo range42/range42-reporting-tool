@@ -437,6 +437,7 @@
       "specNamePlaceholder": "Defaults to the template name",
       "availableAt": "Available from",
       "dueAt": "Due",
+      "approvalRequired": "Requires approval",
       "addSpec": "Add another report",
       "submit": "Create campaign"
     }

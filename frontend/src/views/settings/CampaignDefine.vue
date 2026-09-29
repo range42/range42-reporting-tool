@@ -22,6 +22,7 @@ interface SpecRow {
   name: string
   availableLocal: string
   dueLocal: string
+  approvalRequired: boolean
 }
 
 const inputClass =
@@ -37,7 +38,9 @@ const token = computed(() => auth.token ?? '')
 
 const templates = ref<TemplateSummary[]>([])
 const name = ref('')
-const specs = ref<SpecRow[]>([{ templateId: '', name: '', availableLocal: '', dueLocal: '' }])
+const specs = ref<SpecRow[]>([
+  { templateId: '', name: '', availableLocal: '', dueLocal: '', approvalRequired: false },
+])
 const error = ref('')
 const saving = ref(false)
 
@@ -50,7 +53,13 @@ const canSubmit = computed(
 )
 
 function addSpec(): void {
-  specs.value.push({ templateId: '', name: '', availableLocal: '', dueLocal: '' })
+  specs.value.push({
+    templateId: '',
+    name: '',
+    availableLocal: '',
+    dueLocal: '',
+    approvalRequired: false,
+  })
 }
 
 function removeSpec(index: number): void {
@@ -76,6 +85,7 @@ async function submit(): Promise<void> {
       name: s.name.trim() || null,
       available_at: s.availableLocal ? new Date(s.availableLocal).toISOString() : null,
       due_at: s.dueLocal ? new Date(s.dueLocal).toISOString() : null,
+      approval_required: s.approvalRequired,
     }))
     const created = await createCampaign(token.value, exerciseId, {
       name: name.value.trim(),
@@ -112,7 +122,7 @@ async function submit(): Promise<void> {
           v-for="(spec, i) in specs"
           :key="i"
           :data-test="`spec-row-${i}`"
-          class="grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[1.5fr_1.5fr_1fr_1fr_auto] dark:border-zinc-800"
+          class="grid grid-cols-1 gap-3 rounded-lg border border-zinc-200 p-3 sm:grid-cols-[1.5fr_1.5fr_1fr_1fr_auto_auto] dark:border-zinc-800"
         >
           <div>
             <label class="mb-1 block text-xs text-zinc-500">{{
@@ -155,6 +165,17 @@ async function submit(): Promise<void> {
               type="datetime-local"
               :class="inputClass"
             />
+          </div>
+          <div class="flex items-end pb-2.5">
+            <label class="flex items-center gap-1.5 text-xs text-zinc-500">
+              <input
+                :data-test="`spec-approval-${i}`"
+                v-model="spec.approvalRequired"
+                type="checkbox"
+                class="h-4 w-4 rounded"
+              />
+              {{ t('campaigns.define.approvalRequired') }}
+            </label>
           </div>
           <div class="flex items-end">
             <button
