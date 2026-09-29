@@ -7,7 +7,8 @@ defineProps<{
   reportName: string
   teamName: string
   overallGrade: string | null
-  gradeMax: string
+  /** Omitted when the sections share no single maximum (the rollup does not normalize). */
+  gradeMax: string | null
   isCurrent?: boolean
 }>()
 
@@ -31,7 +32,7 @@ const { t } = useI18n()
         {{ t('evaluations.overallGrade') }}
       </span>
       <p class="font-mono text-lg font-semibold tabular-nums" data-test="pane-grade">
-        {{ overallGrade ?? '—' }} / {{ gradeMax }}
+        {{ overallGrade ?? '—' }}<template v-if="gradeMax"> / {{ gradeMax }}</template>
       </p>
     </div>
   </header>

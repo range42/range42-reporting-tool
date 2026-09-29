@@ -293,6 +293,24 @@ describe('CampaignEvaluation', () => {
     expect(row.find('[data-test="section-card-s1"]').exists()).toBe(true)
   })
 
+  it('renders previous and current pane headers with report, team, and overall grade', async () => {
+    const w = await setup({ previousOverallGrade: '8.00' })
+    const previous = w.get('[data-test="pane-header-previous"]')
+    expect(previous.text()).toContain('Day 1')
+    expect(previous.text()).toContain('Blue Team Alpha')
+    expect(previous.get('[data-test="pane-grade"]').text()).toBe('8.00 / 10')
+    const current = w.get('[data-test="pane-header-current"]')
+    expect(current.text()).toContain('Day 2 SITREP')
+    expect(current.get('[data-test="pane-grade"]').text()).toBe('7.50 / 10')
+    expect(current.find('[data-test="pane-being-graded"]').exists()).toBe(true)
+  })
+
+  it('omits the previous pane header when the report opens the campaign', async () => {
+    const w = await setup({ entries: [timelineEntry({ report_id: 'r1' })] })
+    expect(w.find('[data-test="pane-header-previous"]').exists()).toBe(false)
+    expect(w.find('[data-test="pane-header-current"]').exists()).toBe(true)
+  })
+
   it('renders the spanning section header with grade mode, range, and weight', async () => {
     const w = await setup()
     const meta = w.get('[data-test="section-meta-s1"]').text()

@@ -38,6 +38,20 @@ describe('PaneHeader.vue', () => {
     expect(wrapper.find('[data-test="pane-grade"]').text()).toBe('— / 10')
   })
 
+  it('omits the scale when the sections share no single grade maximum', () => {
+    const wrapper = mount(PaneHeader, {
+      props: {
+        label: 'Previous',
+        reportName: 'Day 1 SITREP',
+        teamName: 'Blue Team Alpha',
+        overallGrade: '7.80',
+        gradeMax: null,
+      },
+      global: { plugins: [i18n] },
+    })
+    expect(wrapper.find('[data-test="pane-grade"]').text()).toBe('7.80')
+  })
+
   it('labels the current pane as the one being graded', () => {
     const withCurrent = mount(PaneHeader, {
       props: {

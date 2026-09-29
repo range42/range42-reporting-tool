@@ -276,6 +276,8 @@
     "breakdownHeading": "Evaluations",
     "breakdownYours": "Your evaluation",
     "campaignBackToSingle": "Back to single view",
+    "campaignPanePrevious": "Previous",
+    "campaignPaneCurrent": "Current",
     "campaignBeingGraded": "Being graded",
     "campaignDidNotEvaluate": "You did not evaluate this report.",
     "campaignFirstReport": "No previous cycle to compare — this is the first report in the campaign.",

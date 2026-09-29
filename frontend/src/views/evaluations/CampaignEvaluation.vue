@@ -19,6 +19,8 @@ import CampaignNavigator from '@/views/evaluations/CampaignNavigator.vue'
 import SectionJumpBar from '@/views/evaluations/SectionJumpBar.vue'
 import CampaignSectionRow from '@/views/evaluations/CampaignSectionRow.vue'
 import DeltaBadge from '@/views/evaluations/DeltaBadge.vue'
+import PaneHeader from '@/views/evaluations/PaneHeader.vue'
+import { parseGrade } from '@/lib/decimal'
 import { useEvaluationStore } from '@/stores/evaluation'
 import { useAuthStore } from '@/stores/auth'
 import { useCampaignPairing } from '@/composables/useCampaignPairing'
@@ -47,6 +49,17 @@ const singleTo = computed<RouteLocationNamedRaw>(() => ({
 
 /** Template authoring order, not payload order. */
 const sections = computed(() => [...store.sections].sort((a, b) => a.position - b.position))
+
+/** The overall grade's scale: the sections' shared maximum, or null when they disagree. */
+const overallGradeMax = computed(() => {
+  const maxima = new Set(
+    store.sections
+      .filter((s) => s.grade_mode !== 'not_graded')
+      .map((s) => parseGrade(s.grade_max))
+      .filter((m): m is number => m !== null),
+  )
+  return maxima.size === 1 ? String([...maxima][0]) : null
+})
 
 const pairing = useCampaignPairing({
   token: auth.token ?? '',
@@ -149,6 +162,28 @@ onBeforeUnmount(() => activeSection.disconnect())
         >
           {{ t('evaluations.campaignFirstReport') }}
         </p>
+
+        <div data-test="pane-headers" class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <PaneHeader
+            v-if="pairing.previousEntry.value"
+            data-test="pane-header-previous"
+            :label="t('evaluations.campaignPanePrevious')"
+            :report-name="pairing.previousEntry.value.name"
+            :team-name="pairing.previousEntry.value.team_name"
+            :overall-grade="pairing.previousOverallGrade.value"
+            :grade-max="overallGradeMax"
+          />
+          <div v-else aria-hidden="true" class="hidden md:block" />
+          <PaneHeader
+            data-test="pane-header-current"
+            :label="t('evaluations.campaignPaneCurrent')"
+            :report-name="store.detail.report_name"
+            :team-name="store.detail.team_name"
+            :overall-grade="store.detail.overall_grade"
+            :grade-max="overallGradeMax"
+            is-current
+          />
+        </div>
 
         <div class="space-y-4">
           <CampaignSectionRow
