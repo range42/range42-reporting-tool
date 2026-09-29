@@ -72,6 +72,14 @@ const pairing = useCampaignPairing({
 
 const activeSection = useActiveSection(computed(() => sections.value.map((s) => s.section_def_id)))
 
+const previousReportGrade = computed(() => pairing.previousReport.value?.overall_grade ?? null)
+/** The caller's own previous grade when they evaluated it, else the report's aggregate. */
+const previousHeaderGrade = computed(() =>
+  pairing.hasOwnPreviousEvaluation.value
+    ? pairing.previousOverallGrade.value
+    : previousReportGrade.value,
+)
+
 function previousSectionFor(sectionDefId: string) {
   return (
     pairing.previousReport.value?.sections.find((s) => s.section_def_id === sectionDefId) ?? null
@@ -178,7 +186,7 @@ onBeforeUnmount(() => activeSection.disconnect())
             :label="t('evaluations.campaignPanePrevious')"
             :report-name="pairing.previousEntry.value.name"
             :team-name="pairing.previousEntry.value.team_name"
-            :overall-grade="pairing.previousOverallGrade.value"
+            :overall-grade="previousHeaderGrade"
             :grade-max="overallGradeMax"
           />
           <div v-else aria-hidden="true" class="hidden md:block" />
@@ -202,6 +210,7 @@ onBeforeUnmount(() => activeSection.disconnect())
             :previous-section="previousSectionFor(s.section_def_id)"
             :has-own-previous-evaluation="pairing.hasOwnPreviousEvaluation.value"
             :previous-grade="previousGradeFor(s.section_def_id)"
+            :previous-report-grade="previousReportGrade"
             @register-row="(el) => activeSection.registerRow(s.section_def_id, el)"
           />
         </div>

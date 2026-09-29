@@ -229,6 +229,8 @@ interface SetupOptions {
   campaigns?: Campaign[]
   hasOwnPrevious?: boolean
   previousOverallGrade?: string | null
+  /** The previous report's aggregate grade as served by compare (null when gated). */
+  previousReportGrade?: string | null
   /** listCampaigns rejects with 403 instead of resolving. */
   forbidden?: boolean
 }
@@ -263,10 +265,13 @@ async function setup(opts: SetupOptions = {}) {
     ],
   )
   vi.spyOn(campaignSvc, 'compareCampaignReports').mockResolvedValue([
-    reportDetail('r0', [
-      reportSection({ id: 'ps1', section_def_id: 'd1' }),
-      reportSection({ id: 'ps2', section_def_id: 'd2', name: 'Actions' }),
-    ]),
+    {
+      ...reportDetail('r0', [
+        reportSection({ id: 'ps1', section_def_id: 'd1' }),
+        reportSection({ id: 'ps2', section_def_id: 'd2', name: 'Actions' }),
+      ]),
+      overall_grade: opts.previousReportGrade ?? null,
+    },
     reportDetail('r1', []),
   ])
 
@@ -303,6 +308,15 @@ describe('CampaignEvaluation', () => {
     expect(current.text()).toContain('Day 2 SITREP')
     expect(current.get('[data-test="pane-grade"]').text()).toBe('7.50 / 10')
     expect(current.find('[data-test="pane-being-graded"]').exists()).toBe(true)
+  })
+
+  it('shows the previous report aggregate when the caller did not evaluate it', async () => {
+    const w = await setup({ hasOwnPrevious: false, previousReportGrade: '6.00' })
+    const card = w.get('[data-test="prev-card-d1"]')
+    expect(card.find('[data-test="prev-not-evaluated"]').exists()).toBe(true)
+    expect(card.get('[data-test="prev-report-grade"]').text()).toBe('6.00')
+    const header = w.get('[data-test="pane-header-previous"]')
+    expect(header.get('[data-test="pane-grade"]').text()).toBe('6.00 / 10')
   })
 
   it('omits the previous pane header when the report opens the campaign', async () => {

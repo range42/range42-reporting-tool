@@ -18,6 +18,8 @@ const props = defineProps<{
   section: ReportSection
   hasOwnPreviousEvaluation: boolean
   grade: SectionGrade | null
+  /** The report's aggregate grade, shown only when the caller has no own evaluation. */
+  reportGrade?: string | null
 }>()
 
 const { t } = useI18n()
@@ -65,13 +67,19 @@ const ownGrade = computed(() => (props.hasOwnPreviousEvaluation ? props.grade : 
       <!-- eslint-disable-next-line vue/no-v-html -- sanitize() is the shared allowlist -->
       <div v-else class="prose-rt max-w-none" v-html="safeContent" />
 
-      <p
-        v-if="!hasOwnPreviousEvaluation"
-        data-test="prev-not-evaluated"
-        class="mt-3 text-xs italic text-[var(--rt-fg-muted)]"
-      >
-        {{ t('evaluations.campaignDidNotEvaluate') }}
-      </p>
+      <div v-if="!hasOwnPreviousEvaluation" class="mt-3 space-y-1">
+        <p data-test="prev-not-evaluated" class="text-xs italic text-[var(--rt-fg-muted)]">
+          {{ t('evaluations.campaignDidNotEvaluate') }}
+        </p>
+        <p v-if="reportGrade" class="text-xs text-[var(--rt-fg-muted)]">
+          {{ t('evaluations.breakdownAggregate') }}:
+          <span
+            data-test="prev-report-grade"
+            class="font-mono font-semibold tabular-nums text-[var(--rt-fg)]"
+            >{{ reportGrade }}</span
+          >
+        </p>
+      </div>
       <div v-else-if="ownGrade" class="mt-3 border-t border-[var(--rt-border)] pt-2">
         <p class="text-xs text-[var(--rt-fg-muted)]">
           {{ t('evaluations.grade') }}:

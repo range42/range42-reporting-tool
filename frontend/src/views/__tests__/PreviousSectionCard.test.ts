@@ -52,6 +52,7 @@ function mountCard(props: {
   section: ReportSection
   hasOwnPreviousEvaluation: boolean
   grade: SectionGrade | null
+  reportGrade?: string | null
 }) {
   return mount(PreviousSectionCard, { props, global: { plugins: [i18n] } })
 }
@@ -91,6 +92,18 @@ describe('PreviousSectionCard.vue', () => {
     const wrapper = mountCard({ section: section(), hasOwnPreviousEvaluation: false, grade: null })
     expect(wrapper.find('[data-test="prev-not-evaluated"]').exists()).toBe(true)
     expect(wrapper.find('[data-test="prev-grade"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="prev-report-grade"]').exists()).toBe(false)
+  })
+
+  it('shows the report aggregate next to the did-not-evaluate note', () => {
+    const wrapper = mountCard({
+      section: section(),
+      hasOwnPreviousEvaluation: false,
+      grade: null,
+      reportGrade: '6.00',
+    })
+    expect(wrapper.find('[data-test="prev-not-evaluated"]').exists()).toBe(true)
+    expect(wrapper.get('[data-test="prev-report-grade"]').text()).toBe('6.00')
   })
 
   it('never renders a grade sourced from another evaluator', () => {

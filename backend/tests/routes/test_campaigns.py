@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.models import AuditLog
 from app.seed import seed_system_roles
+from tests.routes._evaluations import assign, evaluator, ga_headers, role_holder, submitted_report
 from tests.routes._helpers import client, make_user_token
 
 pytestmark = pytest.mark.integration
@@ -317,6 +318,39 @@ async def test_compare_scoped_to_assigned_reports(migrated_db: async_sessionmake
             f"/api/v1/exercises/{ex}/campaigns/{cid}/compare", params={"report_ids": [rid_b]}, headers=eh
         )
         assert denied.status_code == 403
+
+
+async def test_compare_gates_overall_grade_like_report_detail(migrated_db: async_sessionmaker) -> None:
+    """The report-level grade rides along only for callers the grade gate clears: Global Admin and
+    the evaluator role (scoring:read:all) see it; the report's own team does not before it is
+    evaluated."""
+    ah, _ = await ga_headers(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, _sid = await submitted_report(c, ah)
+        eh, uid = await evaluator(migrated_db, c, ah, ex, "ev-a")
+        await assign(c, ah, ex, rid, uid)
+        th, tuid = await role_holder(migrated_db, c, ah, ex, "tw", "team_writer")
+        team_id = (await c.get(f"/api/v1/exercises/{ex}/reports/{rid}", headers=ah)).json()["data"]["team_id"]
+        await c.post(f"/api/v1/exercises/{ex}/teams/{team_id}/members", json={"user_id": tuid}, headers=ah)
+        cid = (await c.post(f"/api/v1/exercises/{ex}/campaigns", json={"name": "C"}, headers=ah)).json()["data"]["id"]
+        await c.post(f"/api/v1/exercises/{ex}/campaigns/{cid}/reports", json={"report_id": rid}, headers=ah)
+        r = await c.put(
+            f"/api/v1/exercises/{ex}/reports/{rid}/overall-grade",
+            json={"overall_grade": "6.5", "reason": "moderated"},
+            headers=ah,
+        )
+        assert r.status_code == 200, r.text
+
+        url = f"/api/v1/exercises/{ex}/campaigns/{cid}/compare"
+        as_ga = await c.get(url, params={"report_ids": [rid]}, headers=ah)
+        as_ev = await c.get(url, params={"report_ids": [rid]}, headers=eh)
+        as_team = await c.get(url, params={"report_ids": [rid]}, headers=th)
+    assert as_ga.status_code == 200, as_ga.text
+    assert as_ga.json()["data"][0]["overall_grade"] == "6.50"
+    assert as_ev.status_code == 200, as_ev.text
+    assert as_ev.json()["data"][0]["overall_grade"] == "6.50"
+    assert as_team.status_code == 200, as_team.text
+    assert as_team.json()["data"][0]["overall_grade"] is None
 
 
 async def test_timeline_empty_for_evaluator_with_no_assignment(migrated_db: async_sessionmaker) -> None:

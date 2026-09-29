@@ -16,6 +16,7 @@ defineProps<{
   previousSection: ReportSection | null
   hasOwnPreviousEvaluation: boolean
   previousGrade: SectionGrade | null
+  previousReportGrade: string | null
 }>()
 
 const emit = defineEmits<{ registerRow: [el: Element | null] }>()
@@ -34,6 +35,7 @@ const { t } = useI18n()
       :section="previousSection"
       :has-own-previous-evaluation="hasOwnPreviousEvaluation"
       :grade="previousGrade"
+      :report-grade="previousReportGrade"
     />
     <p
       v-else

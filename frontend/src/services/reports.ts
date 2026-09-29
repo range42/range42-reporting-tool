@@ -90,6 +90,8 @@ export interface ReportDetail {
   approval_cycle: number
   approval_records: ApprovalRecord[]
   can_approve: boolean
+  /** Report-level grade; null (or absent) when the caller is not cleared to see it. */
+  overall_grade?: string | null
 }
 
 export type SectionAnswerBody =

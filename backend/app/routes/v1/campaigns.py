@@ -33,6 +33,7 @@ from app.models import (
 from app.routes.v1.reports import (
     _auto_assign_evaluators,
     _caller_team_ids,
+    _GradeGate,
     _has_permission,
     _instantiate_report,
     _section_pairs,
@@ -514,5 +515,14 @@ async def campaign_compare(
     reports = {r.id: r for r in (await db.execute(select(Report).where(Report.id.in_(report_ids)))).scalars().all()}
     if visible_ids is not None and any(rid not in visible_ids for rid in report_ids):
         raise HTTPException(status_code=403, detail="insufficient permissions")
-    data = [ReportDetailOut.from_models(reports[rid], await _section_pairs(db, rid)) for rid in report_ids]
+    grade_gate = await _GradeGate.resolve(db, exercise_id, user)
+    team_ids = await _caller_team_ids(db, exercise_id, user)
+    data = [
+        ReportDetailOut.from_models(
+            reports[rid],
+            await _section_pairs(db, rid),
+            grade_visible=grade_gate.allows(reports[rid], is_team_member=reports[rid].team_id in team_ids),
+        )
+        for rid in report_ids
+    ]
     return DataEnvelope(data=data)
