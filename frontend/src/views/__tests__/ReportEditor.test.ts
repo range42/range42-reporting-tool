@@ -23,14 +23,13 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
-// ProseMirror can't run under jsdom — stub TipTap; the RichTextField textarea
-// mirror is the surface these tests drive.
-vi.mock('@tiptap/vue-3', () => ({
+// No live editor: the RichTextField textarea mirror is the surface these tests drive.
+// The schema helpers stay real so draft/server HTML comparison runs as in production.
+vi.mock('@tiptap/vue-3', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tiptap/vue-3')>()),
   useEditor: () => ({ value: undefined }),
   EditorContent: { name: 'EditorContent', template: '<div />' },
 }))
-vi.mock('@tiptap/starter-kit', () => ({ default: {} }))
-vi.mock('@tiptap/extension-image', () => ({ default: { extend: () => ({}) } }))
 
 const richDetail = {
   id: 'r1',
@@ -191,6 +190,86 @@ describe('ReportEditor.vue', () => {
     await flushPromises()
     expect(reports.getReport).toHaveBeenCalledTimes(2)
     expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
+  })
+
+  it('offers to restore a local draft that is newer and differs from the server', async () => {
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: '<p>local</p>', editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(true)
+  })
+
+  it('drops a newer local draft whose content matches the server, without a prompt', async () => {
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: '<p>same</p>', editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      sections: [{ ...richDetail.sections[0], content: '<p>same</p>' }],
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(false)
+    expect(localStorage.getItem('r42:draft:r1:d1')).toBeNull()
+  })
+
+  it('drops a table draft that only differs from the server by editor serialization', async () => {
+    const serverTable =
+      '<table><thead><tr><th>Named Threat</th><th>Detection</th></tr></thead>' +
+      '<tbody><tr><td></td><td></td></tr></tbody></table>'
+    const editorTable =
+      '<table style="min-width: 50px"><colgroup><col style="min-width: 25px">' +
+      '<col style="min-width: 25px"></colgroup><tbody><tr>' +
+      '<th colspan="1" rowspan="1"><p>Named Threat</p></th>' +
+      '<th colspan="1" rowspan="1"><p>Detection</p></th></tr><tr>' +
+      '<td colspan="1" rowspan="1"><p></p></td><td colspan="1" rowspan="1"><p></p></td>' +
+      '</tr></tbody></table>'
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: editorTable, editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      sections: [{ ...richDetail.sections[0], content: serverTable }],
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(false)
+    expect(localStorage.getItem('r42:draft:r1:d1')).toBeNull()
+  })
+
+  it('treats a choice draft with the same codes in another order as matching the server', async () => {
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: ['b', 'a'], editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      sections: [
+        {
+          ...richDetail.sections[0],
+          field_type: 'choice',
+          content: null,
+          choice_values: ['a', 'b'],
+          choice_config: {
+            selection: 'multi',
+            values: [
+              { code: 'a', label: 'A' },
+              { code: 'b', label: 'B' },
+            ],
+          },
+        },
+      ],
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(false)
+    expect(localStorage.getItem('r42:draft:r1:d1')).toBeNull()
   })
 
   it('a draft assigned to another user is read-only with the assignment-lock banner', async () => {

@@ -25,6 +25,7 @@ import {
   type Attachment,
 } from '@/services/attachments'
 import { useDraftCache } from '@/composables/useDraftCache'
+import { normalizeRichText } from '@/lib/richText'
 import { useCharBudget } from '@/composables/useCharBudget'
 import {
   useWriterPreviousReport,
@@ -154,6 +155,22 @@ function toEditable(s: ReportDetail['sections'][number]): EditableSection {
   }
 }
 
+/** True when the stored draft holds exactly what the server already has for this section. */
+function draftMatchesServer(s: EditableSection): boolean {
+  const entry = draft.read(s.sectionDefId)
+  if (entry === null) return false
+  if (s.fieldType === 'rich_text') {
+    return (
+      typeof entry.value === 'string' &&
+      normalizeRichText(entry.value) === normalizeRichText(s.content)
+    )
+  }
+  if (!Array.isArray(entry.value)) return false
+  const local = [...(entry.value as string[])].sort()
+  const server = [...s.choice].sort()
+  return local.length === server.length && local.every((code, i) => code === server[i])
+}
+
 async function loadPreviousReport(teamId: string): Promise<void> {
   const result = useWriterPreviousReport({
     token: token.value,
@@ -176,7 +193,9 @@ onMounted(async () => {
     report.value = detail
     sections.splice(0, sections.length, ...detail.sections.map(toEditable))
     for (const s of sections) {
-      if (draft.isNewerThanServer(s.sectionDefId, s.serverUpdatedAt)) s.restore = true
+      if (!draft.isNewerThanServer(s.sectionDefId, s.serverUpdatedAt)) continue
+      if (draftMatchesServer(s)) draft.clear(s.sectionDefId)
+      else s.restore = true
     }
     attachments.value = await listAttachments(token.value, exerciseId, rid)
     void loadPreviousReport(detail.team_id)

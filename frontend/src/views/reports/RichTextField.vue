@@ -15,15 +15,11 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
-import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
-import { Table } from '@tiptap/extension-table'
-import TableRow from '@tiptap/extension-table-row'
-import TableHeader from '@tiptap/extension-table-header'
-import TableCell from '@tiptap/extension-table-cell'
 import { ImagePlus, Table2, Rows3, Columns3, Trash2 } from '@lucide/vue'
 import { resolveAttachmentObjectUrl } from '@/services/attachments'
 import { IMG_SRC_PATTERN } from '@/services/sanitize'
+import { richTextExtensions } from '@/lib/richText'
 
 const props = defineProps<{
   modelValue: string
@@ -63,14 +59,7 @@ const AuthedImage = Image.extend({
 const editor = useEditor({
   content: props.modelValue,
   editable: !props.disabled,
-  extensions: [
-    StarterKit,
-    AuthedImage,
-    Table.configure({ resizable: false }),
-    TableRow,
-    TableHeader,
-    TableCell,
-  ],
+  extensions: richTextExtensions(AuthedImage),
   onUpdate: ({ editor }) => emit('update:modelValue', editor.getHTML()),
 })
 
@@ -83,7 +72,7 @@ watch(
 )
 watch(
   () => props.disabled,
-  (d) => editor.value?.setEditable(!d),
+  (d) => editor.value?.setEditable(!d, false),
 )
 
 onBeforeUnmount(() => editor.value?.destroy())
