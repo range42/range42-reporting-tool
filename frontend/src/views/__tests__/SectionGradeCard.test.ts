@@ -63,12 +63,12 @@ function env(status: number, data: unknown): Response {
 }
 
 /** Load the store from a stubbed detail, then mount the card against it. */
-async function setup(d: EvaluationDetail = detail()) {
+async function setup(d: EvaluationDetail = detail(), showMeta?: boolean) {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(env(200, d)))
   const store = useEvaluationStore()
   await store.load('tok', 'ex1', 'r1', 'ev1')
   const w = mount(SectionGradeCard, {
-    props: { sectionId: d.sections[0]!.report_section_id },
+    props: { sectionId: d.sections[0]!.report_section_id, showMeta },
     global: { plugins: [i18n] },
   })
   return { store, w }
@@ -97,6 +97,11 @@ describe('SectionGradeCard', () => {
     const header = w.get('[data-test="section-meta-s1"]').text()
     expect(header).toContain('0–10')
     expect(header).toContain('1.5')
+  })
+
+  it('leaves the header out when the layout renders it elsewhere', async () => {
+    const { w } = await setup(detail(), false)
+    expect(w.find('[data-test="section-meta-s1"]').exists()).toBe(false)
   })
 
   it('renders the content pane and the grade control in one card', async () => {

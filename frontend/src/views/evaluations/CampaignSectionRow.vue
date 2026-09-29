@@ -17,6 +17,8 @@ defineProps<{
   hasOwnPreviousEvaluation: boolean
   previousGrade: SectionGrade | null
   previousReportGrade: string | null
+  /** The current section's grading summary, shown once across both columns. */
+  meta: string
 }>()
 
 const emit = defineEmits<{ registerRow: [el: Element | null] }>()
@@ -30,6 +32,12 @@ const { t } = useI18n()
     class="grid grid-cols-1 gap-3 md:grid-cols-2"
     :ref="(el) => emit('registerRow', el as Element | null)"
   >
+    <p
+      :data-test="`pair-meta-${sectionDefId}`"
+      class="text-xs text-[var(--rt-fg-muted)] md:col-span-2"
+    >
+      {{ meta }}
+    </p>
     <PreviousSectionCard
       v-if="previousSection"
       :section="previousSection"
@@ -45,6 +53,6 @@ const { t } = useI18n()
       {{ t('evaluations.campaignFirstReport') }}
     </p>
 
-    <SectionGradeCard :section-id="currentSectionId" />
+    <SectionGradeCard :section-id="currentSectionId" :show-meta="false" />
   </div>
 </template>

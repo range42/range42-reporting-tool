@@ -327,10 +327,13 @@ describe('CampaignEvaluation', () => {
 
   it('renders the spanning section header with grade mode, range, and weight', async () => {
     const w = await setup()
-    const meta = w.get('[data-test="section-meta-s1"]').text()
-    expect(meta).toContain('0')
-    expect(meta).toContain('10')
-    expect(meta).toContain('1')
+    const row = w.get('[data-test="pair-row-d1"]')
+    const header = row.get('[data-test="pair-meta-d1"]')
+    expect(header.element.parentElement).toBe(row.element)
+    expect(header.classes()).toContain('md:col-span-2')
+    expect(header.text()).toContain('0–10')
+    expect(header.text()).toContain('1')
+    expect(row.find('[data-test="section-meta-s1"]').exists()).toBe(false)
   })
 
   it('renders only the current report’s grading controls', async () => {

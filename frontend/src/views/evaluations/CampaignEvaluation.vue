@@ -25,6 +25,7 @@ import { useEvaluationStore } from '@/stores/evaluation'
 import { useAuthStore } from '@/stores/auth'
 import { useCampaignPairing } from '@/composables/useCampaignPairing'
 import { useActiveSection } from '@/composables/useActiveSection'
+import { useSectionMeta } from '@/composables/useSectionMeta'
 import { ApiError } from '@/services/http'
 import type { RouteLocationNamedRaw } from 'vue-router'
 
@@ -47,6 +48,8 @@ const singleTo = computed<RouteLocationNamedRaw>(() => ({
   name: SINGLE_ROUTE,
   params: { exerciseId, rid, evid },
 }))
+
+const { metaFor } = useSectionMeta()
 
 /** Template authoring order, not payload order. */
 const sections = computed(() => [...store.sections].sort((a, b) => a.position - b.position))
@@ -211,6 +214,7 @@ onBeforeUnmount(() => activeSection.disconnect())
             :has-own-previous-evaluation="pairing.hasOwnPreviousEvaluation.value"
             :previous-grade="previousGradeFor(s.section_def_id)"
             :previous-report-grade="previousReportGrade"
+            :meta="metaFor(s)"
             @register-row="(el) => activeSection.registerRow(s.section_def_id, el)"
           />
         </div>
