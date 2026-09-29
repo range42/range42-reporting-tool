@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /**
- * Global-Admin per-campaign hub: rename the campaign, and set BOTH halves of the
- * evaluator-assignment intersection in one place — campaign-level evaluators, and every
- * team's evaluators, inline.
+ * Global-Admin per-campaign hub: rename the campaign, and assign evaluators per team.
  *
- * Why both halves live here: a report only auto-assigns an evaluator once
- * `team_evaluator ∩ campaign_evaluator` is non-empty for its team and campaign (backend:
- * `reports.py::_auto_assign_evaluators`). Before this screen, the campaign side
- * (`CampaignEvaluators.vue`) and the team side (`TeamEvaluators.vue`, reachable only from
- * `ReportCreate.vue`'s team picker) had no common screen, so an admin using only the
- * campaign-creation flow had no way to discover the team half exists at all.
+ * Assigning someone to a team HERE (as opposed to via the standalone team screen) writes
+ * BOTH halves of the intersection a report needs to auto-assign an evaluator —
+ * `team_evaluator` for that team AND `campaign_evaluator` for this campaign (backend:
+ * `reports.py::_auto_assign_evaluators` needs `team_evaluator ∩ campaign_evaluator`). There
+ * is deliberately no separate campaign-level picker: being on this campaign's own detail page
+ * already says "for this campaign," so a second, redundant "which campaign" step added
+ * nothing. A duplicate `campaign_evaluator` write (assigning the same person to a second team
+ * in the same campaign) 409s server-side ("already assigned") and is treated as a normal,
+ * silent no-op — not an error.
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -22,11 +23,8 @@ import { listEvaluatorCandidates, type EvaluatorCandidate } from '@/services/eva
 import {
   addCampaignEvaluator,
   getCampaign,
-  listCampaignEvaluators,
-  removeCampaignEvaluator,
   updateCampaign,
   type Campaign,
-  type CampaignEvaluatorSummary,
 } from '@/services/campaigns'
 import {
   addTeamEvaluator,
@@ -48,14 +46,11 @@ const token = computed(() => auth.token ?? '')
 const campaign = ref<Campaign | null>(null)
 const teams = ref<Team[]>([])
 const candidates = ref<EvaluatorCandidate[]>([])
-const campaignRows = ref<CampaignEvaluatorSummary[]>([])
 const teamRows = reactive<Record<string, TeamEvaluatorSummary[]>>({})
 
 const loading = ref(true)
 const error = ref('')
 
-const campaignAssigning = ref(false)
-const campaignAssignError = ref('')
 const teamAssigning = reactive<Record<string, boolean>>({})
 const teamAssignError = reactive<Record<string, string>>({})
 
@@ -66,10 +61,6 @@ const savingName = ref(false)
 
 async function loadCampaign(): Promise<void> {
   campaign.value = await getCampaign(token.value, exerciseId, cid)
-}
-
-async function loadCampaignEvaluators(): Promise<void> {
-  campaignRows.value = await listCampaignEvaluators(token.value, exerciseId, cid)
 }
 
 async function loadTeamEvaluators(teamId: string): Promise<void> {
@@ -84,42 +75,12 @@ onMounted(async () => {
   try {
     candidates.value = await listEvaluatorCandidates(token.value, exerciseId)
     teams.value = await listTeams(token.value, exerciseId)
-    await Promise.all([
-      loadCampaign(),
-      loadCampaignEvaluators(),
-      ...teams.value.map((tm) => loadTeamEvaluators(tm.id)),
-    ])
+    await Promise.all([loadCampaign(), ...teams.value.map((tm) => loadTeamEvaluators(tm.id))])
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('campaigns.manage.loadDetailError')
   }
   loading.value = false
 })
-
-async function assignCampaign(evaluatorId: string): Promise<void> {
-  if (campaignAssigning.value) return
-  campaignAssigning.value = true
-  campaignAssignError.value = ''
-  try {
-    await addCampaignEvaluator(token.value, exerciseId, cid, evaluatorId)
-    await loadCampaignEvaluators()
-  } catch (e) {
-    campaignAssignError.value =
-      e instanceof ApiError ? e.message : t('campaignEvaluators.assignFailed')
-  } finally {
-    campaignAssigning.value = false
-  }
-}
-
-async function removeCampaignRow(evaluatorId: string): Promise<void> {
-  campaignAssignError.value = ''
-  try {
-    await removeCampaignEvaluator(token.value, exerciseId, cid, evaluatorId)
-    await loadCampaignEvaluators()
-  } catch (e) {
-    campaignAssignError.value =
-      e instanceof ApiError ? e.message : t('campaignEvaluators.removeFailed')
-  }
-}
 
 async function assignTeam(teamId: string, evaluatorId: string): Promise<void> {
   if (teamAssigning[teamId]) return
@@ -127,6 +88,12 @@ async function assignTeam(teamId: string, evaluatorId: string): Promise<void> {
   delete teamAssignError[teamId]
   try {
     await addTeamEvaluator(token.value, exerciseId, teamId, evaluatorId)
+    try {
+      await addCampaignEvaluator(token.value, exerciseId, cid, evaluatorId)
+    } catch (e) {
+      // 409 = this evaluator already covers the campaign (e.g. via another team) — expected.
+      if (!(e instanceof ApiError && e.status === 409)) throw e
+    }
     await loadTeamEvaluators(teamId)
   } catch (e) {
     teamAssignError[teamId] = e instanceof ApiError ? e.message : t('teamEvaluators.assignFailed')
@@ -235,27 +202,6 @@ async function saveName(): Promise<void> {
           </p>
         </div>
       </div>
-
-      <section class="mb-10">
-        <h2 class="mb-3 text-sm font-semibold text-[var(--rt-fg-muted)]">
-          {{ t('campaigns.manage.campaignEvaluatorsHeading') }}
-        </h2>
-        <EvaluatorAssignmentPanel
-          :rows="campaignRows"
-          :candidates="candidates"
-          :assigning="campaignAssigning"
-          :assign-error="campaignAssignError"
-          :add-heading="t('campaignEvaluators.addHeading')"
-          :no-candidates-text="t('campaignEvaluators.noCandidates')"
-          :pick-label="t('campaignEvaluators.pickLabel')"
-          :assign-action-text="t('campaignEvaluators.assignAction')"
-          :current-heading="t('campaignEvaluators.currentHeading')"
-          :nobody-text="t('campaignEvaluators.nobody')"
-          :remove-action-text="t('campaignEvaluators.removeAction')"
-          @assign="assignCampaign"
-          @remove="removeCampaignRow"
-        />
-      </section>
 
       <section>
         <h2 class="mb-1 text-sm font-semibold text-[var(--rt-fg-muted)]">

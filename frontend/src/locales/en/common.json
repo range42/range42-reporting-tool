@@ -421,9 +421,8 @@
       "saveAction": "Save",
       "cancelAction": "Cancel",
       "saveError": "Could not rename the campaign.",
-      "campaignEvaluatorsHeading": "Campaign evaluators",
       "teamEvaluatorsHeading": "Per-team evaluators",
-      "teamEvaluatorsHint": "A report only auto-assigns an evaluator once the same person covers both the campaign and the report's team."
+      "teamEvaluatorsHint": "Assigning someone here covers both this team and this campaign — a report only auto-assigns once both match."
     },
     "define": {
       "title": "Define a campaign",
