@@ -59,7 +59,7 @@ const isOwnEvaluation = computed(() => store.detail?.evaluator_id === auth.user?
  *  too — otherwise their finalized work is editable nowhere and finalizable never again. */
 const canReopen = computed(() => store.isFinalized && (auth.isAdmin || isOwnEvaluation.value))
 
-/** Null while the campaign route is unregistered; ViewModeSwitch disables the control then. */
+/** Null if the campaign route is missing; ViewModeSwitch then renders a disabled control. */
 const campaignTo = computed<RouteLocationNamedRaw | null>(() =>
   router.hasRoute(CAMPAIGN_ROUTE)
     ? { name: CAMPAIGN_ROUTE, params: { exerciseId, rid, evid } }

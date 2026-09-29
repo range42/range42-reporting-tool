@@ -2,9 +2,8 @@
 /**
  * Single ↔ Campaign switch for one evaluation.
  *
- * The campaign target is passed in rather than built here, and is null while the
- * `evaluation-campaign` route is unregistered: a `RouterLink` pointing at an unregistered name
- * throws while resolving, taking the whole view down. Null renders a disabled control instead.
+ * The campaign target is passed in rather than built here; null renders a disabled control
+ * instead of a `RouterLink`, which would throw while resolving a route that does not exist.
  *
  * `mode` picks which side is "current" (a plain `<span aria-current>`, not a link) — 'single'
  * (the default, unchanged from before this existed) for `SingleEvaluation.vue`, 'campaign' for
