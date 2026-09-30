@@ -17,9 +17,7 @@ def upgrade() -> None:
         "team_evaluator",
         sa.Column("id", pg.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
         sa.Column("team_id", pg.UUID(as_uuid=True), sa.ForeignKey("team.id", ondelete="CASCADE"), nullable=False),
-        sa.Column(
-            "evaluator_id", pg.UUID(as_uuid=True), sa.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
-        ),
+        sa.Column("evaluator_id", pg.UUID(as_uuid=True), sa.ForeignKey("user.id", ondelete="CASCADE"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.UniqueConstraint("team_id", "evaluator_id", name="uq_team_evaluator"),
     )
@@ -31,9 +29,7 @@ def upgrade() -> None:
         sa.Column(
             "campaign_id", pg.UUID(as_uuid=True), sa.ForeignKey("campaign.id", ondelete="CASCADE"), nullable=False
         ),
-        sa.Column(
-            "evaluator_id", pg.UUID(as_uuid=True), sa.ForeignKey("user.id", ondelete="CASCADE"), nullable=False
-        ),
+        sa.Column("evaluator_id", pg.UUID(as_uuid=True), sa.ForeignKey("user.id", ondelete="CASCADE"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
         sa.UniqueConstraint("campaign_id", "evaluator_id", name="uq_campaign_evaluator"),
     )
