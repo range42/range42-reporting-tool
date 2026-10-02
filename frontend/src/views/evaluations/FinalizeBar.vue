@@ -78,7 +78,7 @@ async function onFeedbackBlur(): Promise<void> {
 <template>
   <div
     data-test="finalize-bar"
-    class="sticky bottom-0 z-20 border-t border-[var(--rt-border)] bg-[var(--rt-bg-elev)]/90 backdrop-blur"
+    class="rt-finalize-bar sticky bottom-0 z-20 border-t border-[var(--rt-border)] bg-[var(--rt-bg-elev)]/90 backdrop-blur"
   >
     <div class="mx-auto flex max-w-[1800px] flex-wrap items-center gap-4 px-4 py-3">
       <div class="flex items-baseline gap-2">

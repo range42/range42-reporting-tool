@@ -55,6 +55,11 @@ body {
   outline-offset: 2px;
 }
 
+/* Keep focused or scrolled-to fields clear of the sticky finalize bar. */
+html:has(.rt-finalize-bar) {
+  scroll-padding-bottom: 6rem;
+}
+
 /* Subtle scrollbars */
 * {
   scrollbar-width: thin;
