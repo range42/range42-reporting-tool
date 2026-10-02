@@ -21,7 +21,7 @@ const { t } = useI18n()
       <p class="text-[10px] font-medium uppercase tracking-wider text-[var(--rt-fg-muted)]">
         {{ label }}
         <span v-if="isCurrent" data-test="pane-being-graded" class="text-[var(--rt-accent)]">
-          · {{ t('evaluations.campaignBeingGraded') }}
+          · {{ t('evaluations.campaign.beingGraded') }}
         </span>
       </p>
       <h3 class="truncate text-sm font-semibold">{{ reportName }}</h3>

@@ -69,7 +69,7 @@ const ownGrade = computed(() => (props.hasOwnPreviousEvaluation ? props.grade : 
 
       <div v-if="!hasOwnPreviousEvaluation" class="mt-3 space-y-1">
         <p data-test="prev-not-evaluated" class="text-xs italic text-[var(--rt-fg-muted)]">
-          {{ t('evaluations.campaignDidNotEvaluate') }}
+          {{ t('evaluations.campaign.didNotEvaluate') }}
         </p>
         <p v-if="reportGrade" class="text-xs text-[var(--rt-fg-muted)]">
           {{ t('evaluations.breakdownAggregate') }}:

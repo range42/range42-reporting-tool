@@ -11,7 +11,7 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <nav :aria-label="t('evaluations.campaignJumpAriaLabel')">
+  <nav :aria-label="t('evaluations.campaign.jumpAriaLabel')">
     <ol class="flex flex-wrap gap-1.5">
       <li v-for="s in sections" :key="s.section_def_id">
         <a

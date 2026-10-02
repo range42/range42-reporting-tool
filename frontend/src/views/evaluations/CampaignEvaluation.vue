@@ -137,13 +137,13 @@ onBeforeUnmount(() => activeSection.disconnect())
         data-test="no-campaign"
         class="space-y-2"
       >
-        <p class="text-sm text-[var(--rt-fg-muted)]">{{ t('evaluations.campaignNoCampaign') }}</p>
+        <p class="text-sm text-[var(--rt-fg-muted)]">{{ t('evaluations.campaign.noCampaign') }}</p>
         <RouterLink
           data-test="mode-single"
           :to="singleTo"
           class="text-sm text-[var(--rt-accent)] underline"
         >
-          {{ t('evaluations.campaignBackToSingle') }}
+          {{ t('evaluations.campaign.backToSingle') }}
         </RouterLink>
       </div>
 
@@ -179,14 +179,14 @@ onBeforeUnmount(() => activeSection.disconnect())
           data-test="campaign-empty"
           class="mb-4 text-xs italic text-[var(--rt-fg-muted)]"
         >
-          {{ t('evaluations.campaignFirstReport') }}
+          {{ t('evaluations.campaign.firstReport') }}
         </p>
 
         <div data-test="pane-headers" class="mb-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           <PaneHeader
             v-if="pairing.previousEntry.value"
             data-test="pane-header-previous"
-            :label="t('evaluations.campaignPanePrevious')"
+            :label="t('evaluations.campaign.panePrevious')"
             :report-name="pairing.previousEntry.value.name"
             :team-name="pairing.previousEntry.value.team_name"
             :overall-grade="previousHeaderGrade"
@@ -195,7 +195,7 @@ onBeforeUnmount(() => activeSection.disconnect())
           <div v-else aria-hidden="true" class="hidden md:block" />
           <PaneHeader
             data-test="pane-header-current"
-            :label="t('evaluations.campaignPaneCurrent')"
+            :label="t('evaluations.campaign.paneCurrent')"
             :report-name="store.detail.report_name"
             :team-name="store.detail.team_name"
             :overall-grade="store.detail.overall_grade"

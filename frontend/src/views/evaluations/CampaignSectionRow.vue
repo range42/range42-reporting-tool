@@ -50,7 +50,7 @@ const { t } = useI18n()
       :data-test="`prev-empty-${sectionDefId}`"
       class="rounded-lg border border-dashed border-[var(--rt-border)] p-3 text-xs italic text-[var(--rt-fg-muted)]"
     >
-      {{ t('evaluations.campaignFirstReport') }}
+      {{ t('evaluations.campaign.firstReport') }}
     </p>
 
     <SectionGradeCard :section-id="currentSectionId" :show-meta="false" />

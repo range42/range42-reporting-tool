@@ -50,7 +50,7 @@ function onClick(entry: TimelineEntry, index: number): void {
 </script>
 
 <template>
-  <nav :aria-label="t('evaluations.campaignNavAriaLabel')" class="flex flex-wrap gap-1.5">
+  <nav :aria-label="t('evaluations.campaign.navAriaLabel')" class="flex flex-wrap gap-1.5">
     <button
       v-for="(entry, i) in entries"
       :key="entry.report_id"
