@@ -1,15 +1,24 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { FOREIGN_FEEDBACK_PREFIX } from './global-setup'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
+interface Pair {
+  rid: string
+  evid: string
+  sectionIds: string[]
+}
+
 interface Fixture {
   exerciseId: string
-  pairA: { rid: string; evid: string; sectionIds: string[] }
-  pairB: { rid: string; evid: string; sectionIds: string[] }
+  pairA: Pair
+  pairB: Pair
   soloC: { rid: string; evid: string }
-  pairD: { rid: string; evid: string; sectionIds: string[] }
+  pairD: Pair
+  pairE: Pair
+  pairF: Pair
 }
 
 const fixture: Fixture = JSON.parse(readFileSync(`${__dirname}/.auth/fixture.json`, 'utf-8'))
@@ -167,4 +176,63 @@ test('captures reference screenshots for first-report, mid-grading, and all-grad
   await secondInput.blur()
   await expect(page.locator('[data-test="finalize-btn"]')).toBeEnabled()
   await page.screenshot({ path: `${test.info().outputDir}/all-graded.png`, fullPage: true })
+})
+
+test.describe('as an evaluator without global admin', () => {
+  test.use({ storageState: `${__dirname}/.auth/evaluator-storage.json` })
+
+  test('sees their own previous grade and feedback beside the current report', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== SINGLE_PROJECT, 'single project is enough')
+    await page.goto(campaignUrl(fixture.pairE.rid, fixture.pairE.evid))
+
+    await expect(page.locator('[data-test="prev-grade"]').first()).toContainText('6.00')
+    await expect(page.getByText('Carol feedback 1.')).toBeVisible()
+    await expect(page.locator('[data-test="prev-not-evaluated"]')).toHaveCount(0)
+    for (const sid of fixture.pairE.sectionIds) {
+      await expect(page.locator(`[data-test="grade-numeric-${sid}"]`)).toBeEditable()
+    }
+  })
+
+  test('never receives a previous report graded only by another evaluator', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== SINGLE_PROJECT, 'single project is enough')
+    await page.goto(campaignUrl(fixture.pairF.rid, fixture.pairF.evid))
+
+    // Outside the evaluator's assigned read scope, so the timeline never lists it at all.
+    await expect(page.locator('[data-test="campaign-empty"]')).toBeVisible()
+    await expect(
+      page.getByRole('navigation', { name: 'Campaign reports' }).getByRole('button'),
+    ).toHaveCount(1)
+    await expect(page.locator('[data-test^="prev-card-"]')).toHaveCount(0)
+    const html = await page.content()
+    expect(html).not.toContain(FOREIGN_FEEDBACK_PREFIX)
+    expect(html).not.toContain('Pair F — Previous')
+  })
+
+  test('grades and finalizes the current report', async ({ page, request }, testInfo) => {
+    test.skip(testInfo.project.name !== SINGLE_PROJECT, 'single project is enough')
+    await page.goto(campaignUrl(fixture.pairF.rid, fixture.pairF.evid))
+
+    for (const sid of fixture.pairF.sectionIds) {
+      const input = page.locator(`[data-test="grade-numeric-${sid}"]`)
+      await input.fill('5')
+      await input.blur()
+      await expect(input).toHaveValue('5.00')
+    }
+    await expect(page.locator('[data-test="finalize-remaining"]')).toHaveText('All sections graded')
+    await page.locator('[data-test="finalize-btn"]').click()
+    await expect(page.locator('[data-test="finalize-done"]')).toBeVisible()
+
+    // An evaluator reads through the evaluation breakdown; report detail needs reports:read:own/all.
+    const token = await page.evaluate(() => localStorage.getItem('rt_token'))
+    const resp = await request.get(
+      `http://localhost:8000/api/v1/exercises/${fixture.exerciseId}/reports/${fixture.pairF.rid}/evaluations`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    expect(resp.ok()).toBe(true)
+    expect((await resp.json()).data.report_status).toBe('evaluated')
+  })
 })

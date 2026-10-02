@@ -6,31 +6,35 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const BASE = 'http://localhost:5173'
 const API = 'http://localhost:8000'
 const STORAGE_STATE = `${__dirname}/.auth/admin-storage.json`
+const EVALUATOR_STORAGE_STATE = `${__dirname}/.auth/evaluator-storage.json`
 const FIXTURE_FILE = `${__dirname}/.auth/fixture.json`
+const EVALUATOR_EMAIL = 'carol@range42.local'
+/** Feedback the admin leaves on pair F's previous report; the evaluator must never see it. */
+export const FOREIGN_FEEDBACK_PREFIX = 'ADMIN-ONLY feedback'
 
 /**
- * Logs the seeded `admin@range42.local` persona in through the real Dex SSO flow (a browser,
- * not a raw HTTP shortcut — this IS the login journey a real evaluator would take), then uses
- * that admin's bearer token to provision everything the spec needs: a template, three
- * team-pairs (two report cycles each, or one solo report) and a campaign tying them together.
+ * Logs the seeded `admin@range42.local` and `carol@range42.local` personas in through the real
+ * Dex SSO flow (a browser, not a raw HTTP shortcut), then uses the admin's bearer token to
+ * provision everything the spec needs: a template, team-pairs (two report cycles each, or one
+ * solo report) and a campaign tying them together.
  *
- * The admin is used as the evaluator throughout. `is_global_admin` bypasses every permission
- * and team-scoping check server-side, so this is a legitimate way to exercise the FEATURE's own
- * logic without re-deriving the separate REPORTS_READ_ASSIGNED scoping already covered by the
- * backend pytest suite.
+ * Pairs A–D use the admin as the evaluator (`is_global_admin` bypasses permission and
+ * team-scoping checks), which exercises the view's own logic. Pairs E and F are graded by Carol,
+ * who holds only the exercise-scoped `evaluator` role: E's previous report is her own work, F's
+ * was graded by the admin alone.
  */
-async function loginAndSaveStorage(): Promise<string> {
+async function loginAndSaveStorage(email: string, storagePath: string): Promise<string> {
   const browser = await chromium.launch()
   const page = await browser.newPage()
   await page.goto(`${BASE}/login`)
   await page.getByRole('button', { name: /sign in with sso/i }).click()
-  await page.fill('#login', 'admin@range42.local')
+  await page.fill('#login', email)
   await page.fill('#password', 'changeme')
   await page.click('#submit-login')
-  await page.waitForURL('**/exercises**', { timeout: 15000 })
+  await page.waitForFunction(() => localStorage.getItem('rt_token'), null, { timeout: 15000 })
   const token = await page.evaluate(() => localStorage.getItem('rt_token'))
-  if (!token) throw new Error('admin login did not produce a token')
-  await page.context().storageState({ path: STORAGE_STATE })
+  if (!token) throw new Error(`${email} login did not produce a token`)
+  await page.context().storageState({ path: storagePath })
   await browser.close()
   return token
 }
@@ -107,22 +111,25 @@ async function createReport(
   return { id: report.id as string, sectionIds }
 }
 
+/** Assigns `evaluatorId` (via the admin `api`) and, when `grades` is given, writes them with
+ *  `grader` — grades can only be written by the assigned evaluator themselves. */
 async function assignAndGrade(
   api: Api,
   exerciseId: string,
   rid: string,
   sectionIds: string[],
-  adminId: string,
+  evaluatorId: string,
   grades: number[] | null,
+  { grader = api, feedbackPrefix = 'Feedback for section' } = {},
 ): Promise<string> {
   const ev = await api.post(`/api/v1/exercises/${exerciseId}/reports/${rid}/evaluations`, {
-    evaluator_id: adminId,
+    evaluator_id: evaluatorId,
   })
   if (grades) {
     for (const [i, sid] of sectionIds.entries()) {
-      await api.put(
+      await grader.put(
         `/api/v1/exercises/${exerciseId}/reports/${rid}/evaluations/${ev.id}/grades/${sid}`,
-        { grade: grades[i], feedback: `Feedback for section ${i + 1}.` },
+        { grade: grades[i], feedback: `${feedbackPrefix} ${i + 1}.` },
       )
     }
   }
@@ -130,12 +137,15 @@ async function assignAndGrade(
 }
 
 async function globalSetup(): Promise<void> {
-  const token = await loginAndSaveStorage()
+  const token = await loginAndSaveStorage('admin@range42.local', STORAGE_STATE)
+  const evaluatorToken = await loginAndSaveStorage(EVALUATOR_EMAIL, EVALUATOR_STORAGE_STATE)
   const ctx = await request.newContext()
   const api = makeApi(ctx, token)
+  const evaluatorApi = makeApi(ctx, evaluatorToken)
 
   const me = await api.get('/api/v1/auth/me')
   const adminId = me.id as string
+  const evaluatorId = (await evaluatorApi.get('/api/v1/auth/me')).id as string
 
   const exercise = await api.post('/api/v1/exercises', {
     name: `E2E Campaign Exercise ${Date.now()}`,
@@ -193,6 +203,52 @@ async function globalSetup(): Promise<void> {
   await addToCampaign(prevD.id)
   await addToCampaign(currD.id)
 
+  await api.post(`/api/v1/exercises/${exerciseId}/roles`, {
+    user_id: evaluatorId,
+    role_key: 'evaluator',
+  })
+  const asEvaluator = { grader: evaluatorApi, feedbackPrefix: 'Carol feedback' }
+
+  // Pair E: Carol graded the previous report herself — her own grade and feedback show.
+  const teamE = await team('E2E Team E')
+  const prevE = await createReport(api, exerciseId, templateId, teamE, 'Pair E — Previous')
+  const currE = await createReport(api, exerciseId, templateId, teamE, 'Pair E — Current')
+  await assignAndGrade(
+    api,
+    exerciseId,
+    prevE.id,
+    prevE.sectionIds,
+    evaluatorId,
+    [6, 7],
+    asEvaluator,
+  )
+  const evidE = await assignAndGrade(api, exerciseId, currE.id, currE.sectionIds, evaluatorId, null)
+  await addToCampaign(prevE.id)
+  await addToCampaign(currE.id)
+
+  // Pair F: only the admin graded (and finalized) the previous report — Carol must see the
+  // report's aggregate grade, never the admin's per-section grades or feedback.
+  const teamF = await team('E2E Team F')
+  const prevF = await createReport(api, exerciseId, templateId, teamF, 'Pair F — Previous')
+  const currF = await createReport(api, exerciseId, templateId, teamF, 'Pair F — Current')
+  const prevEvidF = await assignAndGrade(
+    api,
+    exerciseId,
+    prevF.id,
+    prevF.sectionIds,
+    adminId,
+    [9, 8],
+    {
+      feedbackPrefix: FOREIGN_FEEDBACK_PREFIX,
+    },
+  )
+  await api.post(
+    `/api/v1/exercises/${exerciseId}/reports/${prevF.id}/evaluations/${prevEvidF}/finalize`,
+  )
+  const evidF = await assignAndGrade(api, exerciseId, currF.id, currF.sectionIds, evaluatorId, null)
+  await addToCampaign(prevF.id)
+  await addToCampaign(currF.id)
+
   writeFileSync(
     FIXTURE_FILE,
     JSON.stringify(
@@ -202,6 +258,8 @@ async function globalSetup(): Promise<void> {
         pairB: { rid: currB.id, evid: evidB, sectionIds: currB.sectionIds },
         soloC: { rid: soloC.id, evid: evidC },
         pairD: { rid: currD.id, evid: evidD, sectionIds: currD.sectionIds },
+        pairE: { rid: currE.id, evid: evidE, sectionIds: currE.sectionIds },
+        pairF: { rid: currF.id, evid: evidF, sectionIds: currF.sectionIds },
       },
       null,
       2,
