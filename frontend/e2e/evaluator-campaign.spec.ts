@@ -18,6 +18,13 @@ function campaignUrl(rid: string, evid: string): string {
   return `/exercises/${fixture.exerciseId}/reports/${rid}/evaluations/${evid}/campaign`
 }
 
+// The app's theme comes from localStorage (default dark), not prefers-color-scheme, so each
+// project's colour scheme is applied through the same key the theme toggle writes.
+test.beforeEach(async ({ page }, testInfo) => {
+  const theme = testInfo.project.use.colorScheme === 'light' ? 'light' : 'dark'
+  await page.addInitScript((t) => localStorage.setItem('rt-theme', t), theme)
+})
+
 /** Most of these checks are layout/business-logic facts that don't vary by viewport or
  *  theme — running them on every project would just repeat the same assertion 8x. Each is
  *  pinned to a single project; the dedicated screenshot test below is the one that actually
