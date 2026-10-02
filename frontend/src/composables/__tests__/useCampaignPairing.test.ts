@@ -289,6 +289,69 @@ describe('useCampaignPairing', () => {
     expect(p.entries.value.map((e) => e.report_id)).toEqual(['r1', 'r2'])
   })
 
+  it("ignores another evaluator's evaluation on the previous report", async () => {
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([
+      {
+        id: 'c1',
+        exercise_id: 'ex1',
+        name: 'A',
+        description: null,
+        report_count: 2,
+        created_by: 'u1',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    vi.mocked(campaigns.getCampaignTimeline).mockResolvedValue([
+      entry({ report_id: 'r1' }),
+      entry({ report_id: 'r2' }),
+    ])
+    vi.mocked(campaigns.compareCampaignReports).mockResolvedValue([report('r1'), report('r2')])
+    vi.mocked(evaluations.listEvaluationsForReport).mockResolvedValue({
+      report_id: 'r1',
+      report_status: 'evaluated',
+      finalize_policy: 'all_must_finalize',
+      finalize_gate_satisfied: true,
+      aggregate: {
+        overall_grade: '9.00',
+        grade_version: 1,
+        counted_evaluator_count: 1,
+        completed_evaluator_count: 1,
+        aggregated_weight_total: '1',
+      },
+      evaluations: [
+        {
+          id: 'ev-foreign',
+          evaluator_id: 'u2',
+          evaluator_display_name: 'Other Evaluator',
+          status: 'completed',
+          overall_grade: '9.00',
+          aggregated_weight: '1',
+          completed_at: '2026-09-01T10:00:00Z',
+          finalized_by: null,
+          finalize_is_admin_override: false,
+          unassigned_at: null,
+          unassign_reason: null,
+          reopen_count: 0,
+        },
+      ],
+    })
+
+    const p = useCampaignPairing({
+      token: 'tok',
+      exerciseId: 'ex1',
+      reportId: 'r2',
+      userId: 'u1',
+    })
+    await p.load()
+
+    expect(p.status.value).toBe('ready')
+    expect(p.hasOwnPreviousEvaluation.value).toBe(false)
+    expect(p.previousGrades.value).toBeNull()
+    expect(p.previousOverallGrade.value).toBeNull()
+    expect(evaluations.listSectionGrades).not.toHaveBeenCalled()
+  })
+
   it('reports a forbidden status when a campaign endpoint returns 403', async () => {
     vi.mocked(campaigns.listCampaigns).mockRejectedValue(
       new ApiError('forbidden', 'no', [], undefined, 403),
