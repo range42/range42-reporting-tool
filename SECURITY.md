@@ -8,7 +8,7 @@
 
 ## Reporting a Vulnerability
 
-Please report security vulnerabilities by email to **philippe.parage@obsidiancorps.com**.
+Please report security vulnerabilities by email to **range42@nc3.lu**.
 
 Do not open a public GitHub issue for security vulnerabilities. You will receive a response within 72 hours. Please include:
 
