@@ -18,10 +18,17 @@ import ReportContentPane from '@/views/evaluations/ReportContentPane.vue'
 import EvaluationCriteria from '@/views/evaluations/EvaluationCriteria.vue'
 import GradeControl from '@/views/evaluations/GradeControl.vue'
 import { useEvaluationStore } from '@/stores/evaluation'
-import { parseGrade } from '@/lib/decimal'
+import { useSectionMeta } from '@/composables/useSectionMeta'
 import type { GradeUpsertInput } from '@/services/evaluations'
 
-const props = defineProps<{ sectionId: string }>()
+const props = withDefaults(
+  defineProps<{
+    sectionId: string
+    /** False when the surrounding layout renders the grading summary itself. */
+    showMeta?: boolean
+  }>(),
+  { showMeta: true },
+)
 
 const { t, te } = useI18n()
 const store = useEvaluationStore()
@@ -46,20 +53,8 @@ const error = computed(() => {
   return te(key) ? t(key) : code
 })
 
-const meta = computed(() => {
-  const s = section.value
-  if (!s) return ''
-  const weight = t('evaluations.weight', { weight: parseGrade(s.grade_weight) ?? 1 })
-  if (s.grade_mode === 'not_graded') return t('evaluations.modeNotGraded')
-  const mode =
-    s.grade_mode === 'numeric'
-      ? t('evaluations.modeNumeric', {
-          min: parseGrade(s.grade_min) ?? 0,
-          max: parseGrade(s.grade_max) ?? '—',
-        })
-      : t(s.grade_mode === 'pass_fail' ? 'evaluations.modePassFail' : 'evaluations.modeRubric')
-  return `${mode} · ${weight}`
-})
+const { metaFor } = useSectionMeta()
+const meta = computed(() => (section.value ? metaFor(section.value) : ''))
 
 function onGradeUpdate(patch: GradeUpsertInput): void {
   store.setGrade(props.sectionId, patch)
@@ -80,7 +75,11 @@ function save(): void {
     :data-test="`section-card-${sectionId}`"
     class="space-y-2 rounded-lg border border-[var(--rt-border)] p-3"
   >
-    <p :data-test="`section-meta-${sectionId}`" class="text-xs text-[var(--rt-fg-muted)]">
+    <p
+      v-if="showMeta"
+      :data-test="`section-meta-${sectionId}`"
+      class="text-xs text-[var(--rt-fg-muted)]"
+    >
       {{ meta }}
     </p>
 

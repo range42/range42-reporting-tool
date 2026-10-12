@@ -1,7 +1,12 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/services/http'
 import type { ChoiceConfig, FieldType } from '@/services/templates'
 
-export type ReportStatus = 'draft' | 'pending_approval' | 'submitted'
+export type ReportStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'submitted'
+  | 'under_evaluation'
+  | 'evaluated'
 
 export type ApprovalAction = 'approved' | 'rejected'
 
@@ -85,6 +90,8 @@ export interface ReportDetail {
   approval_cycle: number
   approval_records: ApprovalRecord[]
   can_approve: boolean
+  /** Report-level grade; null (or absent) when the caller is not cleared to see it. */
+  overall_grade?: string | null
 }
 
 export type SectionAnswerBody =

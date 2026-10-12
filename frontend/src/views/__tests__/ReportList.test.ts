@@ -76,6 +76,28 @@ describe('ReportList.vue', () => {
     expect(w.find('[data-test="new-report"]').exists()).toBe(false)
   })
 
+  it('shows the Campaigns entry for admins only', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const admin = mountList()
+    await flushPromises()
+    expect(admin.find('[data-test="campaigns-link"]').exists()).toBe(true)
+
+    setAdmin(false)
+    const nonAdmin = mountList()
+    await flushPromises()
+    expect(nonAdmin.find('[data-test="campaigns-link"]').exists()).toBe(false)
+  })
+
+  // The button now opens the campaign LIST, not the create form directly — "New campaign" was
+  // a dead end once campaigns needed managing (list/edit/delete/evaluators), not just creating.
+  it('navigates to the campaigns list route from the Campaigns entry', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const w = mountList()
+    await flushPromises()
+    await w.get('[data-test="campaigns-link"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'campaigns', params: { exerciseId: 'ex1' } })
+  })
+
   it('shows the Evaluations entry only for a caller who can evaluate', async () => {
     setAdmin(false)
     vi.spyOn(svc, 'listReports').mockResolvedValue([])
@@ -146,5 +168,47 @@ describe('ReportList.vue', () => {
     const wrapper = mountList()
     await flushPromises()
     expect(wrapper.find('[data-test="assign-evaluators-r1"]').exists()).toBe(false)
+  })
+
+  // "View evaluation" opens for any report that's actually been submitted — no further
+  // gating on evaluation status itself; the page shows content-only until evaluated. A
+  // report that never left draft/pending_approval has no evaluation concept at all yet.
+  it('hides View evaluation for a draft report — it was never submitted', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report({ status: 'draft' })] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="view-evaluation-r1"]').exists()).toBe(false)
+  })
+
+  it('hides View evaluation for a report still awaiting approval', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([
+      report({ status: 'pending_approval' }),
+    ] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="view-evaluation-r1"]').exists()).toBe(false)
+  })
+
+  it('offers View evaluation once the report is actually submitted', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report({ status: 'submitted' })] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    expect(wrapper.find('[data-test="view-evaluation-r1"]').exists()).toBe(true)
+  })
+
+  it('navigates to the evaluation summary route without also opening the editor', async () => {
+    setAdmin(false)
+    vi.spyOn(svc, 'listReports').mockResolvedValue([report()] as never)
+    const wrapper = mountList()
+    await flushPromises()
+    await wrapper.find('[data-test="view-evaluation-r1"]').trigger('click')
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push).toHaveBeenCalledWith({
+      name: 'report-evaluation-summary',
+      params: { exerciseId: 'ex1', rid: 'r1' },
+    })
   })
 })

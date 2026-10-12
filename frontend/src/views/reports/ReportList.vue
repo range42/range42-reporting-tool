@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, TriangleAlert, Clock, ShieldCheck, ClipboardCheck } from '@lucide/vue'
+import { Plus, TriangleAlert, Clock, ShieldCheck, ClipboardCheck, CalendarPlus } from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
@@ -53,6 +53,8 @@ const statusBadge: Record<ReportStatus, string> = {
   draft: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
   pending_approval: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
   submitted: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
+  under_evaluation: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-300',
+  evaluated: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
 const countdown = useCountdown(t)
@@ -74,8 +76,20 @@ const ASSIGNABLE_STATUSES: readonly string[] = ['submitted', 'under_evaluation']
 
 const canAssign = (status: string): boolean => ASSIGNABLE_STATUSES.includes(status)
 
+/** A report never submitted (draft/pending_approval) has no evaluation concept yet —
+ *  offering "View evaluation" there would only ever show empty content, no scores. */
+const SUBMITTED_STATUSES: readonly string[] = ['submitted', 'under_evaluation', 'evaluated']
+
+const canViewEvaluation = (status: string): boolean => SUBMITTED_STATUSES.includes(status)
+
 function openEvaluators(id: string): void {
   void router.push({ name: 'report-evaluators', params: { exerciseId, rid: id } })
+}
+
+/** Opens unconditionally — no status gating. The evaluation-summary page itself decides
+ *  whether to show content-only (not yet evaluated) or content plus scores. */
+function openEvaluationSummary(id: string): void {
+  void router.push({ name: 'report-evaluation-summary', params: { exerciseId, rid: id } })
 }
 
 function openReport(id: string): void {
@@ -84,6 +98,10 @@ function openReport(id: string): void {
 
 function createReport(): void {
   void router.push(`/exercises/${exerciseId}/reports/new`)
+}
+
+function openCampaigns(): void {
+  void router.push({ name: 'campaigns', params: { exerciseId } })
 }
 </script>
 
@@ -109,6 +127,16 @@ function createReport(): void {
       >
         <ClipboardCheck class="h-4 w-4" />
         {{ t('evaluations.nav') }}
+      </button>
+      <button
+        v-if="auth.isAdmin"
+        type="button"
+        data-test="campaigns-link"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="openCampaigns"
+      >
+        <CalendarPlus class="h-4 w-4" />
+        {{ t('campaigns.nav') }}
       </button>
       <button
         v-if="auth.isAdmin"
@@ -158,6 +186,7 @@ function createReport(): void {
             <th class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
               {{ t('reports.due') }}
             </th>
+            <th class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500" />
             <th
               v-if="auth.isAdmin"
               class="px-5 py-3 text-xs font-medium uppercase tracking-wider text-zinc-500"
@@ -201,6 +230,17 @@ function createReport(): void {
               </span>
               <span v-else class="text-zinc-400">{{ t('reports.noDue') }}</span>
             </td>
+            <td class="px-5 py-3">
+              <button
+                v-if="canViewEvaluation(r.status)"
+                :data-test="`view-evaluation-${r.id}`"
+                type="button"
+                class="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium transition hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60"
+                @click.stop="openEvaluationSummary(r.id)"
+              >
+                {{ t('reports.viewEvaluation') }}
+              </button>
+            </td>
             <td v-if="auth.isAdmin" class="px-5 py-3">
               <button
                 v-if="canAssign(r.status)"
@@ -214,7 +254,7 @@ function createReport(): void {
             </td>
           </tr>
           <tr v-if="reports.length === 0">
-            <td :colspan="auth.isAdmin ? 5 : 4" class="px-5 py-8 text-center text-sm text-zinc-400">
+            <td :colspan="auth.isAdmin ? 6 : 5" class="px-5 py-8 text-center text-sm text-zinc-400">
               <span data-test="reports-empty">{{ t('reports.empty') }}</span>
             </td>
           </tr>

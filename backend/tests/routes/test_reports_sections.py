@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -131,3 +133,76 @@ async def test_save_choice_validates_codes_and_cardinality(migrated_db: async_se
             headers=ah,
         )
         assert too_many.status_code == 422
+
+
+async def _mk_report_with_available_at(c, ah, *, available_at):
+    tid = (await c.post("/api/v1/templates", json={"name": "T", "report_type": "spot"}, headers=ah)).json()["data"][
+        "id"
+    ]
+    await c.post(
+        f"/api/v1/templates/{tid}/sections",
+        json={"name": "S", "field_type": "rich_text", "is_required": True},
+        headers=ah,
+    )
+    await c.post(f"/api/v1/templates/{tid}/publish", headers=ah)
+    ex = (await c.post("/api/v1/exercises", json={"name": "E"}, headers=ah)).json()["data"]["id"]
+    team = (await c.post(f"/api/v1/exercises/{ex}/teams", json={"name": "A", "team_type": "blue"}, headers=ah)).json()[
+        "data"
+    ]["id"]
+    detail = (
+        await c.post(
+            f"/api/v1/exercises/{ex}/reports",
+            json={"template_id": tid, "team_id": team, "name": "R", "available_at": available_at.isoformat()},
+            headers=ah,
+        )
+    ).json()["data"]
+    return ex, detail["id"], detail["sections"][0]["id"]
+
+
+async def test_create_report_round_trips_available_at(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        future = datetime.now(UTC) + timedelta(days=1)
+        ex, rid, _ = await _mk_report_with_available_at(c, ah, available_at=future)
+        r = await c.get(f"/api/v1/exercises/{ex}/reports/{rid}", headers=ah)
+        assert r.json()["data"]["available_at"] is not None
+
+
+async def test_save_section_before_available_at_returns_403(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        future = datetime.now(UTC) + timedelta(days=1)
+        ex, rid, sid = await _mk_report_with_available_at(c, ah, available_at=future)
+        r = await c.patch(
+            f"/api/v1/exercises/{ex}/reports/{rid}/sections/{sid}",
+            json={"version": 1, "body": {"kind": "rich_text", "content": "<p>too early</p>"}},
+            headers=ah,
+        )
+        assert r.status_code == 403
+        assert r.json()["error"]["message"] == "report_not_yet_available"
+
+
+async def test_save_section_after_available_at_succeeds(migrated_db: async_sessionmaker) -> None:
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        past = datetime.now(UTC) - timedelta(days=1)
+        ex, rid, sid = await _mk_report_with_available_at(c, ah, available_at=past)
+        r = await c.patch(
+            f"/api/v1/exercises/{ex}/reports/{rid}/sections/{sid}",
+            json={"version": 1, "body": {"kind": "rich_text", "content": "<p>on time</p>"}},
+            headers=ah,
+        )
+        assert r.status_code == 200, r.text
+
+
+async def test_save_section_with_no_available_at_set_succeeds(migrated_db: async_sessionmaker) -> None:
+    # Default behavior: no available_at means immediately fillable, same as before this field existed.
+    ah = await _ga(migrated_db)
+    async with client(migrated_db) as c:
+        ex, rid, sid = await _mk_report(c, ah)
+        r = await c.patch(
+            f"/api/v1/exercises/{ex}/reports/{rid}/sections/{sid}",
+            json={"version": 1, "body": {"kind": "rich_text", "content": "<p>fine</p>"}},
+            headers=ah,
+        )
+        assert r.status_code == 200, r.text

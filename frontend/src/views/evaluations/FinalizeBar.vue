@@ -78,7 +78,7 @@ async function onFeedbackBlur(): Promise<void> {
 <template>
   <div
     data-test="finalize-bar"
-    class="sticky bottom-0 z-20 border-t border-[var(--rt-border)] bg-[var(--rt-bg-elev)]/90 backdrop-blur"
+    class="rt-finalize-bar sticky bottom-0 z-20 border-t border-[var(--rt-border)] bg-[var(--rt-bg-elev)]/90 backdrop-blur"
   >
     <div class="mx-auto flex max-w-[1800px] flex-wrap items-center gap-4 px-4 py-3">
       <div class="flex items-baseline gap-2">
@@ -96,6 +96,9 @@ async function onFeedbackBlur(): Promise<void> {
         >
           {{ t('evaluations.provisional') }}
         </span>
+        <!-- Campaign view only (D6): a DeltaBadge comparing this evaluation's overall_grade
+             against the caller's own previous-cycle overall_grade. Empty in the single view. -->
+        <slot name="vs-previous" />
       </div>
 
       <p data-test="finalize-remaining" class="text-xs text-[var(--rt-fg-muted)]">

@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit import client_ip, record_audit
 from app.core.db import get_db
-from app.core.permissions import EVALUATIONS_WRITE
-from app.core.rbac import get_current_user, require_global_admin, require_permission
+from app.core.permissions import EVALUATIONS_WRITE, REPORTS_READ_ALL, REPORTS_READ_ASSIGNED, REPORTS_READ_OWN
+from app.core.rbac import get_current_user, require_global_admin, require_permission, require_permission_any
 from app.models import (
     Evaluation,
     ExerciseRole,
@@ -33,7 +33,7 @@ from app.models import (
     TemplateSectionDef,
     User,
 )
-from app.routes.v1.reports import _get_report, _has_permission
+from app.routes.v1.reports import _assert_report_access, _caller_team_ids, _get_report, _GradeGate, _has_permission
 from app.schemas.common import DataEnvelope
 from app.schemas.evaluation import (
     EvaluationAssignmentOut,
@@ -41,16 +41,19 @@ from app.schemas.evaluation import (
     EvaluationCreate,
     EvaluationDetailOut,
     EvaluationOut,
+    EvaluationSummaryOut,
     EvaluationUpdate,
     EvaluatorCandidateOut,
     GradableSectionOut,
     ManualGradeRequest,
     ReportGradeOut,
     SectionGradeOut,
+    SectionGradeSummaryOut,
     SectionGradeUpsert,
 )
 from app.services.evaluation import breakdown
 from app.services.scoring import grade_validation, rollup
+from app.services.scoring.timeline import aggregate_overall_feedback, aggregate_section_grades, compute_evaluated_at
 from app.services.workflow import state_machine
 
 router = APIRouter(tags=["evaluations"])
@@ -719,5 +722,53 @@ async def set_overall_grade(
             overall_grade=report.overall_grade,
             overall_grade_is_manual=report.overall_grade_is_manual,
             grade_version=report.grade_version,
+        )
+    )
+
+
+# --- own-team evaluation summary (writer/approver reference view) ----------------------
+
+
+@router.get("/exercises/{exercise_id}/reports/{rid}/evaluation-summary")
+async def get_evaluation_summary(
+    exercise_id: uuid.UUID,
+    rid: uuid.UUID,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_permission_any([REPORTS_READ_OWN, REPORTS_READ_ASSIGNED, REPORTS_READ_ALL])),
+    db: AsyncSession = Depends(get_db),
+) -> DataEnvelope[EvaluationSummaryOut]:
+    """The evaluated grade + per-section feedback, own-team read path.
+
+    Gated by the SAME rule as ``report.overall_grade`` elsewhere (``_GradeGate``): visible to
+    Global Admin / ``scoring:read:all`` always, and to a team member only once the report is
+    ``evaluated`` AND ``scoring_config.teams_see_own_scores`` is true. Both "not evaluated" and
+    "hidden by config" are typed 409s — neither is an error state for this endpoint's caller,
+    who is checking a report they wrote, not probing for one they shouldn't see.
+    """
+    report = await _get_report(db, exercise_id, rid)
+    await _assert_report_access(db, exercise_id, report, user, write=False)
+    if report.status != "evaluated":
+        raise HTTPException(status_code=409, detail={"error": "not_yet_evaluated"})
+    grade_gate = await _GradeGate.resolve(db, exercise_id, user)
+    is_team_member = report.team_id in await _caller_team_ids(db, exercise_id, user)
+    if not grade_gate.allows(report, is_team_member=is_team_member):
+        raise HTTPException(status_code=409, detail={"error": "scores_not_visible"})
+    evaluations = await rollup.load_evaluation_inputs(db, report)
+    return DataEnvelope(
+        data=EvaluationSummaryOut(
+            report_id=str(report.id),
+            overall_grade=report.overall_grade,
+            overall_feedback=aggregate_overall_feedback(evaluations),
+            evaluated_at=compute_evaluated_at(evaluations),
+            section_grades=[
+                SectionGradeSummaryOut(
+                    section_def_id=g.section_def_id,
+                    name=g.name,
+                    grade=g.grade,
+                    weight=g.weight,
+                    feedback=g.feedback,
+                )
+                for g in aggregate_section_grades(evaluations)
+            ],
         )
     )

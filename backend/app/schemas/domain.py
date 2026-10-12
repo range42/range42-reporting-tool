@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.models import Exercise, ExerciseRole, Team, TeamMember, TeamTypeConfig, User
+from app.models import Exercise, ExerciseRole, Team, TeamEvaluator, TeamMember, TeamTypeConfig, User
 
 ExerciseStatus = Literal["draft", "active", "archived"]
 
@@ -199,6 +199,30 @@ class TeamMemberRowOut(BaseModel):
     @classmethod
     def from_model(cls, m: TeamMember) -> TeamMemberRowOut:
         return cls(id=str(m.id), team_id=str(m.team_id), user_id=str(m.user_id), created_at=m.created_at)
+
+
+class TeamEvaluatorCreate(BaseModel):
+    evaluator_id: str
+
+
+class TeamEvaluatorOut(BaseModel):
+    id: str
+    team_id: str
+    evaluator_id: str
+    display_name: str
+    email: str
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, te: TeamEvaluator, u: User) -> TeamEvaluatorOut:
+        return cls(
+            id=str(te.id),
+            team_id=str(te.team_id),
+            evaluator_id=str(u.id),
+            display_name=u.display_name,
+            email=u.email,
+            created_at=te.created_at,
+        )
 
 
 class ExerciseRoleCreate(BaseModel):

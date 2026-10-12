@@ -57,6 +57,7 @@ class SectionGradeInput:
     grade_weight: Decimal
     # Template ordering, echoed into the timeline so sections render in authoring order.
     position: int = 0
+    feedback: str | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class EvaluationInput:
     # timeline needs both answers at once: section grades exclude non-contributors, while
     # ``evaluated_at`` and ``evaluator_count`` keep counting them.
     contributes: bool = True
+    overall_feedback: str | None = None
 
 
 def _dec(v: object) -> Decimal:
@@ -305,6 +307,7 @@ async def _load_evaluation_inputs(db: AsyncSession, report: Report) -> list[tupl
                 grade_max=_dec(defn.grade_max) if defn.grade_max is not None else None,
                 grade_weight=_dec(defn.grade_weight),
                 position=section.position,
+                feedback=own[section.id].feedback if section.id in own else None,
             )
             for section, defn in sections
         )
@@ -317,6 +320,7 @@ async def _load_evaluation_inputs(db: AsyncSession, report: Report) -> list[tupl
                     sections=inputs,
                     completed_at=ev.completed_at,
                     contributes=contributes_grade(evaluation_facts(ev)),
+                    overall_feedback=ev.overall_feedback,
                 ),
                 ev,
             )

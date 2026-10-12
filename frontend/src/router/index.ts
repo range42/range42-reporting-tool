@@ -69,6 +69,12 @@ export const router = createRouter({
       meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
+      path: '/exercises/:exerciseId/reports/:rid/evaluation-summary',
+      name: 'report-evaluation-summary',
+      component: () => import('@/views/reports/ReportEvaluationSummary.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/exercises/:exerciseId/evaluations',
       name: 'evaluation-queue',
       component: () => import('@/views/evaluations/EvaluationQueuePage.vue'),
@@ -79,6 +85,36 @@ export const router = createRouter({
       name: 'evaluation',
       component: () => import('@/views/evaluations/SingleEvaluation.vue'),
       meta: { requiresAuth: true, requiresEvaluator: true },
+    },
+    {
+      path: '/exercises/:exerciseId/reports/:rid/evaluations/:evid/campaign',
+      name: 'evaluation-campaign',
+      component: () => import('@/views/evaluations/CampaignEvaluation.vue'),
+      meta: { requiresAuth: true, requiresEvaluator: true },
+    },
+    {
+      path: '/exercises/:exerciseId/teams/:teamId/evaluators',
+      name: 'team-evaluators',
+      component: () => import('@/views/settings/TeamEvaluators.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/exercises/:exerciseId/campaigns',
+      name: 'campaigns',
+      component: () => import('@/views/settings/CampaignManage.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/exercises/:exerciseId/campaigns/new',
+      name: 'campaign-define',
+      component: () => import('@/views/settings/CampaignDefine.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/exercises/:exerciseId/campaigns/:cid',
+      name: 'campaign-detail',
+      component: () => import('@/views/settings/CampaignDetail.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
     },
     {
       path: '/settings/roles',

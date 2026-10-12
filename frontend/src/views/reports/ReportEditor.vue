@@ -25,10 +25,17 @@ import {
   type Attachment,
 } from '@/services/attachments'
 import { useDraftCache } from '@/composables/useDraftCache'
+import { normalizeRichText } from '@/lib/richText'
 import { useCharBudget } from '@/composables/useCharBudget'
+import {
+  useWriterPreviousReport,
+  type PreviousReportStatus,
+} from '@/composables/useWriterPreviousReport'
+import type { EvaluationSummary, SectionGradeSummary } from '@/services/evaluations'
 import AttachmentsPanel from '@/views/reports/AttachmentsPanel.vue'
 import RichTextField from '@/views/reports/RichTextField.vue'
 import SectionConflictMerge from '@/views/reports/SectionConflictMerge.vue'
+import EvaluationSummarySection from '@/views/reports/EvaluationSummarySection.vue'
 
 const AUTOSAVE_MS = 30_000
 
@@ -81,6 +88,30 @@ const sections = reactive<EditableSection[]>([])
 const error = ref('')
 const submitError = ref('')
 
+// Previous-campaign-report reference — a bonus panel, never required and never blocking:
+// writing/saving the current report proceeds regardless of this state. Paired side-by-side
+// with the current section, same layout as the evaluator's CampaignSectionRow — but
+// togglable, since it's an optional reference, not part of the writing task itself.
+const previousStatus = ref<PreviousReportStatus>('idle')
+const previousReportDetail = ref<ReportDetail | null>(null)
+const previousSummary = ref<EvaluationSummary | null>(null)
+const showPrevious = ref(true)
+
+const showSideBySide = computed(
+  () =>
+    showPrevious.value && previousStatus.value === 'ready' && previousReportDetail.value !== null,
+)
+
+function previousSectionFor(sectionDefId: string): ReportSection | null {
+  return previousReportDetail.value?.sections.find((s) => s.section_def_id === sectionDefId) ?? null
+}
+
+function previousGradeFor(sectionDefId: string): SectionGradeSummary | null {
+  return (
+    previousSummary.value?.section_grades.find((g) => g.section_def_id === sectionDefId) ?? null
+  )
+}
+
 const isTeamAdmin = computed(() => caps.has(exerciseId, REPORTS_RECALL))
 
 // Write-lock mirror of the backend policy: an assigned draft is editable
@@ -124,6 +155,35 @@ function toEditable(s: ReportDetail['sections'][number]): EditableSection {
   }
 }
 
+/** True when the stored draft holds exactly what the server already has for this section. */
+function draftMatchesServer(s: EditableSection): boolean {
+  const entry = draft.read(s.sectionDefId)
+  if (entry === null) return false
+  if (s.fieldType === 'rich_text') {
+    return (
+      typeof entry.value === 'string' &&
+      normalizeRichText(entry.value) === normalizeRichText(s.content)
+    )
+  }
+  if (!Array.isArray(entry.value)) return false
+  const local = [...(entry.value as string[])].sort()
+  const server = [...s.choice].sort()
+  return local.length === server.length && local.every((code, i) => code === server[i])
+}
+
+async function loadPreviousReport(teamId: string): Promise<void> {
+  const result = useWriterPreviousReport({
+    token: token.value,
+    exerciseId,
+    reportId: rid,
+    teamId,
+  })
+  await result.load()
+  previousStatus.value = result.status.value
+  previousReportDetail.value = result.previousReport.value
+  previousSummary.value = result.previousSummary.value
+}
+
 onMounted(async () => {
   if (!auth.token) return
   // Capabilities drive the team-admin lock exemption + the recall affordance.
@@ -133,9 +193,12 @@ onMounted(async () => {
     report.value = detail
     sections.splice(0, sections.length, ...detail.sections.map(toEditable))
     for (const s of sections) {
-      if (draft.isNewerThanServer(s.sectionDefId, s.serverUpdatedAt)) s.restore = true
+      if (!draft.isNewerThanServer(s.sectionDefId, s.serverUpdatedAt)) continue
+      if (draftMatchesServer(s)) draft.clear(s.sectionDefId)
+      else s.restore = true
     }
     attachments.value = await listAttachments(token.value, exerciseId, rid)
+    void loadPreviousReport(detail.team_id)
   } catch (e) {
     error.value = e instanceof ApiError ? e.message : t('reports.loadError')
   }
@@ -383,7 +446,7 @@ async function submit(): Promise<void> {
       </button>
     </template>
 
-    <div class="mx-auto max-w-3xl">
+    <div :class="showSideBySide ? 'mx-auto max-w-[1800px]' : 'mx-auto max-w-3xl'">
       <div class="mb-6 flex items-baseline justify-between">
         <h1 class="text-2xl font-semibold tracking-tight">{{ report?.name }}</h1>
         <span
@@ -423,129 +486,165 @@ async function submit(): Promise<void> {
         <span>{{ submitError }}</span>
       </div>
 
+      <div
+        v-if="previousStatus === 'ready' && previousReportDetail"
+        class="mb-4 flex items-center justify-between"
+      >
+        <h3 class="text-sm font-semibold text-[var(--rt-fg-muted)]">
+          {{ t('reports.previousReportHeading') }}: {{ previousReportDetail.name }}
+        </h3>
+        <button
+          type="button"
+          data-test="toggle-previous-report"
+          class="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium transition hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60"
+          @click="showPrevious = !showPrevious"
+        >
+          {{ showPrevious ? t('reports.hidePreviousReport') : t('reports.showPreviousReport') }}
+        </button>
+      </div>
+
       <div class="space-y-8">
-        <section
+        <div
           v-for="s in sections"
           :key="s.id"
-          class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900"
+          :class="showSideBySide ? 'grid grid-cols-1 gap-3 md:grid-cols-2' : ''"
         >
-          <div class="mb-2 flex items-center gap-2">
-            <h2 class="font-medium">{{ s.name }}</h2>
-            <span v-if="s.isRequired" class="text-xs text-red-500">*</span>
-          </div>
-          <p v-if="s.description" class="mb-3 text-sm text-zinc-500">{{ s.description }}</p>
-
-          <div
-            v-if="s.restore"
-            :data-test="`restore-${s.id}`"
-            class="mb-3 flex items-center justify-between gap-2 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-sm"
-          >
-            <span class="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300">
-              <RotateCcw class="h-4 w-4" />
-              {{ t('reports.restorePrompt') }}
-            </span>
-            <span class="flex gap-2">
-              <button
-                type="button"
-                class="rounded border border-indigo-400 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300"
-                @click="applyRestore(s)"
-              >
-                {{ t('reports.restore') }}
-              </button>
-              <button
-                type="button"
-                class="rounded px-2 py-0.5 text-xs text-zinc-500"
-                @click="dismissRestore(s)"
-              >
-                {{ t('reports.discard') }}
-              </button>
-            </span>
-          </div>
-
-          <SectionConflictMerge
-            v-if="s.conflictServer"
-            :test-id="s.id"
-            :base="s.fieldType === 'rich_text' ? s.baseContent : s.baseChoice.join(', ')"
-            :local="s.fieldType === 'rich_text' ? s.content : s.choice.join(', ')"
-            :server="
-              s.fieldType === 'rich_text'
-                ? (s.conflictServer.content ?? '')
-                : (s.conflictServer.choice_values ?? []).join(', ')
-            "
-            :server-version="s.conflictServer.version"
-            :field-type="s.fieldType"
-            @keep-mine="keepMine(s)"
-            @use-server="useServer(s)"
-            @resolved-manual="(content) => resolveManual(s, content)"
-          />
-
-          <template v-if="s.fieldType === 'rich_text'">
-            <RichTextField
-              v-model="s.content"
-              :test-id="s.id"
-              :disabled="readOnly"
-              :image-upload="imageUploadFor(s)"
-              :token="token"
-              @update:model-value="onEdited(s)"
+          <template v-if="showSideBySide">
+            <EvaluationSummarySection
+              v-if="previousSectionFor(s.sectionDefId)"
+              :section="previousSectionFor(s.sectionDefId)!"
+              :grade="previousGradeFor(s.sectionDefId)"
             />
-            <div class="mt-2 flex items-center justify-between text-xs">
-              <span
-                v-if="s.charLimit !== null"
-                :data-test="`char-counter-${s.id}`"
-                :class="overLimit(s) ? 'font-medium text-red-500' : 'text-zinc-400'"
-              >
-                {{ charCount(s) }}/{{ s.charLimit }}
-              </span>
-              <span v-else :data-test="`char-counter-${s.id}`" class="text-zinc-400">
-                {{ charCount(s) }}
-              </span>
-              <span class="text-zinc-400">{{ s.savedLabel }}</span>
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="space-y-1.5">
-              <label
-                v-for="opt in s.options"
-                :key="opt.code"
-                class="flex items-center gap-2 text-sm"
-              >
-                <input
-                  :type="s.selection === 'single' ? 'radio' : 'checkbox'"
-                  :name="`choice-${s.id}`"
-                  :value="opt.code"
-                  :checked="s.choice.includes(opt.code)"
-                  :disabled="readOnly"
-                  @change="toggleChoice(s, opt.code)"
-                />
-                {{ opt.label }}
-              </label>
-            </div>
-            <div class="mt-2 text-right text-xs text-zinc-400">{{ s.savedLabel }}</div>
-          </template>
-
-          <div v-if="!readOnly" class="mt-3 flex justify-end">
-            <button
-              type="button"
-              :data-test="`save-${s.id}`"
-              :disabled="overLimit(s)"
-              class="flex h-8 items-center rounded-md border border-zinc-200 px-3 text-sm transition hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
-              @click="save(s)"
+            <p
+              v-else
+              :data-test="`prev-missing-${s.id}`"
+              class="rounded-lg border border-dashed border-[var(--rt-border)] p-3 text-xs italic text-[var(--rt-fg-muted)]"
             >
-              {{ t('reports.save') }}
-            </button>
-          </div>
+              {{ t('reports.previousSectionMissing') }}
+            </p>
+          </template>
 
-          <AttachmentsPanel
-            :attachments="attachmentsFor(s.id)"
-            :test-id="s.id"
-            :read-only="readOnly"
-            :error="attachmentErrors[s.id]"
-            @upload="(file) => onAttachmentUpload(s, file)"
-            @remove="(aid) => onAttachmentRemove(s, aid)"
-            @download="onAttachmentDownload"
-          />
-        </section>
+          <section
+            class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900"
+          >
+            <div class="mb-2 flex items-center gap-2">
+              <h2 class="font-medium">{{ s.name }}</h2>
+              <span v-if="s.isRequired" class="text-xs text-red-500">*</span>
+            </div>
+            <p v-if="s.description" class="mb-3 text-sm text-zinc-500">{{ s.description }}</p>
+
+            <div
+              v-if="s.restore"
+              :data-test="`restore-${s.id}`"
+              class="mb-3 flex items-center justify-between gap-2 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-sm"
+            >
+              <span class="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300">
+                <RotateCcw class="h-4 w-4" />
+                {{ t('reports.restorePrompt') }}
+              </span>
+              <span class="flex gap-2">
+                <button
+                  type="button"
+                  class="rounded border border-indigo-400 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300"
+                  @click="applyRestore(s)"
+                >
+                  {{ t('reports.restore') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-2 py-0.5 text-xs text-zinc-500"
+                  @click="dismissRestore(s)"
+                >
+                  {{ t('reports.discard') }}
+                </button>
+              </span>
+            </div>
+
+            <SectionConflictMerge
+              v-if="s.conflictServer"
+              :test-id="s.id"
+              :base="s.fieldType === 'rich_text' ? s.baseContent : s.baseChoice.join(', ')"
+              :local="s.fieldType === 'rich_text' ? s.content : s.choice.join(', ')"
+              :server="
+                s.fieldType === 'rich_text'
+                  ? (s.conflictServer.content ?? '')
+                  : (s.conflictServer.choice_values ?? []).join(', ')
+              "
+              :server-version="s.conflictServer.version"
+              :field-type="s.fieldType"
+              @keep-mine="keepMine(s)"
+              @use-server="useServer(s)"
+              @resolved-manual="(content) => resolveManual(s, content)"
+            />
+
+            <template v-if="s.fieldType === 'rich_text'">
+              <RichTextField
+                v-model="s.content"
+                :test-id="s.id"
+                :disabled="readOnly"
+                :image-upload="imageUploadFor(s)"
+                :token="token"
+                @update:model-value="onEdited(s)"
+              />
+              <div class="mt-2 flex items-center justify-between text-xs">
+                <span
+                  v-if="s.charLimit !== null"
+                  :data-test="`char-counter-${s.id}`"
+                  :class="overLimit(s) ? 'font-medium text-red-500' : 'text-zinc-400'"
+                >
+                  {{ charCount(s) }}/{{ s.charLimit }}
+                </span>
+                <span v-else :data-test="`char-counter-${s.id}`" class="text-zinc-400">
+                  {{ charCount(s) }}
+                </span>
+                <span class="text-zinc-400">{{ s.savedLabel }}</span>
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="space-y-1.5">
+                <label
+                  v-for="opt in s.options"
+                  :key="opt.code"
+                  class="flex items-center gap-2 text-sm"
+                >
+                  <input
+                    :type="s.selection === 'single' ? 'radio' : 'checkbox'"
+                    :name="`choice-${s.id}`"
+                    :value="opt.code"
+                    :checked="s.choice.includes(opt.code)"
+                    :disabled="readOnly"
+                    @change="toggleChoice(s, opt.code)"
+                  />
+                  {{ opt.label }}
+                </label>
+              </div>
+              <div class="mt-2 text-right text-xs text-zinc-400">{{ s.savedLabel }}</div>
+            </template>
+
+            <div v-if="!readOnly" class="mt-3 flex justify-end">
+              <button
+                type="button"
+                :data-test="`save-${s.id}`"
+                :disabled="overLimit(s)"
+                class="flex h-8 items-center rounded-md border border-zinc-200 px-3 text-sm transition hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
+                @click="save(s)"
+              >
+                {{ t('reports.save') }}
+              </button>
+            </div>
+
+            <AttachmentsPanel
+              :attachments="attachmentsFor(s.id)"
+              :test-id="s.id"
+              :read-only="readOnly"
+              :error="attachmentErrors[s.id]"
+              @upload="(file) => onAttachmentUpload(s, file)"
+              @remove="(aid) => onAttachmentRemove(s, aid)"
+              @download="onAttachmentDownload"
+            />
+          </section>
+        </div>
       </div>
     </div>
   </AppShell>

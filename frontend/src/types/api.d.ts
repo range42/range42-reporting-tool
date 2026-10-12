@@ -360,6 +360,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/teams/{team_id}/evaluators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Team Evaluators */
+        get: operations["list_team_evaluators_api_v1_exercises__exercise_id__teams__team_id__evaluators_get"];
+        put?: never;
+        /** Add Team Evaluator */
+        post: operations["add_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/teams/{team_id}/evaluators/{evaluator_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Team Evaluator */
+        delete: operations["remove_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators__evaluator_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users": {
         parameters: {
             query?: never;
@@ -876,6 +911,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/evaluators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Campaign Evaluators */
+        get: operations["list_campaign_evaluators_api_v1_exercises__exercise_id__campaigns__cid__evaluators_get"];
+        put?: never;
+        /** Add Campaign Evaluator */
+        post: operations["add_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exercises/{exercise_id}/campaigns/{cid}/evaluators/{evaluator_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove Campaign Evaluator */
+        delete: operations["remove_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators__evaluator_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exercises/{exercise_id}/campaigns/{cid}/timeline": {
         parameters: {
             query?: never;
@@ -1187,6 +1257,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluation-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Evaluation Summary
+         * @description The evaluated grade + per-section feedback, own-team read path.
+         *
+         *     Gated by the SAME rule as ``report.overall_grade`` elsewhere (``_GradeGate``): visible to
+         *     Global Admin / ``scoring:read:all`` always, and to a team member only once the report is
+         *     ``evaluated`` AND ``scoring_config.teams_see_own_scores`` is true. Both "not evaluated" and
+         *     "hidden by config" are typed 409s — neither is an error state for this endpoint's caller,
+         *     who is checking a report they wrote, not probing for one they shouldn't see.
+         */
+        get: operations["get_evaluation_summary_api_v1_exercises__exercise_id__reports__rid__evaluation_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/exercises/{exercise_id}/reports/{rid}/evaluations/{evid}/finalize": {
         parameters: {
             query?: never;
@@ -1393,6 +1489,31 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             } | null;
+            /** Report Specs */
+            report_specs?: components["schemas"]["CampaignReportSpec"][] | null;
+        };
+        /** CampaignEvaluatorCreate */
+        CampaignEvaluatorCreate: {
+            /** Evaluator Id */
+            evaluator_id: string;
+        };
+        /** CampaignEvaluatorOut */
+        CampaignEvaluatorOut: {
+            /** Id */
+            id: string;
+            /** Campaign Id */
+            campaign_id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** CampaignOut */
         CampaignOut: {
@@ -1424,6 +1545,29 @@ export interface components {
             /** Report Id */
             report_id: string;
         };
+        /**
+         * CampaignReportSpec
+         * @description One report to instantiate for every team when a campaign is defined with ``report_specs``.
+         *
+         *     ``name`` is optional — two specs sharing a template would otherwise produce identically
+         *     named reports per team (e.g. two SITREP specs both naming their reports "SITREP — BT1").
+         *     Left unset, the report name falls back to the template's own name.
+         */
+        CampaignReportSpec: {
+            /** Template Id */
+            template_id: string;
+            /** Name */
+            name?: string | null;
+            /** Available At */
+            available_at?: string | null;
+            /** Due At */
+            due_at?: string | null;
+            /**
+             * Approval Required
+             * @default false
+             */
+            approval_required: boolean;
+        };
         /** CampaignUpdate */
         CampaignUpdate: {
             /** Name */
@@ -1450,6 +1594,11 @@ export interface components {
             data: components["schemas"]["AttachmentOut"];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[CampaignEvaluatorOut] */
+        DataEnvelope_CampaignEvaluatorOut_: {
+            data: components["schemas"]["CampaignEvaluatorOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[CampaignOut] */
         DataEnvelope_CampaignOut_: {
             data: components["schemas"]["CampaignOut"];
@@ -1468,6 +1617,11 @@ export interface components {
         /** DataEnvelope[EvaluationOut] */
         DataEnvelope_EvaluationOut_: {
             data: components["schemas"]["EvaluationOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[EvaluationSummaryOut] */
+        DataEnvelope_EvaluationSummaryOut_: {
+            data: components["schemas"]["EvaluationSummaryOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[ExerciseOut] */
@@ -1518,6 +1672,11 @@ export interface components {
         /** DataEnvelope[SectionOut] */
         DataEnvelope_SectionOut_: {
             data: components["schemas"]["SectionOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[TeamEvaluatorOut] */
+        DataEnvelope_TeamEvaluatorOut_: {
+            data: components["schemas"]["TeamEvaluatorOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[TeamMemberRowOut] */
@@ -1590,6 +1749,12 @@ export interface components {
             data: components["schemas"]["AttachmentOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
+        /** DataEnvelope[list[CampaignEvaluatorOut]] */
+        DataEnvelope_list_CampaignEvaluatorOut__: {
+            /** Data */
+            data: components["schemas"]["CampaignEvaluatorOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
         /** DataEnvelope[list[CampaignOut]] */
         DataEnvelope_list_CampaignOut__: {
             /** Data */
@@ -1648,6 +1813,12 @@ export interface components {
         DataEnvelope_list_SectionOut__: {
             /** Data */
             data: components["schemas"]["SectionOut"][];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[list[TeamEvaluatorOut]] */
+        DataEnvelope_list_TeamEvaluatorOut__: {
+            /** Data */
+            data: components["schemas"]["TeamEvaluatorOut"][];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[list[TeamMemberOut]] */
@@ -1884,6 +2055,26 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * EvaluationSummaryOut
+         * @description Body of ``GET .../reports/{rid}/evaluation-summary``.
+         *
+         *     Gated the same way ``report.overall_grade`` is elsewhere (``_GradeGate``): the route 409s
+         *     rather than returning this with nulled fields, since "not visible yet" is a distinct state
+         *     from "graded zero."
+         */
+        EvaluationSummaryOut: {
+            /** Report Id */
+            report_id: string;
+            /** Overall Grade */
+            overall_grade: string | null;
+            /** Overall Feedback */
+            overall_feedback: string | null;
+            /** Evaluated At */
+            evaluated_at: string | null;
+            /** Section Grades */
+            section_grades: components["schemas"]["SectionGradeSummaryOut"][];
         };
         /** EvaluationUpdate */
         EvaluationUpdate: {
@@ -2160,6 +2351,8 @@ export interface components {
             description?: string | null;
             /** Due At */
             due_at?: string | null;
+            /** Available At */
+            available_at?: string | null;
             /**
              * Approval Required
              * @default false
@@ -2198,6 +2391,8 @@ export interface components {
             approval_required: boolean;
             /** Due At */
             due_at: string | null;
+            /** Available At */
+            available_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
             /** Assigned Writer Id */
@@ -2273,6 +2468,8 @@ export interface components {
             approval_required: boolean;
             /** Due At */
             due_at: string | null;
+            /** Available At */
+            available_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
             /** Assigned Writer Id */
@@ -2353,6 +2550,8 @@ export interface components {
             description?: string | null;
             /** Due At */
             due_at?: string | null;
+            /** Available At */
+            available_at?: string | null;
             /** Approval Required */
             approval_required?: boolean | null;
             /** Approval Chain */
@@ -2512,6 +2711,26 @@ export interface components {
             updated_at: string;
         };
         /**
+         * SectionGradeSummaryOut
+         * @description One section's aggregated grade + feedback, for ``EvaluationSummaryOut``.
+         *
+         *     No ``evaluator_id`` here by design — ``GET .../evaluation-summary`` is the own-team read
+         *     path, and evaluator isolation means the team never sees who graded what, only the combined
+         *     result.
+         */
+        SectionGradeSummaryOut: {
+            /** Section Def Id */
+            section_def_id: string;
+            /** Name */
+            name: string;
+            /** Grade */
+            grade: string | null;
+            /** Weight */
+            weight: string;
+            /** Feedback */
+            feedback: string | null;
+        };
+        /**
          * SectionGradeUpsert
          * @description One grading channel per row.
          *
@@ -2647,6 +2866,29 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** TeamEvaluatorCreate */
+        TeamEvaluatorCreate: {
+            /** Evaluator Id */
+            evaluator_id: string;
+        };
+        /** TeamEvaluatorOut */
+        TeamEvaluatorOut: {
+            /** Id */
+            id: string;
+            /** Team Id */
+            team_id: string;
+            /** Evaluator Id */
+            evaluator_id: string;
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** TeamMemberCreate */
         TeamMemberCreate: {
@@ -3836,6 +4078,105 @@ export interface operations {
                 exercise_id: string;
                 team_id: string;
                 user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_team_evaluators_api_v1_exercises__exercise_id__teams__team_id__evaluators_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_TeamEvaluatorOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                team_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamEvaluatorCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_TeamEvaluatorOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_team_evaluator_api_v1_exercises__exercise_id__teams__team_id__evaluators__evaluator_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                team_id: string;
+                evaluator_id: string;
             };
             cookie?: never;
         };
@@ -5209,6 +5550,105 @@ export interface operations {
             };
         };
     };
+    list_campaign_evaluators_api_v1_exercises__exercise_id__campaigns__cid__evaluators_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_list_CampaignEvaluatorOut__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignEvaluatorCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_CampaignEvaluatorOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_campaign_evaluator_api_v1_exercises__exercise_id__campaigns__cid__evaluators__evaluator_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                cid: string;
+                evaluator_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     campaign_timeline_api_v1_exercises__exercise_id__campaigns__cid__timeline_get: {
         parameters: {
             query?: never;
@@ -5734,6 +6174,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataEnvelope_ReportGradeOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evaluation_summary_api_v1_exercises__exercise_id__reports__rid__evaluation_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+                rid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_EvaluationSummaryOut_"];
                 };
             };
             /** @description Validation Error */

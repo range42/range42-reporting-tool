@@ -6,6 +6,9 @@ import en from '@/locales/en/common.json'
 import ReportEditor from '@/views/reports/ReportEditor.vue'
 import * as reports from '@/services/reports'
 import * as attachments from '@/services/attachments'
+import * as campaigns from '@/services/campaigns'
+import * as evaluations from '@/services/evaluations'
+import { ApiError } from '@/services/http'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 
@@ -13,19 +16,20 @@ const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
 vi.mock('@/services/reports')
 vi.mock('@/services/attachments')
+vi.mock('@/services/campaigns')
+vi.mock('@/services/evaluations')
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { exerciseId: 'ex1', rid: 'r1' } }),
   useRouter: () => ({ push: vi.fn() }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
-// ProseMirror can't run under jsdom — stub TipTap; the RichTextField textarea
-// mirror is the surface these tests drive.
-vi.mock('@tiptap/vue-3', () => ({
+// No live editor: the RichTextField textarea mirror is the surface these tests drive.
+// The schema helpers stay real so draft/server HTML comparison runs as in production.
+vi.mock('@tiptap/vue-3', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tiptap/vue-3')>()),
   useEditor: () => ({ value: undefined }),
   EditorContent: { name: 'EditorContent', template: '<div />' },
 }))
-vi.mock('@tiptap/starter-kit', () => ({ default: {} }))
-vi.mock('@tiptap/extension-image', () => ({ default: { extend: () => ({}) } }))
 
 const richDetail = {
   id: 'r1',
@@ -94,6 +98,9 @@ describe('ReportEditor.vue', () => {
     vi.mocked(attachments.attachmentUrl).mockImplementation(
       (ex, rid, aid) => `/api/v1/exercises/${ex}/reports/${rid}/attachments/${aid}/download`,
     )
+    // Most reports aren't in a campaign — the default keeps every pre-existing test's
+    // PreviousReportPanel silent (no_campaign) without per-test mocking.
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([])
   })
 
   it('renders a char counter for rich_text and blocks over the limit', async () => {
@@ -183,6 +190,86 @@ describe('ReportEditor.vue', () => {
     await flushPromises()
     expect(reports.getReport).toHaveBeenCalledTimes(2)
     expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
+  })
+
+  it('offers to restore a local draft that is newer and differs from the server', async () => {
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: '<p>local</p>', editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(true)
+  })
+
+  it('drops a newer local draft whose content matches the server, without a prompt', async () => {
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: '<p>same</p>', editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      sections: [{ ...richDetail.sections[0], content: '<p>same</p>' }],
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(false)
+    expect(localStorage.getItem('r42:draft:r1:d1')).toBeNull()
+  })
+
+  it('drops a table draft that only differs from the server by editor serialization', async () => {
+    const serverTable =
+      '<table><thead><tr><th>Named Threat</th><th>Detection</th></tr></thead>' +
+      '<tbody><tr><td></td><td></td></tr></tbody></table>'
+    const editorTable =
+      '<table style="min-width: 50px"><colgroup><col style="min-width: 25px">' +
+      '<col style="min-width: 25px"></colgroup><tbody><tr>' +
+      '<th colspan="1" rowspan="1"><p>Named Threat</p></th>' +
+      '<th colspan="1" rowspan="1"><p>Detection</p></th></tr><tr>' +
+      '<td colspan="1" rowspan="1"><p></p></td><td colspan="1" rowspan="1"><p></p></td>' +
+      '</tr></tbody></table>'
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: editorTable, editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      sections: [{ ...richDetail.sections[0], content: serverTable }],
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(false)
+    expect(localStorage.getItem('r42:draft:r1:d1')).toBeNull()
+  })
+
+  it('treats a choice draft with the same codes in another order as matching the server', async () => {
+    localStorage.setItem(
+      'r42:draft:r1:d1',
+      JSON.stringify({ value: ['b', 'a'], editedAt: '2026-06-26T12:00:00Z' }),
+    )
+    vi.mocked(reports.getReport).mockResolvedValue({
+      ...richDetail,
+      sections: [
+        {
+          ...richDetail.sections[0],
+          field_type: 'choice',
+          content: null,
+          choice_values: ['a', 'b'],
+          choice_config: {
+            selection: 'multi',
+            values: [
+              { code: 'a', label: 'A' },
+              { code: 'b', label: 'B' },
+            ],
+          },
+        },
+      ],
+    } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="restore-s1"]').exists()).toBe(false)
+    expect(localStorage.getItem('r42:draft:r1:d1')).toBeNull()
   })
 
   it('a draft assigned to another user is read-only with the assignment-lock banner', async () => {
@@ -322,5 +409,197 @@ describe('ReportEditor.vue', () => {
     await flushPromises()
     expect(w.find('[data-test="attach-btn-s1"]').exists()).toBe(false)
     expect(w.find('[data-test="img-btn-s1"]').exists()).toBe(false)
+  })
+
+  // --- previous-campaign-report pairing: a reference surface, never a gate on writing ----
+
+  it('shows no previous-report toggle when the current report is in no campaign', async () => {
+    vi.mocked(reports.getReport).mockResolvedValue({ ...richDetail, team_id: 't1' } as never)
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="toggle-previous-report"]').exists()).toBe(false)
+  })
+
+  it('shows the previous report content side by side and, once evaluated, its scores', async () => {
+    vi.mocked(reports.getReport).mockImplementation(
+      async (_t, _e, rid) =>
+        (rid === 'r0'
+          ? { ...richDetail, id: 'r0', name: 'Day 1', team_id: 't1' }
+          : { ...richDetail, id: 'r1', team_id: 't1' }) as never,
+    )
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([
+      {
+        id: 'c1',
+        exercise_id: 'ex1',
+        name: 'Sitreps',
+        description: null,
+        report_count: 2,
+        created_by: 'u1',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    vi.mocked(campaigns.getCampaignTimeline).mockResolvedValue([
+      {
+        report_id: 'r0',
+        name: 'Day 1',
+        status: 'evaluated',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+      {
+        report_id: 'r1',
+        name: 'Day 2',
+        status: 'draft',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+    ])
+    vi.mocked(evaluations.getReportEvaluationSummary).mockResolvedValue({
+      report_id: 'r0',
+      overall_grade: '8.00',
+      overall_feedback: 'Solid overall.',
+      evaluated_at: '2026-09-01T00:00:00Z',
+      section_grades: [],
+    })
+
+    const w = mountEditor()
+    await flushPromises()
+
+    expect(w.find('[data-test="toggle-previous-report"]').exists()).toBe(true)
+    const previousCard = w.find('[data-test="evaluation-summary-section-d1"]')
+    expect(previousCard.exists()).toBe(true)
+    expect(previousCard.find('[data-test="evaluation-summary-section-grade-d1"]').exists()).toBe(
+      false,
+    )
+    // section_grades was empty in this fixture — no per-section grade to show, which is fine;
+    // the pairing itself (previous section beside the current one) is what's under test.
+    const row = previousCard.element.parentElement!
+    expect(row.className).toContain('md:grid-cols-2')
+  })
+
+  it('hides the side-by-side pairing when the toggle is switched off', async () => {
+    vi.mocked(reports.getReport).mockImplementation(
+      async (_t, _e, rid) =>
+        (rid === 'r0'
+          ? { ...richDetail, id: 'r0', name: 'Day 1', team_id: 't1' }
+          : { ...richDetail, id: 'r1', team_id: 't1' }) as never,
+    )
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([
+      {
+        id: 'c1',
+        exercise_id: 'ex1',
+        name: 'Sitreps',
+        description: null,
+        report_count: 2,
+        created_by: 'u1',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    vi.mocked(campaigns.getCampaignTimeline).mockResolvedValue([
+      {
+        report_id: 'r0',
+        name: 'Day 1',
+        status: 'evaluated',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+      {
+        report_id: 'r1',
+        name: 'Day 2',
+        status: 'draft',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+    ])
+    vi.mocked(evaluations.getReportEvaluationSummary).mockResolvedValue({
+      report_id: 'r0',
+      overall_grade: '8.00',
+      overall_feedback: 'Solid overall.',
+      evaluated_at: '2026-09-01T00:00:00Z',
+      section_grades: [],
+    })
+
+    const w = mountEditor()
+    await flushPromises()
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(true)
+
+    await w.find('[data-test="toggle-previous-report"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(false)
+    // The current section is still there — only the previous side is hidden.
+    expect(w.find('[data-test="content-s1"]').exists()).toBe(true)
+
+    await w.find('[data-test="toggle-previous-report"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(true)
+  })
+
+  it('writing the current report is unaffected by the previous report not being evaluated yet', async () => {
+    vi.mocked(reports.getReport).mockImplementation(
+      async (_t, _e, rid) =>
+        (rid === 'r0'
+          ? { ...richDetail, id: 'r0', name: 'Day 1', team_id: 't1' }
+          : { ...richDetail, id: 'r1', team_id: 't1' }) as never,
+    )
+    vi.mocked(campaigns.listCampaigns).mockResolvedValue([
+      {
+        id: 'c1',
+        exercise_id: 'ex1',
+        name: 'Sitreps',
+        description: null,
+        report_count: 2,
+        created_by: 'u1',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    vi.mocked(campaigns.getCampaignTimeline).mockResolvedValue([
+      {
+        report_id: 'r0',
+        name: 'Day 1',
+        status: 'submitted',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+      {
+        report_id: 'r1',
+        name: 'Day 2',
+        status: 'draft',
+        team_id: 't1',
+        team_name: 'Alpha',
+        submitted_at: null,
+        due_at: null,
+        created_at: '',
+      },
+    ])
+    vi.mocked(evaluations.getReportEvaluationSummary).mockRejectedValue(
+      new ApiError('HTTP_ERROR', 'not_yet_evaluated', [], undefined, 409),
+    )
+
+    const w = mountEditor()
+    await flushPromises()
+
+    expect(w.find('[data-test="evaluation-summary-section-d1"]').exists()).toBe(true)
+    expect(w.find('[data-test="evaluation-summary-section-grade-d1"]').exists()).toBe(false)
+    // The current report is still fully editable — the previous one's status never gates it.
+    expect(w.find('[data-test="content-s1"]').attributes('disabled')).toBeUndefined()
+    expect(w.find('[data-test="save-s1"]').exists()).toBe(true)
   })
 })

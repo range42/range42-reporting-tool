@@ -350,3 +350,41 @@ class EvaluatorCandidateOut(BaseModel):
     user_id: str
     display_name: str
     email: str
+
+
+class SectionGradeSummaryOut(BaseModel):
+    """One section's aggregated grade + feedback, for ``EvaluationSummaryOut``.
+
+    No ``evaluator_id`` here by design — ``GET .../evaluation-summary`` is the own-team read
+    path, and evaluator isolation means the team never sees who graded what, only the combined
+    result.
+    """
+
+    section_def_id: str
+    name: str
+    grade: Decimal | None
+    weight: Decimal
+    feedback: str | None
+
+    @field_serializer("grade")
+    def _two_dp(self, v: Decimal | None) -> str | None:
+        return None if v is None else f"{v:.2f}"
+
+
+class EvaluationSummaryOut(BaseModel):
+    """Body of ``GET .../reports/{rid}/evaluation-summary``.
+
+    Gated the same way ``report.overall_grade`` is elsewhere (``_GradeGate``): the route 409s
+    rather than returning this with nulled fields, since "not visible yet" is a distinct state
+    from "graded zero."
+    """
+
+    report_id: str
+    overall_grade: Decimal | None
+    overall_feedback: str | None
+    evaluated_at: datetime | None
+    section_grades: list[SectionGradeSummaryOut]
+
+    @field_serializer("overall_grade")
+    def _two_dp(self, v: Decimal | None) -> str | None:
+        return None if v is None else f"{v:.2f}"

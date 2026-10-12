@@ -6,14 +6,42 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from app.models.campaign import Campaign
+from app.models.campaign_evaluator import CampaignEvaluator
 from app.models.report import Report
+from app.models.user import User
 from app.schemas.domain import _reject_null
+
+
+class CampaignReportSpec(BaseModel):
+    """One report to instantiate for every team when a campaign is defined with ``report_specs``.
+
+    ``name`` is optional — two specs sharing a template would otherwise produce identically
+    named reports per team (e.g. two SITREP specs both naming their reports "SITREP — BT1").
+    Left unset, the report name falls back to the template's own name.
+    """
+
+    template_id: str
+    name: str | None = None
+    available_at: datetime | None = None
+    due_at: datetime | None = None
+    approval_required: bool = False
+
+
+def _reject_empty_specs(v: list[CampaignReportSpec] | None) -> list[CampaignReportSpec] | None:
+    if v is not None and len(v) == 0:
+        raise ValueError("report_specs must be a non-empty list or null")
+    return v
 
 
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str | None = None
     metadata: dict[str, Any] | None = None
+    # When set, fans each spec out once per team in the exercise (n specs x m teams) and links
+    # every created report into this campaign — see campaigns.py::create_campaign.
+    report_specs: list[CampaignReportSpec] | None = None
+
+    _no_empty_specs = field_validator("report_specs")(_reject_empty_specs)
 
 
 class CampaignUpdate(BaseModel):
@@ -29,6 +57,30 @@ class CampaignUpdate(BaseModel):
 
 class CampaignReportAdd(BaseModel):
     report_id: str
+
+
+class CampaignEvaluatorCreate(BaseModel):
+    evaluator_id: str
+
+
+class CampaignEvaluatorOut(BaseModel):
+    id: str
+    campaign_id: str
+    evaluator_id: str
+    display_name: str
+    email: str
+    created_at: datetime
+
+    @classmethod
+    def from_row(cls, ce: CampaignEvaluator, u: User) -> CampaignEvaluatorOut:
+        return cls(
+            id=str(ce.id),
+            campaign_id=str(ce.campaign_id),
+            evaluator_id=str(u.id),
+            display_name=u.display_name,
+            email=u.email,
+            created_at=ce.created_at,
+        )
 
 
 class CampaignOut(BaseModel):
