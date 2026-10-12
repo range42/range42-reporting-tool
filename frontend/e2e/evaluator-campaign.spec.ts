@@ -113,7 +113,9 @@ test('grade, save, then finalize moves the report to evaluated', async ({
   }
   // The save round trip (PUT + re-fetch) is async — wait for the server's own confirmation
   // that every gradable section landed, not just for the local draft to show a value.
-  await expect(page.locator('[data-test="finalize-remaining"]')).toHaveText('All sections graded')
+  await expect(page.locator('[data-test="finalize-remaining"]')).toHaveText(
+    'All sections evaluated',
+  )
 
   const finalizeBtn = page.locator('[data-test="finalize-btn"]')
   await expect(finalizeBtn).toBeEnabled()
@@ -222,7 +224,9 @@ test.describe('as an evaluator without global admin', () => {
       await input.blur()
       await expect(input).toHaveValue('5.00')
     }
-    await expect(page.locator('[data-test="finalize-remaining"]')).toHaveText('All sections graded')
+    await expect(page.locator('[data-test="finalize-remaining"]')).toHaveText(
+      'All sections evaluated',
+    )
     await page.locator('[data-test="finalize-btn"]').click()
     await expect(page.locator('[data-test="finalize-done"]')).toBeVisible()
 
