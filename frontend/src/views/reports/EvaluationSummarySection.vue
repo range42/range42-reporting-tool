@@ -59,7 +59,7 @@ const isEmpty = computed(() => choices.value.length === 0 && safeContent.value.t
 
       <div v-if="grade" class="mt-3 border-t border-[var(--rt-border)] pt-2">
         <p class="text-xs text-[var(--rt-fg-muted)]">
-          {{ t('evaluations.grade') }}:
+          {{ t('evaluations.colGrade') }}:
           <span
             :data-test="`evaluation-summary-section-grade-${section.section_def_id}`"
             class="font-mono font-semibold tabular-nums text-[var(--rt-fg)]"

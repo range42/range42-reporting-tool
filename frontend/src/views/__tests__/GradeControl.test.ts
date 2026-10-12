@@ -52,7 +52,7 @@ describe('GradeControl', () => {
     expect(input.attributes('inputmode')).toBe('decimal')
     expect(input.attributes('step')).toBeDefined()
     // A real label and a range hint wired through aria-describedby.
-    expect(w.get(`label[for="${input.attributes('id')}"]`).text()).toContain('Grade')
+    expect(w.get(`label[for="${input.attributes('id')}"]`).text()).toContain('Evaluate')
     const hintId = input.attributes('aria-describedby')!
     expect(w.get(`#${hintId}`).text()).toContain('10')
   })

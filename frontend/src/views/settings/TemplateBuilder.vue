@@ -636,7 +636,7 @@ const inputClass =
                           })
                         "
                       >
-                        <option value="not_graded">Not graded</option>
+                        <option value="not_graded">Not evaluated</option>
                         <option value="numeric">Numeric</option>
                         <option value="pass_fail">Pass / Fail</option>
                         <option value="rubric">Rubric</option>

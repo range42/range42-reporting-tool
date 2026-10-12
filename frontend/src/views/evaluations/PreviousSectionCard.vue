@@ -82,7 +82,7 @@ const ownGrade = computed(() => (props.hasOwnPreviousEvaluation ? props.grade : 
       </div>
       <div v-else-if="ownGrade" class="mt-3 border-t border-[var(--rt-border)] pt-2">
         <p class="text-xs text-[var(--rt-fg-muted)]">
-          {{ t('evaluations.grade') }}:
+          {{ t('evaluations.colGrade') }}:
           <span
             data-test="prev-grade"
             class="font-mono font-semibold tabular-nums text-[var(--rt-fg)]"
