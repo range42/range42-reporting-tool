@@ -281,7 +281,7 @@
       "paneCurrent": "Current",
       "beingGraded": "Being graded",
       "didNotEvaluate": "You did not evaluate this report.",
-      "firstReport": "No previous cycle to compare — this is the first report in the campaign.",
+      "firstReport": "No earlier report from this team to compare against.",
       "jumpAriaLabel": "Jump to section",
       "navAriaLabel": "Campaign reports",
       "noCampaign": "This report is not part of any campaign."
