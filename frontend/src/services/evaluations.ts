@@ -272,6 +272,30 @@ export const listEvaluatorCandidates = (
 ): Promise<EvaluatorCandidate[]> =>
   apiGet<EvaluatorCandidate[]>(`/api/v1/exercises/${exerciseId}/evaluator-candidates`, token)
 
+export type FinalizePolicy = 'all_must_finalize' | 'any_can_finalize'
+
+/** One `under_evaluation` report in the Global-Admin stalled view (mirrors `StalledReportRow`). */
+export interface StalledReport {
+  report_id: string
+  report_name: string
+  team_id: string
+  team_name: string
+  under_evaluation_since: string | null
+  counted_evaluator_count: number
+  completed_evaluator_count: number
+  /** Least recent activity among evaluators still working; null when none is left. */
+  oldest_pending_activity_at: string | null
+}
+
+export interface StalledReports {
+  finalize_policy: FinalizePolicy
+  /** Most stalled first, as ranked by the server. */
+  reports: StalledReport[]
+}
+
+export const listStalledReports = (token: string, exerciseId: string): Promise<StalledReports> =>
+  apiGet<StalledReports>(`/api/v1/exercises/${exerciseId}/stalled-reports`, token)
+
 /** One section's aggregated grade + feedback, for `EvaluationSummary`. No `evaluator_id` —
  *  the own-team read path never reveals who graded what, only the combined result. */
 export interface SectionGradeSummary {

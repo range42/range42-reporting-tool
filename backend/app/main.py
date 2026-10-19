@@ -20,6 +20,7 @@ from app.routes.v1 import auth as auth_route
 from app.routes.v1 import campaigns as campaigns_route
 from app.routes.v1 import config as config_route
 from app.routes.v1 import evaluation_finalize as evaluation_finalize_route
+from app.routes.v1 import evaluation_stalled as evaluation_stalled_route
 from app.routes.v1 import evaluations as evaluations_route
 from app.routes.v1 import exercises as exercises_route
 from app.routes.v1 import health as health_route
@@ -120,6 +121,7 @@ def create_app() -> FastAPI:
         attachments_route.router,
         evaluations_route.router,
         evaluation_finalize_route.router,
+        evaluation_stalled_route.router,
     ):
         app.include_router(r, prefix="/api/v1")
     for r in stub_routers.values():

@@ -268,6 +268,29 @@
     "viewEvaluation": "View evaluation"
   },
   "evaluations": {
+    "stalled": {
+      "nav": "Stalled evaluations",
+      "title": "Stalled evaluations",
+      "subtitle": "Reports still under evaluation, the longest-idle first.",
+      "policyLabel": "Finalize policy",
+      "policy": {
+        "all_must_finalize": "every assigned evaluator must finalize",
+        "any_can_finalize": "any one evaluator may finalize"
+      },
+      "report": "Report",
+      "team": "Team",
+      "waiting": "Under evaluation",
+      "finalized": "Finalized",
+      "finalizedCount": "{completed} of {counted}",
+      "lastActivity": "Oldest pending activity",
+      "days": "today | 1 day | {n} days",
+      "daysAgo": "today | 1 day ago | {n} days ago",
+      "unknown": "unknown",
+      "noPendingEvaluator": "No evaluator left on it",
+      "open": "Manage evaluators",
+      "empty": "No report is under evaluation.",
+      "loadError": "Could not load the stalled evaluations."
+    },
     "aiPrecheck": "AI pre-check",
     "allGraded": "All sections evaluated",
     "assignAction": "Assign",

@@ -81,6 +81,12 @@ export const router = createRouter({
       meta: { requiresAuth: true, requiresEvaluator: true },
     },
     {
+      path: '/exercises/:exerciseId/evaluations/stalled',
+      name: 'stalled-evaluations',
+      component: () => import('@/views/evaluations/StalledEvaluations.vue'),
+      meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
       path: '/exercises/:exerciseId/reports/:rid/evaluations/:evid',
       name: 'evaluation',
       component: () => import('@/views/evaluations/SingleEvaluation.vue'),

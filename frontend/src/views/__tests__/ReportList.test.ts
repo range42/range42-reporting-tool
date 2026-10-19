@@ -88,6 +88,29 @@ describe('ReportList.vue', () => {
     expect(nonAdmin.find('[data-test="campaigns-link"]').exists()).toBe(false)
   })
 
+  it('shows the Stalled evaluations entry for admins only', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const admin = mountList()
+    await flushPromises()
+    expect(admin.find('[data-test="stalled-link"]').exists()).toBe(true)
+
+    setAdmin(false)
+    const nonAdmin = mountList()
+    await flushPromises()
+    expect(nonAdmin.find('[data-test="stalled-link"]').exists()).toBe(false)
+  })
+
+  it('navigates to the stalled evaluations route', async () => {
+    vi.spyOn(svc, 'listReports').mockResolvedValue([])
+    const w = mountList()
+    await flushPromises()
+    await w.get('[data-test="stalled-link"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({
+      name: 'stalled-evaluations',
+      params: { exerciseId: 'ex1' },
+    })
+  })
+
   // The button now opens the campaign LIST, not the create form directly — "New campaign" was
   // a dead end once campaigns needed managing (list/edit/delete/evaluators), not just creating.
   it('navigates to the campaigns list route from the Campaigns entry', async () => {

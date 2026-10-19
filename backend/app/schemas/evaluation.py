@@ -388,3 +388,27 @@ class EvaluationSummaryOut(BaseModel):
     @field_serializer("overall_grade")
     def _two_dp(self, v: Decimal | None) -> str | None:
         return None if v is None else f"{v:.2f}"
+
+
+class StalledReportRow(BaseModel):
+    """One ``under_evaluation`` report in the Global-Admin stalled view.
+
+    ``oldest_pending_activity_at`` is the least recent last-activity among counted evaluations
+    not yet completed; None when no counted evaluation is pending.
+    """
+
+    report_id: str
+    report_name: str
+    team_id: str
+    team_name: str
+    under_evaluation_since: datetime | None
+    counted_evaluator_count: int
+    completed_evaluator_count: int
+    oldest_pending_activity_at: datetime | None
+
+
+class StalledReportsOut(BaseModel):
+    """Response of ``GET /exercises/{id}/stalled-reports``, rows ordered most stalled first."""
+
+    finalize_policy: str
+    reports: list[StalledReportRow]

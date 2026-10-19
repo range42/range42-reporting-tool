@@ -5098,6 +5098,50 @@
           }
         }
       }
+    },
+    "/api/v1/exercises/{exercise_id}/stalled-reports": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "List Stalled Reports",
+        "description": "Reports under evaluation, most stalled first (Global Admin only). Read-only.",
+        "operationId": "list_stalled_reports_api_v1_exercises__exercise_id__stalled_reports_get",
+        "parameters": [
+          {
+            "name": "exercise_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Exercise Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataEnvelope_StalledReportsOut_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6049,6 +6093,28 @@
           "data"
         ],
         "title": "DataEnvelope[SectionOut]"
+      },
+      "DataEnvelope_StalledReportsOut_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StalledReportsOut"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "DataEnvelope[StalledReportsOut]"
       },
       "DataEnvelope_TeamEvaluatorOut_": {
         "properties": {
@@ -10026,6 +10092,93 @@
         },
         "type": "object",
         "title": "SectionUpdate"
+      },
+      "StalledReportRow": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "title": "Report Id"
+          },
+          "report_name": {
+            "type": "string",
+            "title": "Report Name"
+          },
+          "team_id": {
+            "type": "string",
+            "title": "Team Id"
+          },
+          "team_name": {
+            "type": "string",
+            "title": "Team Name"
+          },
+          "under_evaluation_since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Under Evaluation Since"
+          },
+          "counted_evaluator_count": {
+            "type": "integer",
+            "title": "Counted Evaluator Count"
+          },
+          "completed_evaluator_count": {
+            "type": "integer",
+            "title": "Completed Evaluator Count"
+          },
+          "oldest_pending_activity_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Pending Activity At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_id",
+          "report_name",
+          "team_id",
+          "team_name",
+          "under_evaluation_since",
+          "counted_evaluator_count",
+          "completed_evaluator_count",
+          "oldest_pending_activity_at"
+        ],
+        "title": "StalledReportRow",
+        "description": "One ``under_evaluation`` report in the Global-Admin stalled view.\n\n``oldest_pending_activity_at`` is the least recent last-activity among counted evaluations\nnot yet completed; None when no counted evaluation is pending."
+      },
+      "StalledReportsOut": {
+        "properties": {
+          "finalize_policy": {
+            "type": "string",
+            "title": "Finalize Policy"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/StalledReportRow"
+            },
+            "type": "array",
+            "title": "Reports"
+          }
+        },
+        "type": "object",
+        "required": [
+          "finalize_policy",
+          "reports"
+        ],
+        "title": "StalledReportsOut",
+        "description": "Response of ``GET /exercises/{id}/stalled-reports``, rows ordered most stalled first."
       },
       "TeamCreate": {
         "properties": {

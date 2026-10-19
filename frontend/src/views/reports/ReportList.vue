@@ -2,7 +2,15 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, TriangleAlert, Clock, ShieldCheck, ClipboardCheck, CalendarPlus } from '@lucide/vue'
+import {
+  Plus,
+  TriangleAlert,
+  Clock,
+  ShieldCheck,
+  ClipboardCheck,
+  CalendarPlus,
+  Hourglass,
+} from '@lucide/vue'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
@@ -103,6 +111,10 @@ function createReport(): void {
 function openCampaigns(): void {
   void router.push({ name: 'campaigns', params: { exerciseId } })
 }
+
+function openStalled(): void {
+  void router.push({ name: 'stalled-evaluations', params: { exerciseId } })
+}
 </script>
 
 <template>
@@ -137,6 +149,16 @@ function openCampaigns(): void {
       >
         <CalendarPlus class="h-4 w-4" />
         {{ t('campaigns.nav') }}
+      </button>
+      <button
+        v-if="auth.isAdmin"
+        type="button"
+        data-test="stalled-link"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="openStalled"
+      >
+        <Hourglass class="h-4 w-4" />
+        {{ t('evaluations.stalled.nav') }}
       </button>
       <button
         v-if="auth.isAdmin"

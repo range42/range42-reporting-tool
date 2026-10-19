@@ -1369,6 +1369,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exercises/{exercise_id}/stalled-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Stalled Reports
+         * @description Reports under evaluation, most stalled first (Global Admin only). Read-only.
+         */
+        get: operations["list_stalled_reports_api_v1_exercises__exercise_id__stalled_reports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1682,6 +1702,11 @@ export interface components {
         /** DataEnvelope[SectionOut] */
         DataEnvelope_SectionOut_: {
             data: components["schemas"]["SectionOut"];
+            meta?: components["schemas"]["Page"] | null;
+        };
+        /** DataEnvelope[StalledReportsOut] */
+        DataEnvelope_StalledReportsOut_: {
+            data: components["schemas"]["StalledReportsOut"];
             meta?: components["schemas"]["Page"] | null;
         };
         /** DataEnvelope[TeamEvaluatorOut] */
@@ -2895,6 +2920,41 @@ export interface components {
             capec_tags?: string[] | null;
             /** Cwe Tags */
             cwe_tags?: string[] | null;
+        };
+        /**
+         * StalledReportRow
+         * @description One ``under_evaluation`` report in the Global-Admin stalled view.
+         *
+         *     ``oldest_pending_activity_at`` is the least recent last-activity among counted evaluations
+         *     not yet completed; None when no counted evaluation is pending.
+         */
+        StalledReportRow: {
+            /** Report Id */
+            report_id: string;
+            /** Report Name */
+            report_name: string;
+            /** Team Id */
+            team_id: string;
+            /** Team Name */
+            team_name: string;
+            /** Under Evaluation Since */
+            under_evaluation_since: string | null;
+            /** Counted Evaluator Count */
+            counted_evaluator_count: number;
+            /** Completed Evaluator Count */
+            completed_evaluator_count: number;
+            /** Oldest Pending Activity At */
+            oldest_pending_activity_at: string | null;
+        };
+        /**
+         * StalledReportsOut
+         * @description Response of ``GET /exercises/{id}/stalled-reports``, rows ordered most stalled first.
+         */
+        StalledReportsOut: {
+            /** Finalize Policy */
+            finalize_policy: string;
+            /** Reports */
+            reports: components["schemas"]["StalledReportRow"][];
         };
         /** TeamCreate */
         TeamCreate: {
@@ -6359,6 +6419,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataEnvelope_EvaluationBreakdownOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_stalled_reports_api_v1_exercises__exercise_id__stalled_reports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exercise_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataEnvelope_StalledReportsOut_"];
                 };
             };
             /** @description Validation Error */
