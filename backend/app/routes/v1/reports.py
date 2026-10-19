@@ -39,6 +39,7 @@ from app.models.role_definition import RoleDefinition
 from app.schemas.common import DataEnvelope, Page
 from app.schemas.report import (
     KNOWN_REPORT_STATUSES,
+    ApprovalWithRemarks,
     ApproveRequest,
     RecallRequest,
     RejectRequest,
@@ -48,8 +49,15 @@ from app.schemas.report import (
     ReportSectionOut,
     ReportUpdate,
     SectionAnswerUpdate,
+    SectionRemarkIn,
 )
 from app.services.workflow import state_machine
+from app.services.workflow.approval_remarks import (
+    SectionRemarkError,
+    add_section_remarks,
+    check_section_remarks,
+    with_remarks,
+)
 
 router = APIRouter(tags=["reports"])
 
@@ -264,8 +272,8 @@ def _require_status(r: Report, expected: str) -> None:
         raise HTTPException(status_code=409, detail={"error": "invalid_state", "from": r.status, "to": expected})
 
 
-async def _approval_records(db: AsyncSession, report_id: uuid.UUID) -> list[ApprovalRecord]:
-    return list(
+async def _approval_records(db: AsyncSession, report_id: uuid.UUID) -> list[ApprovalWithRemarks]:
+    records = (
         (
             await db.execute(
                 select(ApprovalRecord).where(ApprovalRecord.report_id == report_id).order_by(ApprovalRecord.created_at)
@@ -274,6 +282,14 @@ async def _approval_records(db: AsyncSession, report_id: uuid.UUID) -> list[Appr
         .scalars()
         .all()
     )
+    return await with_remarks(db, records)
+
+
+async def _check_remarks(db: AsyncSession, report_id: uuid.UUID, remarks: list[SectionRemarkIn]) -> None:
+    try:
+        await check_section_remarks(db, report_id, remarks)
+    except SectionRemarkError as e:
+        raise HTTPException(status_code=422, detail={"error": e.code}) from e
 
 
 def _chain_entries(report: Report) -> list[dict[str, object]]:
@@ -871,18 +887,20 @@ async def approve_report(
     approver_id, is_admin_override = await _resolve_on_behalf_of(db, body.on_behalf_of, user)
     if not is_admin_override:
         await _assert_step_eligibility(db, exercise_id, user, entries, step)
+    await _check_remarks(db, report.id, body.section_remarks)
 
-    db.add(
-        ApprovalRecord(
-            report_id=report.id,
-            approver_id=approver_id,
-            step=step,
-            cycle=report.approval_cycle,
-            action="approved",
-            is_admin_override=is_admin_override,
-            comment=body.comment,
-        )
+    record = ApprovalRecord(
+        report_id=report.id,
+        approver_id=approver_id,
+        step=step,
+        cycle=report.approval_cycle,
+        action="approved",
+        is_admin_override=is_admin_override,
+        comment=body.comment,
     )
+    db.add(record)
+    await db.flush()
+    add_section_remarks(db, record, body.section_remarks)
     await db.flush()
 
     approved = approved | {step}
@@ -925,17 +943,19 @@ async def reject_report(
 ) -> DataEnvelope[ReportDetailOut]:
     report = await _get_report(db, exercise_id, rid)
     _require_status(report, "pending_approval")
-    db.add(
-        ApprovalRecord(
-            report_id=report.id,
-            approver_id=user.id,
-            step=body.step or 1,
-            cycle=report.approval_cycle,
-            action="rejected",
-            is_admin_override=False,
-            comment=body.comment,
-        )
+    await _check_remarks(db, report.id, body.section_remarks)
+    record = ApprovalRecord(
+        report_id=report.id,
+        approver_id=user.id,
+        step=body.step or 1,
+        cycle=report.approval_cycle,
+        action="rejected",
+        is_admin_override=False,
+        comment=body.comment,
     )
+    db.add(record)
+    await db.flush()
+    add_section_remarks(db, record, body.section_remarks)
     await db.flush()
     # The content is about to change, so earlier steps in this cycle must sign off again
     # rather than being silently skipped on resubmission. Superseding, not deleting.

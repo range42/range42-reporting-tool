@@ -7,6 +7,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
 import AppShell from '@/components/AppShell.vue'
+import ReportContentPane from '@/views/evaluations/ReportContentPane.vue'
+import type { ContentSection } from '@/services/evaluations'
 import {
   listPendingApproval,
   getReport,
@@ -14,6 +16,7 @@ import {
   rejectReport,
   type Report,
   type ReportDetail,
+  type SectionRemarkInput,
 } from '@/services/reports'
 
 type StepState = 'done' | 'current' | 'pending'
@@ -37,6 +40,8 @@ const selected = ref<ReportDetail | null>(null)
 const loading = ref(true)
 const error = ref('')
 const note = ref('')
+/** Remark draft per report_section_id; blank entries are never sent. */
+const remarks = ref<Record<string, string>>({})
 const acting = ref(false)
 const decisionError = ref('')
 
@@ -58,6 +63,7 @@ onMounted(async () => {
 
 async function select(id: string): Promise<void> {
   note.value = ''
+  remarks.value = {}
   decisionError.value = ''
   selected.value = await getReport(token.value, exerciseId, id)
 }
@@ -65,6 +71,27 @@ async function select(id: string): Promise<void> {
 const canAct = computed(
   () => selected.value !== null && (selected.value.can_approve || auth.isAdmin),
 )
+
+/** Template authoring order, shaped for the evaluator's read-only section renderer. */
+const sections = computed<ContentSection[]>(() =>
+  [...(selected.value?.sections ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .map((s) => ({
+      report_section_id: s.id,
+      name: s.name,
+      description: s.description,
+      content: s.content,
+      content_plain: s.content_plain,
+      choice_values: s.choice_values,
+    })),
+)
+
+function filledRemarks(): SectionRemarkInput[] {
+  return sections.value.flatMap((s) => {
+    const remark = (remarks.value[s.report_section_id] ?? '').trim()
+    return remark ? [{ report_section_id: s.report_section_id, remark }] : []
+  })
+}
 
 const steps = computed<StepView[]>(() => {
   const d = selected.value
@@ -101,16 +128,22 @@ async function decide(kind: 'approve' | 'reject'): Promise<void> {
   if (!d || acting.value) return
   const comment = note.value.trim()
   if (kind === 'reject' && !comment) return
+  const filled = filledRemarks()
+  const withRemarks = filled.length ? { section_remarks: filled } : {}
   acting.value = true
   decisionError.value = ''
   try {
     if (kind === 'approve') {
-      await approveReport(token.value, exerciseId, d.id, comment ? { comment } : {})
+      await approveReport(token.value, exerciseId, d.id, {
+        ...(comment ? { comment } : {}),
+        ...withRemarks,
+      })
     } else {
-      await rejectReport(token.value, exerciseId, d.id, { comment })
+      await rejectReport(token.value, exerciseId, d.id, { comment, ...withRemarks })
     }
     selected.value = null
     note.value = ''
+    remarks.value = {}
     queue.value = await listPendingApproval(token.value, exerciseId)
   } catch (e) {
     decisionError.value = e instanceof ApiError ? e.message : t('reports.approvals.decisionError')
@@ -241,6 +274,37 @@ const stepDot: Record<StepState, string> = {
                 >
                   {{ t(`reports.approvals.state.${s.state}`) }}
                 </span>
+              </li>
+            </ol>
+          </div>
+
+          <!-- Sections, each with an optional remark -->
+          <div
+            v-if="sections.length"
+            class="border-b border-zinc-100 px-6 py-5 dark:border-zinc-800"
+          >
+            <h4 class="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
+              {{ t('reports.approvals.sections') }}
+            </h4>
+            <ol class="space-y-5">
+              <li v-for="s in sections" :key="s.report_section_id" class="space-y-2">
+                <ReportContentPane :section="s" />
+                <div v-if="canAct">
+                  <label
+                    :for="`section-remark-${s.report_section_id}`"
+                    class="mb-1 block text-xs font-medium text-zinc-500"
+                  >
+                    {{ t('reports.approvals.sectionRemark', { name: s.name }) }}
+                  </label>
+                  <textarea
+                    :id="`section-remark-${s.report_section_id}`"
+                    v-model="remarks[s.report_section_id]"
+                    :data-test="`section-remark-${s.report_section_id}`"
+                    rows="2"
+                    :placeholder="t('reports.approvals.sectionRemarkPlaceholder')"
+                    class="w-full rounded-lg border border-zinc-200 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700"
+                  />
+                </div>
               </li>
             </ol>
           </div>

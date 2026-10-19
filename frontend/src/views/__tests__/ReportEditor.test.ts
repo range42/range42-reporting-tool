@@ -103,6 +103,39 @@ describe('ReportEditor.vue', () => {
     vi.mocked(campaigns.listCampaigns).mockResolvedValue([])
   })
 
+  describe('after a rejection', () => {
+    const rejectedDetail = {
+      ...richDetail,
+      approval_cycle: 2,
+      approval_records: [
+        {
+          id: 'a1',
+          step: 1,
+          cycle: 1,
+          action: 'rejected',
+          comment: 'Tighten the summary.',
+          section_remarks: [{ id: 'm1', report_section_id: 's1', remark: 'Cite the log line.' }],
+        },
+      ],
+    }
+
+    it("shows the approver's overall note and the remark on its section", async () => {
+      vi.mocked(reports.getReport).mockResolvedValue(rejectedDetail as never)
+      const w = mountEditor()
+      await flushPromises()
+      expect(w.find('[data-test="rejection-banner"]').text()).toContain('Tighten the summary.')
+      expect(w.find('[data-test="section-remark-s1"]').text()).toContain('Cite the log line.')
+    })
+
+    it('shows nothing for a draft that was never rejected', async () => {
+      vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
+      const w = mountEditor()
+      await flushPromises()
+      expect(w.find('[data-test="rejection-banner"]').exists()).toBe(false)
+      expect(w.find('[data-test="section-remark-s1"]').exists()).toBe(false)
+    })
+  })
+
   it('renders a char counter for rich_text and blocks over the limit', async () => {
     vi.mocked(reports.getReport).mockResolvedValue(richDetail as never)
     const w = mountEditor()

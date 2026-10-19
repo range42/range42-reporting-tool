@@ -29,6 +29,20 @@ export interface ApprovalRecord {
   is_admin_override: boolean
   comment: string | null
   created_at: string
+  section_remarks: SectionRemark[]
+}
+
+/** An approver's remark on one section, made as part of one decision. */
+export interface SectionRemark {
+  id: string
+  report_section_id: string
+  remark: string
+  created_at: string
+}
+
+export interface SectionRemarkInput {
+  report_section_id: string
+  remark: string
 }
 
 export interface Report {
@@ -162,10 +176,12 @@ export interface ApproveInput {
   step?: number
   on_behalf_of?: string
   comment?: string
+  section_remarks?: SectionRemarkInput[]
 }
 export interface RejectInput {
   comment: string
   step?: number
+  section_remarks?: SectionRemarkInput[]
 }
 export interface RecallInput {
   comment?: string

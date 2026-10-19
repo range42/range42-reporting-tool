@@ -154,6 +154,10 @@
   },
   "reports": {
     "approvalRequired": "Requires approval before submission",
+    "rejection": {
+      "title": "Sent back by the approver",
+      "sectionRemark": "Approver's remark"
+    },
     "approvals": {
       "nav": "Approvals",
       "title": "Approvals",
@@ -177,7 +181,10 @@
       "notApprover": "You are not the current approver for this report.",
       "decisionError": "Could not record your decision. Please try again.",
       "records": "Decisions so far",
-      "overrideBadge": "admin override"
+      "overrideBadge": "admin override",
+      "sections": "Sections",
+      "sectionRemark": "Remark on {name}",
+      "sectionRemarkPlaceholder": "Optional: what should change in this section?"
     },
     "assignedWriter": {
       "label": "Assigned writer",

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, Field, StringConstraints, field_serializer, field_validator, model_validator
 
 from app.models.approval_record import ApprovalRecord
+from app.models.approval_section_remark import ApprovalSectionRemark
 from app.models.report import Report
 from app.models.report_section import ReportSection
 from app.models.template_section_def import TemplateSectionDef
@@ -72,17 +75,40 @@ class ReportUpdate(BaseModel):
     _no_empty_chain = field_validator("approval_chain")(_reject_empty_chain)
 
 
+SECTION_REMARK_MAX_LENGTH = 10_000
+
+
+class SectionRemarkIn(BaseModel):
+    """An approver's remark on one section of the report being decided."""
+
+    report_section_id: uuid.UUID
+    remark: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=SECTION_REMARK_MAX_LENGTH)]
+
+
+class SectionRemarkOut(BaseModel):
+    id: str
+    report_section_id: str
+    remark: str
+    created_at: datetime
+
+    @classmethod
+    def from_model(cls, m: ApprovalSectionRemark) -> SectionRemarkOut:
+        return cls(id=str(m.id), report_section_id=str(m.report_section_id), remark=m.remark, created_at=m.created_at)
+
+
 class ApproveRequest(BaseModel):
     # step/on_behalf_of drive multi-step chains and admin override;
     # ignored on the single-step path.
     step: int | None = Field(default=None, ge=1)
     on_behalf_of: str | None = None
     comment: str | None = None
+    section_remarks: list[SectionRemarkIn] = []
 
 
 class RejectRequest(BaseModel):
     comment: str = Field(min_length=1)
     step: int | None = Field(default=None, ge=1)
+    section_remarks: list[SectionRemarkIn] = []
 
 
 class RecallRequest(BaseModel):
@@ -99,9 +125,10 @@ class ApprovalRecordOut(BaseModel):
     is_admin_override: bool
     comment: str | None
     created_at: datetime
+    section_remarks: list[SectionRemarkOut] = []
 
     @classmethod
-    def from_model(cls, r: ApprovalRecord) -> ApprovalRecordOut:
+    def from_model(cls, r: ApprovalRecord, remarks: Sequence[ApprovalSectionRemark] = ()) -> ApprovalRecordOut:
         return cls(
             id=str(r.id),
             report_id=str(r.report_id),
@@ -112,7 +139,12 @@ class ApprovalRecordOut(BaseModel):
             is_admin_override=r.is_admin_override,
             comment=r.comment,
             created_at=r.created_at,
+            section_remarks=[SectionRemarkOut.from_model(m) for m in remarks],
         )
+
+
+#: An approval decision paired with the section remarks made in it.
+ApprovalWithRemarks = tuple[ApprovalRecord, Sequence[ApprovalSectionRemark]]
 
 
 class SectionAnswerUpdate(BaseModel):
@@ -289,7 +321,7 @@ class ReportDetailOut(_GatedGradeFields):
         cls,
         r: Report,
         pairs: list[tuple[ReportSection, TemplateSectionDef]],
-        approval_records: list[ApprovalRecord] | None = None,
+        approval_records: Sequence[ApprovalWithRemarks] = (),
         *,
         can_approve: bool = False,
         grade_visible: bool = False,
@@ -311,7 +343,7 @@ class ReportDetailOut(_GatedGradeFields):
             writer_notes=r.writer_notes,
             approval_chain=r.approval_chain,
             approval_cycle=r.approval_cycle,
-            approval_records=[ApprovalRecordOut.from_model(a) for a in (approval_records or [])],
+            approval_records=[ApprovalRecordOut.from_model(a, remarks) for a, remarks in approval_records],
             metadata=r.metadata_,
             sections=[ReportSectionOut.from_models(s, d) for s, d in pairs],
             can_approve=can_approve,

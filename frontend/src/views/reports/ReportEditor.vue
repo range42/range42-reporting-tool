@@ -2,7 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { TriangleAlert, Check, RotateCcw } from '@lucide/vue'
+import { TriangleAlert, Check, RotateCcw, MessageSquareWarning } from '@lucide/vue'
+import { latestRejection } from '@/lib/rejection'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { ApiError } from '@/services/http'
@@ -124,6 +125,8 @@ const lockedByAssignment = computed(() => {
 const readOnly = computed(
   () => report.value !== null && (report.value.status !== 'draft' || lockedByAssignment.value),
 )
+
+const rejection = computed(() => (report.value ? latestRejection(report.value) : null))
 
 const canRecall = computed(
   () => report.value?.status === 'submitted' && (auth.isAdmin || isTeamAdmin.value),
@@ -478,6 +481,19 @@ async function submit(): Promise<void> {
         <span>{{ t('reports.lockedByAssignment') }}</span>
       </div>
       <div
+        v-if="rejection"
+        data-test="rejection-banner"
+        class="mb-4 flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+      >
+        <MessageSquareWarning class="mt-0.5 h-4 w-4 shrink-0" />
+        <div class="min-w-0">
+          <p class="font-medium">{{ t('reports.rejection.title') }}</p>
+          <p v-if="rejection.comment" class="mt-0.5 whitespace-pre-line break-words">
+            {{ rejection.comment }}
+          </p>
+        </div>
+      </div>
+      <div
         v-if="submitError"
         data-test="submit-error"
         class="mb-4 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300"
@@ -532,6 +548,19 @@ async function submit(): Promise<void> {
               <span v-if="s.isRequired" class="text-xs text-red-500">*</span>
             </div>
             <p v-if="s.description" class="mb-3 text-sm text-zinc-500">{{ s.description }}</p>
+
+            <div
+              v-if="rejection?.remarks[s.id]"
+              :data-test="`section-remark-${s.id}`"
+              class="mb-3 border-l-2 border-amber-500 bg-amber-500/5 py-1.5 pl-3 text-sm"
+            >
+              <p
+                class="text-xs font-medium uppercase tracking-wider text-amber-700 dark:text-amber-300"
+              >
+                {{ t('reports.rejection.sectionRemark') }}
+              </p>
+              <p class="mt-0.5 whitespace-pre-line break-words">{{ rejection.remarks[s.id] }}</p>
+            </div>
 
             <div
               v-if="s.restore"

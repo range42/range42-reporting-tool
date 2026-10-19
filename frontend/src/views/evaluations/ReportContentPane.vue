@@ -13,9 +13,9 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { sanitize } from '@/services/sanitize'
-import type { GradableSection } from '@/services/evaluations'
+import type { ContentSection } from '@/services/evaluations'
 
-const props = defineProps<{ section: GradableSection }>()
+const props = defineProps<{ section: ContentSection }>()
 
 const { t } = useI18n()
 

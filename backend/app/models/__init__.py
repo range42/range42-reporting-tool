@@ -1,4 +1,5 @@
 from app.models.approval_record import ApprovalRecord
+from app.models.approval_section_remark import ApprovalSectionRemark
 from app.models.attachment import Attachment
 from app.models.audit import AuditLog
 from app.models.campaign import Campaign
@@ -23,6 +24,7 @@ from app.models.user_session import UserSession
 
 __all__ = [
     "ApprovalRecord",
+    "ApprovalSectionRemark",
     "Attachment",
     "AuditLog",
     "Campaign",

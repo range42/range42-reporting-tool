@@ -49,6 +49,12 @@ export interface GradableSection {
   grade: SectionGrade | null
 }
 
+/** The read-only fields `ReportContentPane` renders; a `GradableSection` already satisfies it. */
+export type ContentSection = Pick<
+  GradableSection,
+  'report_section_id' | 'name' | 'description' | 'content' | 'content_plain' | 'choice_values'
+>
+
 export interface Evaluation {
   id: string
   report_id: string

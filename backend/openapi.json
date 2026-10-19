@@ -5181,6 +5181,14 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "section_remarks": {
+            "items": {
+              "$ref": "#/components/schemas/SectionRemarkOut"
+            },
+            "type": "array",
+            "title": "Section Remarks",
+            "default": []
           }
         },
         "type": "object",
@@ -5232,6 +5240,14 @@
               }
             ],
             "title": "Comment"
+          },
+          "section_remarks": {
+            "items": {
+              "$ref": "#/components/schemas/SectionRemarkIn"
+            },
+            "type": "array",
+            "title": "Section Remarks",
+            "default": []
           }
         },
         "type": "object",
@@ -8183,6 +8199,14 @@
               }
             ],
             "title": "Step"
+          },
+          "section_remarks": {
+            "items": {
+              "$ref": "#/components/schemas/SectionRemarkIn"
+            },
+            "type": "array",
+            "title": "Section Remarks",
+            "default": []
           }
         },
         "type": "object",
@@ -9753,6 +9777,57 @@
           "updated_at"
         ],
         "title": "SectionOut"
+      },
+      "SectionRemarkIn": {
+        "properties": {
+          "report_section_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Report Section Id"
+          },
+          "remark": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Remark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_section_id",
+          "remark"
+        ],
+        "title": "SectionRemarkIn",
+        "description": "An approver's remark on one section of the report being decided."
+      },
+      "SectionRemarkOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "report_section_id": {
+            "type": "string",
+            "title": "Report Section Id"
+          },
+          "remark": {
+            "type": "string",
+            "title": "Remark"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "report_section_id",
+          "remark",
+          "created_at"
+        ],
+        "title": "SectionRemarkOut"
       },
       "SectionUpdate": {
         "properties": {

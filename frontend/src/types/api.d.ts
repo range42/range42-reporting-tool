@@ -1415,6 +1415,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Section Remarks
+             * @default []
+             */
+            section_remarks: components["schemas"]["SectionRemarkOut"][];
         };
         /** ApproveRequest */
         ApproveRequest: {
@@ -1424,6 +1429,11 @@ export interface components {
             on_behalf_of?: string | null;
             /** Comment */
             comment?: string | null;
+            /**
+             * Section Remarks
+             * @default []
+             */
+            section_remarks: components["schemas"]["SectionRemarkIn"][];
         };
         /** AttachmentOut */
         AttachmentOut: {
@@ -2318,6 +2328,11 @@ export interface components {
             comment: string;
             /** Step */
             step?: number | null;
+            /**
+             * Section Remarks
+             * @default []
+             */
+            section_remarks: components["schemas"]["SectionRemarkIn"][];
         };
         /**
          * ReopenRequest
@@ -2814,6 +2829,33 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * SectionRemarkIn
+         * @description An approver's remark on one section of the report being decided.
+         */
+        SectionRemarkIn: {
+            /**
+             * Report Section Id
+             * Format: uuid
+             */
+            report_section_id: string;
+            /** Remark */
+            remark: string;
+        };
+        /** SectionRemarkOut */
+        SectionRemarkOut: {
+            /** Id */
+            id: string;
+            /** Report Section Id */
+            report_section_id: string;
+            /** Remark */
+            remark: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** SectionUpdate */
         SectionUpdate: {

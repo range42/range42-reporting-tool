@@ -7,7 +7,7 @@ import ApproverQueue from '@/views/reports/ApproverQueue.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as reports from '@/services/reports'
 import * as exercises from '@/services/exercises'
-import type { Report, ReportDetail } from '@/services/reports'
+import type { Report, ReportDetail, ReportSection } from '@/services/reports'
 
 const i18n = createI18n({ legacy: false, locale: 'en', messages: { en } })
 
@@ -73,6 +73,7 @@ function approvalRecord(step: number, cycle: number) {
     is_admin_override: false,
     comment: null,
     created_at: '2026-09-15T10:00:00Z',
+    section_remarks: [],
   }
 }
 
@@ -133,6 +134,95 @@ describe('ApproverQueue.vue', () => {
     await w.find('[data-test="approve-btn"]').trigger('click')
     await flushPromises()
     expect(approve).toHaveBeenCalledWith('tok', 'ex1', 'r1', {})
+  })
+
+  describe('per-section remarks', () => {
+    function reportSection(id: string, name: string, position: number): ReportSection {
+      return {
+        id,
+        report_id: 'r1',
+        section_def_id: `d-${id}`,
+        position,
+        name,
+        description: null,
+        field_type: 'rich_text',
+        is_required: true,
+        char_limit: null,
+        choice_config: null,
+        content: `<p>${name} body</p>`,
+        content_plain: `${name} body`,
+        char_count: 0,
+        choice_values: null,
+        version: 1,
+        last_edited_by: null,
+        last_edited_at: null,
+        created_at: '2026-09-15T10:00:00Z',
+        updated_at: '2026-09-15T10:00:00Z',
+      }
+    }
+
+    const withSections = (canApprove: boolean) =>
+      detail(canApprove, {
+        sections: [reportSection('s2', 'Impact', 1), reportSection('s1', 'Findings', 0)],
+      })
+
+    async function openReport(canApprove = true) {
+      vi.spyOn(reports, 'listPendingApproval').mockResolvedValue([pending('r1', 'Report One')])
+      vi.spyOn(reports, 'getReport').mockResolvedValue(withSections(canApprove))
+      const w = mountQueue()
+      await flushPromises()
+      await w.find('[data-test="queue-item"]').trigger('click')
+      await flushPromises()
+      return w
+    }
+
+    it('shows each section in template order', async () => {
+      const w = await openReport()
+      const names = w.findAll('[data-test^="content-pane-"] h3').map((h) => h.text())
+      expect(names).toEqual(['Findings', 'Impact'])
+      expect(w.find('[data-test="content-body-s1"]').text()).toContain('Findings body')
+    })
+
+    it('sends the entered remarks with an approval and skips blank ones', async () => {
+      const approve = vi.spyOn(reports, 'approveReport').mockResolvedValue(detail(true))
+      const w = await openReport()
+      await w.find('[data-test="section-remark-s2"]').setValue('  check the numbers  ')
+      await w.find('[data-test="section-remark-s1"]').setValue('   ')
+      await w.find('[data-test="approve-btn"]').trigger('click')
+      await flushPromises()
+      expect(approve).toHaveBeenCalledWith('tok', 'ex1', 'r1', {
+        section_remarks: [{ report_section_id: 's2', remark: 'check the numbers' }],
+      })
+    })
+
+    it('sends the entered remarks with a rejection', async () => {
+      const reject = vi.spyOn(reports, 'rejectReport').mockResolvedValue(detail(true))
+      const w = await openReport()
+      await w.find('[data-test="section-remark-s1"]').setValue('missing evidence')
+      await w.find('[data-test="decision-note"]').setValue('needs work')
+      await w.find('[data-test="reject-btn"]').trigger('click')
+      await flushPromises()
+      expect(reject).toHaveBeenCalledWith('tok', 'ex1', 'r1', {
+        comment: 'needs work',
+        section_remarks: [{ report_section_id: 's1', remark: 'missing evidence' }],
+      })
+    })
+
+    it('clears remarks when another report is selected', async () => {
+      const w = await openReport()
+      await w.find('[data-test="section-remark-s1"]').setValue('stale')
+      await w.find('[data-test="queue-item"]').trigger('click')
+      await flushPromises()
+      expect((w.find('[data-test="section-remark-s1"]').element as HTMLTextAreaElement).value).toBe(
+        '',
+      )
+    })
+
+    it('shows the sections without remark boxes when the caller cannot act', async () => {
+      const w = await openReport(false)
+      expect(w.findAll('[data-test^="content-pane-"]')).toHaveLength(2)
+      expect(w.find('[data-test="section-remark-s1"]').exists()).toBe(false)
+    })
   })
 
   it('hides the decision block when the caller cannot act', async () => {
