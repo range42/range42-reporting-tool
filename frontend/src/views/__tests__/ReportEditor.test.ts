@@ -79,7 +79,7 @@ async function mountWithConflict() {
   const w = mountEditor()
   await flushPromises()
   await w.find('[data-test="content-s1"]').setValue('mine')
-  await w.find('[data-test="save-s1"]').trigger('click')
+  await w.find('[data-test="save-all"]').trigger('click')
   await flushPromises()
   return w
 }
@@ -142,8 +142,145 @@ describe('ReportEditor.vue', () => {
     await flushPromises()
     expect(w.find('[data-test="char-counter-s1"]').exists()).toBe(true)
     await w.find('[data-test="content-s1"]').setValue('toolong')
+    await w.find('[data-test="save-all"]').trigger('click')
     await flushPromises()
-    expect(w.find('[data-test="save-s1"]').attributes('disabled')).toBeDefined()
+    expect(reports.saveSection).not.toHaveBeenCalled()
+    expect(w.find('[data-test="action-error"]').text()).toContain('Summary')
+  })
+
+  describe('save all and submit', () => {
+    const twoSections = {
+      ...richDetail,
+      sections: [
+        richDetail.sections[0],
+        { ...richDetail.sections[0], id: 's2', section_def_id: 'd2', name: 'Details' },
+      ],
+    }
+
+    function savedAs(id: string, content: string) {
+      return { ...twoSections.sections[0], id, content, version: 2 }
+    }
+
+    beforeEach(() => {
+      vi.mocked(reports.getReport).mockResolvedValue(twoSections as never)
+      vi.mocked(reports.saveSection).mockImplementation(
+        async (_t, _e, _r, sid, body) =>
+          savedAs(sid, (body.body as { content: string }).content) as never,
+      )
+      vi.mocked(reports.submitReport).mockResolvedValue({
+        ...twoSections,
+        status: 'submitted',
+      } as never)
+    })
+
+    it('has no per-section save buttons', async () => {
+      const w = mountEditor()
+      await flushPromises()
+      expect(w.find('[data-test="save-s1"]').exists()).toBe(false)
+      expect(w.find('[data-test="save-s2"]').exists()).toBe(false)
+    })
+
+    it('save all saves only the sections with unsaved changes', async () => {
+      const w = mountEditor()
+      await flushPromises()
+      await w.find('[data-test="content-s2"]').setValue('new')
+      await w.find('[data-test="save-all"]').trigger('click')
+      await flushPromises()
+      expect(reports.saveSection).toHaveBeenCalledTimes(1)
+      expect(reports.saveSection).toHaveBeenCalledWith(
+        'tok',
+        'ex1',
+        'r1',
+        's2',
+        expect.objectContaining({ body: { kind: 'rich_text', content: 'new' } }),
+      )
+      expect(w.find('[data-test="action-error"]').exists()).toBe(false)
+    })
+
+    it('submit saves every unsaved section, confirms, then submits', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      const w = mountEditor()
+      await flushPromises()
+      await w.find('[data-test="content-s1"]').setValue('one')
+      await w.find('[data-test="content-s2"]').setValue('two')
+      await w.find('[data-test="submit-report"]').trigger('click')
+      await flushPromises()
+      expect(reports.saveSection).toHaveBeenCalledTimes(2)
+      expect(confirm).toHaveBeenCalledOnce()
+      const lastSave = Math.max(...vi.mocked(reports.saveSection).mock.invocationCallOrder)
+      expect(vi.mocked(reports.submitReport).mock.invocationCallOrder[0]).toBeGreaterThan(lastSave)
+      expect(reports.submitReport).toHaveBeenCalledWith('tok', 'ex1', 'r1')
+    })
+
+    it('cancelling the confirmation keeps the saves and does not submit', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      const w = mountEditor()
+      await flushPromises()
+      await w.find('[data-test="content-s1"]').setValue('one')
+      await w.find('[data-test="submit-report"]').trigger('click')
+      await flushPromises()
+      expect(reports.saveSection).toHaveBeenCalledTimes(1)
+      expect(reports.submitReport).not.toHaveBeenCalled()
+    })
+
+    it('keeps what was typed while a save was in flight', async () => {
+      let respond: (value: unknown) => void = () => undefined
+      vi.mocked(reports.saveSection).mockImplementationOnce(
+        () => new Promise((resolve) => (respond = resolve)) as never,
+      )
+      const w = mountEditor()
+      await flushPromises()
+      await w.find('[data-test="content-s1"]').setValue('a')
+      await w.find('[data-test="save-all"]').trigger('click')
+      await flushPromises()
+      await w.find('[data-test="content-s1"]').setValue('ab')
+      respond(savedAs('s1', 'a'))
+      await flushPromises()
+
+      expect((w.find('[data-test="content-s1"]').element as HTMLTextAreaElement).value).toBe('ab')
+      await w.find('[data-test="save-all"]').trigger('click')
+      await flushPromises()
+      expect(reports.saveSection).toHaveBeenLastCalledWith('tok', 'ex1', 'r1', 's1', {
+        version: 2,
+        body: { kind: 'rich_text', content: 'ab' },
+      })
+    })
+
+    it('shows one banner for a failed save and clears it once saving works', async () => {
+      vi.mocked(reports.saveSection).mockRejectedValueOnce(
+        new ApiError('HTTP_ERROR', 'boom', [], undefined, 500),
+      )
+      const w = mountEditor()
+      await flushPromises()
+      await w.find('[data-test="content-s1"]').setValue('one')
+      await w.find('[data-test="save-all"]').trigger('click')
+      await flushPromises()
+      expect(w.find('[data-test="action-error"]').text()).toContain('Summary')
+      expect(w.text()).not.toContain('boom')
+
+      await w.find('[data-test="save-all"]').trigger('click')
+      await flushPromises()
+      expect(w.find('[data-test="action-error"]').exists()).toBe(false)
+    })
+
+    it('does not ask or submit when a section cannot be saved, and names it', async () => {
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+      vi.mocked(reports.saveSection).mockImplementation(async (_t, _e, _r, sid, body) => {
+        if (sid === 's2') throw new ApiError('HTTP_ERROR', 'boom', [], undefined, 500)
+        return savedAs(sid, (body.body as { content: string }).content) as never
+      })
+      const w = mountEditor()
+      await flushPromises()
+      await w.find('[data-test="content-s1"]').setValue('one')
+      await w.find('[data-test="content-s2"]').setValue('two')
+      await w.find('[data-test="submit-report"]').trigger('click')
+      await flushPromises()
+      expect(confirm).not.toHaveBeenCalled()
+      expect(reports.submitReport).not.toHaveBeenCalled()
+      const banner = w.find('[data-test="action-error"]').text()
+      expect(banner).toContain('Details')
+      expect(banner).not.toContain('Summary')
+    })
   })
 
   it('saveSection sends the current version; a stale 409 opens the merge panel', async () => {
@@ -219,7 +356,7 @@ describe('ReportEditor.vue', () => {
     const w = mountEditor()
     await flushPromises()
     await w.find('[data-test="content-s1"]').setValue('ok')
-    await w.find('[data-test="save-s1"]').trigger('click')
+    await w.find('[data-test="save-all"]').trigger('click')
     await flushPromises()
     expect(reports.getReport).toHaveBeenCalledTimes(2)
     expect(w.find('[data-test="merge-s1"]').exists()).toBe(false)
@@ -318,7 +455,7 @@ describe('ReportEditor.vue', () => {
     const w = mountEditor()
     await flushPromises()
     expect(w.find('[data-test="assignment-lock"]').exists()).toBe(true)
-    expect(w.find('[data-test="save-s1"]').exists()).toBe(false)
+    expect(w.find('[data-test="save-all"]').exists()).toBe(false)
     expect(w.find('[data-test="content-s1"]').attributes('disabled')).toBeDefined()
   })
 
@@ -335,7 +472,7 @@ describe('ReportEditor.vue', () => {
     const w = mountEditor()
     await flushPromises()
     expect(w.find('[data-test="assignment-lock"]').exists()).toBe(false)
-    expect(w.find('[data-test="save-s1"]').exists()).toBe(true)
+    expect(w.find('[data-test="save-all"]').exists()).toBe(true)
   })
 
   it('a submitted report shows recall for a recall-capable caller and recalls it', async () => {
@@ -633,6 +770,6 @@ describe('ReportEditor.vue', () => {
     expect(w.find('[data-test="evaluation-summary-section-grade-d1"]').exists()).toBe(false)
     // The current report is still fully editable — the previous one's status never gates it.
     expect(w.find('[data-test="content-s1"]').attributes('disabled')).toBeUndefined()
-    expect(w.find('[data-test="save-s1"]').exists()).toBe(true)
+    expect(w.find('[data-test="save-all"]').exists()).toBe(true)
   })
 })

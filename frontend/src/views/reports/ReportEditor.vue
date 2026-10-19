@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { TriangleAlert, Check, RotateCcw, MessageSquareWarning } from '@lucide/vue'
+import { TriangleAlert, Check, RotateCcw, MessageSquareWarning, Save } from '@lucide/vue'
 import { latestRejection } from '@/lib/rejection'
 import { useAuthStore } from '@/stores/auth'
 import { useCapabilitiesStore } from '@/stores/capabilities'
@@ -87,7 +87,7 @@ const REPORTS_RECALL = 'reports:recall'
 const report = ref<ReportDetail | null>(null)
 const sections = reactive<EditableSection[]>([])
 const error = ref('')
-const submitError = ref('')
+const actionError = ref('')
 
 // Previous-campaign-report reference — a bonus panel, never required and never blocking:
 // writing/saving the current report proceeds regardless of this state. Paired side-by-side
@@ -133,6 +133,8 @@ const canRecall = computed(
 )
 
 const autosaveTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+const savesInFlight: Record<string, Promise<boolean>> = {}
+const saving = ref(false)
 
 function toEditable(s: ReportDetail['sections'][number]): EditableSection {
   return {
@@ -168,10 +170,14 @@ function draftMatchesServer(s: EditableSection): boolean {
       normalizeRichText(entry.value) === normalizeRichText(s.content)
     )
   }
-  if (!Array.isArray(entry.value)) return false
-  const local = [...(entry.value as string[])].sort()
-  const server = [...s.choice].sort()
-  return local.length === server.length && local.every((code, i) => code === server[i])
+  return Array.isArray(entry.value) && sameCodes(entry.value as string[], s.choice)
+}
+
+/** True when both selections hold the same choice codes, in any order. */
+function sameCodes(a: string[], b: string[]): boolean {
+  const left = [...a].sort()
+  const right = [...b].sort()
+  return left.length === right.length && left.every((code, i) => code === right[i])
 }
 
 async function loadPreviousReport(teamId: string): Promise<void> {
@@ -311,31 +317,50 @@ function onEdited(s: EditableSection): void {
   autosaveTimers[s.id] = setTimeout(() => void save(s), AUTOSAVE_MS)
 }
 
-async function save(s: EditableSection): Promise<void> {
-  if (readOnly.value || overLimit(s)) return
+/** Save one section, queued behind any save of it already in flight; resolves to success. */
+function save(s: EditableSection): Promise<boolean> {
+  const queued = (savesInFlight[s.id] ?? Promise.resolve(true))
+    .then(() => persist(s))
+    .catch(() => false)
+  savesInFlight[s.id] = queued
+  void queued.then(() => {
+    if (savesInFlight[s.id] === queued) delete savesInFlight[s.id]
+  })
+  return queued
+}
+
+async function persist(s: EditableSection): Promise<boolean> {
+  if (readOnly.value || overLimit(s)) return false
   if (autosaveTimers[s.id]) clearTimeout(autosaveTimers[s.id])
+  const sent = bodyFor(s)
   try {
     const saved = await saveSection(token.value, exerciseId, rid, s.id, {
       version: s.version,
-      body: bodyFor(s),
+      body: sent,
     })
+    const editedSince = JSON.stringify(bodyFor(s)) !== JSON.stringify(sent)
     s.version = saved.version
-    s.content = saved.content ?? ''
-    s.choice = saved.choice_values ?? []
-    s.baseContent = s.content
-    s.baseChoice = [...s.choice]
+    s.baseContent = saved.content ?? ''
+    s.baseChoice = saved.choice_values ?? []
     s.baseVersion = saved.version
     s.conflictServer = null
     s.savedLabel = t('reports.savedNow')
-    draft.clear(s.sectionDefId)
+    // Keystrokes made while the request was in flight stay local, with their draft.
+    if (!editedSince) {
+      s.content = s.baseContent
+      s.choice = [...s.baseChoice]
+      draft.clear(s.sectionDefId)
+    }
+    return true
   } catch (e) {
     if (statusOf(e) === 409) {
       const server = staleSectionOf(e)
       if (server) s.conflictServer = server
       else await reloadSection(s)
     } else {
-      error.value = e instanceof ApiError ? e.message : t('reports.saveError')
+      actionError.value = t('reports.saveAllFailed', { sections: s.name })
     }
+    return false
   }
 }
 
@@ -402,24 +427,57 @@ function toggleChoice(s: EditableSection, code: string): void {
 }
 
 async function recall(): Promise<void> {
-  submitError.value = ''
+  actionError.value = ''
   try {
     const updated = await recallReport(token.value, exerciseId, rid)
     report.value = updated
     sections.splice(0, sections.length, ...updated.sections.map(toEditable))
   } catch (e) {
-    submitError.value = e instanceof ApiError ? e.message : t('reports.recallError')
+    actionError.value = e instanceof ApiError ? e.message : t('reports.recallError')
+  }
+}
+
+function isDirty(s: EditableSection): boolean {
+  if (s.fieldType === 'rich_text') {
+    return normalizeRichText(s.content) !== normalizeRichText(s.baseContent)
+  }
+  return !sameCodes(s.choice, s.baseChoice)
+}
+
+/** Save every section with unsaved changes; resolves to the names of those that failed. */
+async function saveAll(): Promise<string[]> {
+  const pending = sections.filter(isDirty)
+  saving.value = true
+  try {
+    const results = await Promise.all(pending.map(save))
+    return pending.filter((_, i) => !results[i]).map((s) => s.name)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function onSaveAll(): Promise<void> {
+  actionError.value = ''
+  const failed = await saveAll()
+  if (failed.length > 0) {
+    actionError.value = t('reports.saveAllFailed', { sections: failed.join(', ') })
   }
 }
 
 async function submit(): Promise<void> {
-  submitError.value = ''
+  actionError.value = ''
+  const failed = await saveAll()
+  if (failed.length > 0) {
+    actionError.value = t('reports.submitUnsaved', { sections: failed.join(', ') })
+    return
+  }
+  if (!window.confirm(t('reports.submitConfirm'))) return
   try {
     const updated = await submitReport(token.value, exerciseId, rid)
     report.value = updated
   } catch (e) {
-    if (statusOf(e) === 409) submitError.value = t('reports.submitBlocked')
-    else submitError.value = e instanceof ApiError ? e.message : t('reports.submitError')
+    if (statusOf(e) === 409) actionError.value = t('reports.submitBlocked')
+    else actionError.value = e instanceof ApiError ? e.message : t('reports.submitError')
   }
 }
 </script>
@@ -440,8 +498,20 @@ async function submit(): Promise<void> {
       <button
         v-if="report && !readOnly"
         type="button"
+        data-test="save-all"
+        :disabled="saving"
+        class="flex h-9 items-center gap-1.5 rounded-md border border-zinc-300 px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800/60"
+        @click="onSaveAll"
+      >
+        <Save class="h-4 w-4" />
+        {{ saving ? t('reports.saving') : t('reports.saveAll') }}
+      </button>
+      <button
+        v-if="report && !readOnly"
+        type="button"
         data-test="submit-report"
-        class="flex h-9 items-center gap-1.5 rounded-md bg-indigo-500 px-3 text-sm font-medium text-white transition hover:bg-indigo-400"
+        :disabled="saving"
+        class="flex h-9 items-center gap-1.5 rounded-md bg-indigo-500 px-3 text-sm font-medium text-white transition hover:bg-indigo-400 disabled:opacity-50"
         @click="submit"
       >
         <Check class="h-4 w-4" />
@@ -494,12 +564,12 @@ async function submit(): Promise<void> {
         </div>
       </div>
       <div
-        v-if="submitError"
-        data-test="submit-error"
+        v-if="actionError"
+        data-test="action-error"
         class="mb-4 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300"
       >
         <TriangleAlert class="h-4 w-4 shrink-0" />
-        <span>{{ submitError }}</span>
+        <span>{{ actionError }}</span>
       </div>
 
       <div
@@ -650,18 +720,6 @@ async function submit(): Promise<void> {
               </div>
               <div class="mt-2 text-right text-xs text-zinc-400">{{ s.savedLabel }}</div>
             </template>
-
-            <div v-if="!readOnly" class="mt-3 flex justify-end">
-              <button
-                type="button"
-                :data-test="`save-${s.id}`"
-                :disabled="overLimit(s)"
-                class="flex h-8 items-center rounded-md border border-zinc-200 px-3 text-sm transition hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
-                @click="save(s)"
-              >
-                {{ t('reports.save') }}
-              </button>
-            </div>
 
             <AttachmentsPanel
               :attachments="attachmentsFor(s.id)"
