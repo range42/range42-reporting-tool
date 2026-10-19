@@ -19,7 +19,7 @@ import Image from '@tiptap/extension-image'
 import { ImagePlus, Table2, Rows3, Columns3, Trash2 } from '@lucide/vue'
 import { resolveAttachmentObjectUrl } from '@/services/attachments'
 import { IMG_SRC_PATTERN } from '@/services/sanitize'
-import { richTextExtensions } from '@/lib/richText'
+import { normalizeRichText, richTextExtensions } from '@/lib/richText'
 
 const props = defineProps<{
   modelValue: string
@@ -67,7 +67,11 @@ watch(
   () => props.modelValue,
   (v) => {
     const e = editor.value
-    if (e && e.getHTML() !== v) e.commands.setContent(v, { emitUpdate: false })
+    if (!e) return
+    const current = e.getHTML()
+    // The server's sanitized copy drops editor-only markup; replacing an equal document resets the cursor.
+    if (current === v || normalizeRichText(current) === normalizeRichText(v)) return
+    e.commands.setContent(v, { emitUpdate: false })
   },
 )
 watch(
